@@ -309,78 +309,120 @@
     </div>
 
     {% if sections_with_entries %}
-    {% for item in sections_with_entries %}
-    <div class="card-custom mb-4">
-        <div class="card-custom__header">
-            <div>
-                <h5 class="card-custom__title mb-1">
-                    Section {{ item.section.section_name }} - {{ item.section.semester or 'Semester not set' }}
-                </h5>
-                {% if item.section.major %}
-                <span class="badge-custom badge-primary">{{ item.section.major }}</span>
-                {% endif %}
-            </div>
-        </div>
-        <div class="table-responsive">
-            <table class="table-custom">
-                <thead>
-                    <tr>
-                        <th>Course</th>
-                        <th>Professor</th>
-                        <th>Room</th>
-                        <th>Timeslot</th>
-                        <th>Type</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% if item.entries %}
-                    {% for entry in item.entries %}
-                    <tr class="schedule-row" tabindex="0" role="button" data-course="{{ entry.course_name or 'TBA' }}"
-                        data-section="{{ entry.section or '' }}" data-professor="{{ entry.professor_name }}"
-                        data-room="{{ entry.room_name or 'TBA' }}" data-timeslot="{{ entry.time_range }}"
-                        data-session="{{ entry.session_type or 'TBA' }}" title="Click to view full details">
-                        <td>
-                            <strong>{{ entry.course_name or 'TBA' }}</strong>
-                            <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i
-                                    class="bx bx-info-circle me-1"></i>Click for details</small>
-                        </td>
-                        <td>{{ entry.professor_name }}</td>
-                        <td>{{ entry.room_name or 'TBA' }}</td>
-                        <td><span class="badge-custom badge-primary">{{ entry.time_range }}</span></td>
-                        <td>
-                            <span
-                                class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
-                                {{ entry.session_type or 'TBA' }}
-                            </span>
-                        </td>
-                        <td class="text-end align-middle">
-                            <button type="button" class="btn btn-outline-secondary btn-sm edit-preview-entry-btn"
-                                data-entry-id="{{ entry.id }}" data-course-id="{{ entry.course_id or '' }}"
-                                data-course="{{ entry.course_name or 'TBA' }}" data-section="{{ entry.section or '' }}"
-                                data-prof-id="{{ entry.prof_id or '' }}" data-room-id="{{ entry.room_id or '' }}"
-                                data-day="{{ entry.day or '' }}" data-start="{{ entry.start or '' }}"
-                                data-end="{{ entry.end or '' }}">
-                                <i class="bx bx-edit"></i> Edit
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% else %}
-                    <tr>
-                        <td colspan="5">
-                            <div class="empty-state">
-                                <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
-                                <div class="empty-state__text">No schedule entries found</div>
+    {% if year_groups %}
+        <div class="accordion-year-wrapper">
+            {% for group in year_groups %}
+            <div class="collapsible-year-block">
+                <button type="button" 
+                        class="collapsible-year-header" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#collapse-index-{{ group.id }}" 
+                        aria-expanded="false" 
+                        aria-controls="collapse-index-{{ group.id }}">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bx bx-calendar-event text-primary fs-5"></i>
+                        <span class="collapsible-year-title">{{ group.title }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge-custom badge-primary">
+                            {{ group.sections|length }} Section{% if group.sections|length != 1 %}s{% endif %}
+                        </span>
+                        <i class="bx bx-chevron-right collapse-icon"></i>
+                    </div>
+                </button>
+                <div id="collapse-index-{{ group.id }}" class="collapse collapsible-year-content">
+                    {% if group.sections %}
+                        {% for item in group.sections %}
+                        <div class="card-custom mb-3 bg-white">
+                            <div class="card-custom__header">
+                                <div>
+                                    <h5 class="card-custom__title mb-1">
+                                        Section {{ item.section.section_name }} - {{ item.section.semester or 'Semester not set' }}
+                                    </h5>
+                                    {% if item.section.major %}
+                                    <span class="badge-custom badge-primary">{{ item.section.major }}</span>
+                                    {% endif %}
+                                </div>
                             </div>
-                        </td>
-                    </tr>
+                            <div class="table-responsive">
+                                <table class="table-custom">
+                                    <thead>
+                                        <tr>
+                                            <th>Course</th>
+                                            <th>Professor</th>
+                                            <th>Room</th>
+                                            <th>Timeslot</th>
+                                            <th>Type</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% if item.entries %}
+                                            {% for entry in item.entries %}
+                                            <tr class="schedule-row"
+                                                tabindex="0"
+                                                role="button"
+                                                data-course="{{ entry.course_name or 'TBA' }}"
+                                                data-section="{{ entry.section or '' }}"
+                                                data-professor="{{ entry.professor_name }}"
+                                                data-room="{{ entry.room_name or 'TBA' }}"
+                                                data-timeslot="{{ entry.time_range }}"
+                                                data-session="{{ entry.session_type or 'TBA' }}"
+                                                title="Click to view full details">
+                                                <td>
+                                                    <strong>{{ entry.course_name or 'TBA' }}</strong>
+                                                    <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
+                                                </td>
+                                                <td>{{ entry.professor_name }}</td>
+                                                <td>{{ entry.room_name or 'TBA' }}</td>
+                                                <td><span class="badge-custom badge-primary">{{ entry.time_range }}</span></td>
+                                                <td>
+                                                    <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
+                                                        {{ entry.session_type or 'TBA' }}
+                                                    </span>
+                                                </td>
+                                                <td class="text-end align-middle">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm edit-preview-entry-btn" 
+                                                        data-entry-id="{{ entry.id }}"
+                                                        data-course-id="{{ entry.course_id or '' }}"
+                                                        data-course="{{ entry.course_name or 'TBA' }}"
+                                                        data-section="{{ entry.section or '' }}"
+                                                        data-prof-id="{{ entry.prof_id or '' }}"
+                                                        data-room-id="{{ entry.room_id or '' }}"
+                                                        data-day="{{ entry.day or '' }}"
+                                                        data-start="{{ entry.start or '' }}"
+                                                        data-end="{{ entry.end or '' }}">
+                                                        <i class="bx bx-edit"></i> Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="6">
+                                                    <div class="empty-state py-3">
+                                                        <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
+                                                        <div class="empty-state__text">No schedule entries found for this section</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state py-4">
+                            <div class="empty-state__icon"><i class="bx bx-folder-open"></i></div>
+                            <div class="empty-state__text text-muted">No generated sections for {{ group.title }}</div>
+                        </div>
                     {% endif %}
-                </tbody>
-            </table>
+                </div>
+            </div>
+            {% endfor %}
         </div>
-    </div>
-    {% endfor %}
+    {% endif %}
     {% else %}
     <div class="card-custom">
         <div class="empty-state">
@@ -549,6 +591,7 @@
         var loadingTimer = null;
         var activeLoadId = 0;
         var isLoading = false;
+        var isExistingSchedulePresent = false;
 
         function isSecondSemester() {
             var val = (semesterSelect && semesterSelect.value) ? semesterSelect.value.trim().toLowerCase() : '';
@@ -646,7 +689,7 @@
 
         function setSubmitState(isReady) {
             if (submitBtn) {
-                submitBtn.disabled = !isReady;
+                submitBtn.disabled = !isReady || isExistingSchedulePresent;
             }
         }
 
@@ -782,6 +825,11 @@
                     showToast('Please select a Semester first.', 'warning');
                     return;
                 }
+                if (isExistingSchedulePresent) {
+                    e.preventDefault();
+                    showToast('A schedule for this semester already exists.', 'warning');
+                    return;
+                }
             });
         }
 
@@ -797,11 +845,9 @@
             var sem = semesterSelect ? semesterSelect.value : '';
 
             if (!sem) {
+                isExistingSchedulePresent = false;
                 if (existingCard) existingCard.style.display = 'none';
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.title = '';
-                }
+                setSubmitState(true);
                 return;
             }
 
@@ -811,6 +857,7 @@
                 .then(function (res) { return res.json(); })
                 .then(function (data) {
                     if (data && data.exists) {
+                        isExistingSchedulePresent = true;
                         if (existingCard) existingCard.style.display = 'block';
 
                         var desc = sem + ' (All Year Levels)';
@@ -831,16 +878,18 @@
                             submitBtn.title = 'A schedule for ' + desc + ' already exists.';
                         }
                     } else {
+                        isExistingSchedulePresent = false;
                         if (existingCard) existingCard.style.display = 'none';
+                        setSubmitState(true);
                         if (submitBtn) {
-                            submitBtn.disabled = false;
                             submitBtn.title = '';
                         }
                     }
                 })
                 .catch(function (err) {
+                    isExistingSchedulePresent = false;
                     if (existingCard) existingCard.style.display = 'none';
-                    if (submitBtn) submitBtn.disabled = false;
+                    setSubmitState(true);
                 });
         }
 

@@ -70,7 +70,7 @@
                     <td><span class="badge-custom badge-success">{{ professor.department }}</span></td>
                     <td>{{ professor.max_hours or 40 }}</td>
                     <td class="text-end">
-                        <button type="button" class="btn btn-warning btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{professor.prof_id}}" data-firstname="{{professor.first_name}}" data-lastname="{{professor.last_name}}" data-department="{{professor.department}}" data-maxhours="{{ professor.max_hours or 40 }}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{professor.prof_id}}" data-firstname="{{professor.first_name}}" data-lastname="{{professor.last_name}}" data-department="{{professor.department}}" data-maxhours="{{ professor.max_hours or 40 }}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_professor/{{ professor.prof_id }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this professor?">
@@ -210,7 +210,7 @@ $(function(){
                                        '<td><span class="badge-custom badge-success">' + (p.department || '') + '</span></td>' +
                                        '<td>' + (p.max_hours || 40) + '</td>' +
                                        '<td class="text-end">' +
-                                           '<button type="button" class="btn btn-warning btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="' + (p.prof_id || '') + '" data-firstname="' + (p.first_name || '') + '" data-lastname="' + (p.last_name || '') + '" data-department="' + (p.department || '') + '" data-maxhours="' + (p.max_hours || 40) + '"><i class="bx bx-edit"></i> Edit</button> ' +
+                                           '<button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="' + (p.prof_id || '') + '" data-firstname="' + (p.first_name || '') + '" data-lastname="' + (p.last_name || '') + '" data-department="' + (p.department || '') + '" data-maxhours="' + (p.max_hours || 40) + '"><i class="bx bx-edit"></i> Edit</button> ' +
                                            '<a href="/delete_professor/' + (p.prof_id || '') + '" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this professor?"><i class="bx bx-trash"></i> Delete</a>' +
                                        '</td>';
                         tbody.appendChild(tr);

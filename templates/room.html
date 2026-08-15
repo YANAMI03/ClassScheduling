@@ -73,7 +73,7 @@
                     <td><span class="badge-custom badge-info">{{ room.department }}</span></td>
                     <td><span class="badge-custom {% if 'Lab' in room.room_type %}badge-warning{% else %}badge-success{% endif %}">{{ room.room_type }}</span></td>
                     <td class="text-end">
-                        <button type="button" class="btn btn-warning btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{room.room_id}}" data-name="{{room.room_name}}" data-room_type="{{room.room_type}}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{room.room_id}}" data-name="{{room.room_name}}" data-room_type="{{room.room_type}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_room/{{room.room_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this room?">
