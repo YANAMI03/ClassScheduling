@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}Professor Courses - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Professor Course Assignments</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Professors' Courses</h1>
+        <p class="page-subtitle">Assign courses to professors for scheduling</p>
+    </div>
+</div>
+
+<div class="card-custom mb-4">
+    <div class="card-custom__header">
+        <h5 class="card-custom__title"><i class="bx bx-link me-2"></i>Assign Courses to Professor</h5>
+    </div>
+    <form action="/add_prof_course" method="POST">
+        <div class="row g-3 align-items-stretch">
+            <div class="col-md-5 d-flex flex-column">
+                <label class="form-label">Professor</label>
+                <select class="form-select" name="prof_id" required>
+                    <option value="" selected disabled>Select Professor</option>
+                    {% for prof in professors %}
+                    <option value="{{ prof.prof_id }}">{{ prof.first_name }} {{ prof.last_name }} ({{ prof.department }})</option>
+                    {% endfor %}
+                </select>
+                <div id="selected-course-inputs" style="display:none;"></div>
+            </div>
+            <div class="col-md-7 d-flex flex-column">
+                <label class="form-label">Select Courses</label>
+                <div class="card-custom p-3 d-flex flex-column h-100" style="min-height: 340px; max-height: 340px;">
+                    <div class="btn-group w-100 mb-3" role="group" aria-label="Course year filters">
+                        <button type="button" class="btn btn-primary btn-sm year-filter-btn active" data-year="all">All Courses</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm year-filter-btn" data-year="1">1st Year</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm year-filter-btn" data-year="2">2nd Year</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm year-filter-btn" data-year="3">3rd Year</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm year-filter-btn" data-year="4">4th Year</button>
+                    </div>
+                    <div class="overflow-auto flex-grow-1" style="min-height: 0;">
+                        <div class="checkbox-grid" id="course-checkbox-list">
+                            {% for course in courses %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="course_ids" value="{{ course.course_id }}" id="add_course_{{ course.course_id }}">
+                                <label class="form-check-label" for="add_course_{{ course.course_id }}">
+                                    {{ course.course_name }}
+                                    {% if course.program %}
+                                    <small class="text-muted d-block">{{ course.program }}</small>
+                                    {% endif %}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% if not courses %}
+                        <p class="text-muted text-center mb-0">No courses available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bx bx-link"></i> Assign Courses
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card-custom">
+    <div class="card-custom__header">
+        <h5 class="card-custom__title">Current Assignments</h5>
+        <span class="badge-custom badge-primary">{{ prof_courses|groupby('prof_id')|list|length }} professors</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table-custom">
+            <thead>
+                <tr>
+                    <th>Professor</th>
+                    <th>Department</th>
+                    <th>Assigned Courses</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prof_group in prof_courses|groupby('prof_id') %}
+                <tr>
+                    <td class="align-middle">
+                        <strong>{{ prof_group.list[0].prof_first_name }} {{ prof_group.list[0].prof_last_name }}</strong>
+                    </td>
+                    <td class="align-middle">
+                        <span class="badge-custom badge-success">{{ prof_group.list[0].prof_department or 'N/A' }}</span>
+                    </td>
+                    <td class="align-middle">
+                        {% for c in prof_group.list %}
+                        <span class="badge-custom badge-primary me-1 mb-1">{{ c.course_name }}</span>
+                        {% endfor %}
+                    </td>
+                    <td class="text-end align-middle">
+                        <button type="button" class="btn btn-warning btn-sm edit-btn"
+                                data-bs-toggle="modal"
+                                data-bs-target="#editModal"
+                                data-id="{{ prof_group.grouper }}"
+                                data-firstname="{{ prof_group.list[0].prof_first_name }}"
+                                data-lastname="{{ prof_group.list[0].prof_last_name }}"
+                                data-department="{{ prof_group.list[0].prof_department }}"
+                                data-courses="{% for c in prof_group.list %}{{ c.course_id }}{% if not loop.last %},{% endif %}{% endfor %}">
+                            <i class="bx bx-edit"></i> Edit
+                        </button>
+                        <a href="{{ url_for('delete_prof_course_all', prof_id=prof_group.grouper) }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to remove all course assignments for this professor?">
+                            <i class="bx bx-trash"></i> Delete
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">
+                        <div class="empty-state">
+                            <div class="empty-state__icon"><i class="bx bx-book-open"></i></div>
+                            <div class="empty-state__text">No course assignments yet</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel"><i class="bx bx-edit me-2"></i>Edit Professor & Course Assignments</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editForm" method="POST">
+                <div class="modal-body">
+                    <!-- Section 1: Professor Information -->
+                    <div class="mb-4">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bx bx-user me-2"></i>Professor Information</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">First Name</label>
+                                <input type="text" name="first_name" id="edit_firstname" class="form-control" placeholder="Enter first name" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Last Name</label>
+                                <input type="text" name="last_name" id="edit_lastname" class="form-control" placeholder="Enter last name" required>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label">Department</label>
+                                <select class="form-select" name="department" id="edit_department" required>
+                                    <option value="" disabled>Select Department</option>
+                                    <option value="CICT">CICT (College of Information and Communications Technology)</option>
+                                    <option value="CBA">CBA (College of Business Administration)</option>
+                                    <option value="CEA">CEA (College of Engineering and Architecture)</option>
+                                    <option value="CAS">CAS (College of Arts and Sciences)</option>
+                                    <option value="CON">CON (College of Nursing)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+
+                    <!-- Section 2: Assigned Courses -->
+                    <div class="mb-3">
+                        <h6 class="fw-bold text-primary mb-2"><i class="bx bx-book me-2"></i>Assigned Courses</h6>
+                        <p class="text-muted small mb-3">Check or uncheck courses to update assignments for this professor.</p>
+                        <div class="card-custom p-3">
+                            <div class="btn-group w-100 mb-3" role="group" aria-label="Course year filters for edit modal">
+                                <button type="button" class="btn btn-primary btn-sm edit-year-filter-btn active" data-year="all">All Courses</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="1">1st Year</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="2">2nd Year</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="3">3rd Year</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="4">4th Year</button>
+                            </div>
+                            <div style="max-height: 240px; overflow-y: auto;">
+                                <div class="checkbox-grid" id="edit-course-checkbox-list">
+                                    {% for course in courses %}
+                                    <div class="form-check course-filter-item modal-course-item" data-year="{{ course.year_level or '' }}">
+                                        <input class="form-check-input modal-course-check" type="checkbox" name="course_ids" value="{{ course.course_id }}" id="edit_course_{{ course.course_id }}">
+                                        <label class="form-check-label" for="edit_course_{{ course.course_id }}">
+                                            {{ course.course_name }}
+                                            {% if course.program %}
+                                            <small class="text-muted d-block">{{ course.program }}</small>
+                                            {% endif %}
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% if not courses %}
+                                <p class="text-muted text-center mb-0">No courses available.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bx bx-save me-1"></i> Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+$(function(){
+    $('#editModal').appendTo("body");
+
+    var addCourseList = document.getElementById('course-checkbox-list');
+    var editCourseList = document.getElementById('edit-course-checkbox-list');
+    var hiddenCourseInputs = document.getElementById('selected-course-inputs');
+    var addSelectedIds = new Set();
+    var editSelectedIds = new Set();
+    var addLoadInFlight = false;
+    var editLoadInFlight = false;
+
+    function setActiveFilter(buttons, activeButton){
+        buttons.each(function(){
+            var isActive = $(this).is(activeButton);
+            $(this).toggleClass('active', isActive);
+            $(this).toggleClass('btn-primary', isActive);
+            $(this).toggleClass('btn-outline-primary', !isActive);
+        });
+    }
+
+    function getCourseListUrl(yearValue){
+        return '/api/courses' + (yearValue && yearValue !== 'all' ? '?year_level=' + encodeURIComponent(yearValue) : '');
+    }
+
+    function renderCourseList(container, courses, selectedIds, inputName, idPrefix){
+        if (!container) return;
+
+        if (!courses.length) {
+            container.innerHTML = '<p class="text-muted text-center mb-0">No courses available.</p>';
+            return;
+        }
+
+        var html = '';
+        courses.forEach(function(course){
+            var checked = selectedIds.has(String(course.course_id)) ? ' checked' : '';
+            html += '<div class="form-check">' +
+                '<input class="form-check-input" type="checkbox" name="' + inputName + '" value="' + course.course_id + '" id="' + idPrefix + course.course_id + '"' + checked + '>' +
+                '<label class="form-check-label" for="' + idPrefix + course.course_id + '">' +
+                (course.course_name || 'Untitled Course') +
+                (course.program ? '<small class="text-muted d-block">' + course.program + '</small>' : '') +
+                '</label>' +
+                '</div>';
+        });
+
+        container.innerHTML = html;
+    }
+
+    function updateSelectionState(container, selectedIds){
+        if (!container) return;
+        container.querySelectorAll('input[type="checkbox"]').forEach(function(input){
+            if (selectedIds.has(input.value)) {
+                input.checked = true;
+            }
+        });
+    }
+
+    function syncHiddenCourseInputs(selectedIds){
+        if (!hiddenCourseInputs) return;
+        hiddenCourseInputs.innerHTML = '';
+        selectedIds.forEach(function(courseId){
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'course_ids';
+            input.value = courseId;
+            hiddenCourseInputs.appendChild(input);
+        });
+    }
+
+    function loadCourses(container, buttons, yearValue, selectedIds, inputName, idPrefix, loadingFlagRef){
+        if (!container) return;
+
+        if (loadingFlagRef) {
+            loadingFlagRef.value = true;
+        }
+
+        buttons.each(function(){
+            $(this).prop('disabled', true);
+        });
+
+        container.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading courses...</div>';
+
+        fetch(getCourseListUrl(yearValue))
+            .then(function(response){
+                if (!response.ok) {
+                    throw new Error('Unable to load courses.');
+                }
+                return response.json();
+            })
+            .then(function(data){
+                renderCourseList(container, data.courses || [], selectedIds, inputName, idPrefix);
+                updateSelectionState(container, selectedIds);
+                syncHiddenCourseInputs(selectedIds);
+            })
+            .catch(function(){
+                container.innerHTML = '<p class="text-muted text-center mb-0">Unable to load courses right now.</p>';
+            })
+            .finally(function(){
+                buttons.each(function(){
+                    $(this).prop('disabled', false);
+                });
+                if (loadingFlagRef) {
+                    loadingFlagRef.value = false;
+                }
+            });
+    }
+
+    function bindSelectionTracking(container, selectedIds){
+        if (!container) return;
+        container.addEventListener('change', function(event){
+            if (event.target && event.target.matches('input[type="checkbox"]')) {
+                if (event.target.checked) {
+                    selectedIds.add(event.target.value);
+                } else {
+                    selectedIds.delete(event.target.value);
+                }
+                syncHiddenCourseInputs(selectedIds);
+            }
+        });
+    }
+
+    bindSelectionTracking(addCourseList, addSelectedIds);
+    bindSelectionTracking(editCourseList, editSelectedIds);
+
+    // Load the initial course list from the backend so the box is populated server-side style
+    setActiveFilter($('.year-filter-btn'), $('.year-filter-btn[data-year="all"]'));
+    loadCourses(addCourseList, $('.year-filter-btn'), 'all', addSelectedIds, 'course_ids', 'add_course_', { value: false });
+    syncHiddenCourseInputs(addSelectedIds);
+
+    var addCourseForm = document.querySelector('form[action="/add_prof_course"]');
+    if (addCourseForm) {
+        addCourseForm.addEventListener('submit', function(){
+            syncHiddenCourseInputs(addSelectedIds);
+            addCourseList.querySelectorAll('input[type="checkbox"]').forEach(function(input){
+                input.removeAttribute('name');
+            });
+        });
+    }
+
+    $('.year-filter-btn').on('click', function(){
+        var yearValue = $(this).data('year');
+        setActiveFilter($('.year-filter-btn'), this);
+        loadCourses(addCourseList, $('.year-filter-btn'), yearValue, addSelectedIds, 'course_ids', 'add_course_', { value: false });
+    });
+
+    $('.edit-year-filter-btn').on('click', function(){
+        var yearValue = $(this).data('year');
+        setActiveFilter($('.edit-year-filter-btn'), this);
+        loadCourses(editCourseList, $('.edit-year-filter-btn'), yearValue, editSelectedIds, 'course_ids', 'edit_course_', { value: false });
+    });
+
+    $('.edit-btn').on('click', function(){
+        var $t = $(this);
+        var profId = $t.data('id');
+        var firstName = $t.data('firstname');
+        var lastName = $t.data('lastname');
+        var department = $t.data('department');
+        var courseAttr = String($t.data('courses') || '');
+        var courseIds = courseAttr.split(',').map(function(s){ return s.trim(); });
+
+        $('#edit_firstname').val(firstName);
+        $('#edit_lastname').val(lastName);
+        $('#edit_department').val(department);
+
+        editSelectedIds.clear();
+        courseIds.forEach(function(cid){
+            if (cid) {
+                editSelectedIds.add(cid);
+            }
+        });
+
+        setActiveFilter($('.edit-year-filter-btn'), $('.edit-year-filter-btn[data-year="all"]'));
+        loadCourses(editCourseList, $('.edit-year-filter-btn'), 'all', editSelectedIds, 'course_ids', 'edit_course_', { value: false });
+
+        $('#editForm').attr('action', '/update_prof_with_courses/' + profId);
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Log - Scheduler{% endblock %}
+
+{% block header_title %}<h5 class="header__title">Activity Log</h5>{% endblock %}
+
+{% block head_extra %}
+<style>
+    .log-container {
+        padding: var(--content-padding);
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .log-filters {
+        background: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        margin-bottom: 2rem;
+        display: flex;
+        gap: 1rem;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .filter-group label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    .filter-group select,
+    .filter-group input {
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 0.9375rem;
+        transition: border-color var(--transition);
+    }
+
+    .filter-group select:focus,
+    .filter-group input:focus {
+        outline: none;
+        border-color: var(--primary);
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        border-radius: var(--radius-sm);
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--transition);
+        border: none;
+        text-decoration: none;
+    }
+
+    .btn-primary {
+        background: var(--primary);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-dark);
+        color: white;
+    }
+
+    .btn-secondary {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+        background: var(--border-color);
+    }
+
+    .log-table-card {
+        background: var(--card-bg);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .log-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9375rem;
+    }
+
+    .log-table th {
+        background: rgba(0, 0, 0, 0.02);
+        padding: 1rem 1.5rem;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-color);
+        white-space: nowrap;
+    }
+
+    .log-table td {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-primary);
+        vertical-align: top;
+    }
+
+    .log-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .log-table tbody tr:hover {
+        background: rgba(0, 0, 0, 0.01);
+    }
+
+    .badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .badge-create { background: #dcfce7; color: #166534; }
+    .badge-edit { background: #fef9c3; color: #854d0e; }
+    .badge-delete { background: #fee2e2; color: #991b1b; }
+    .badge-login { background: #dbeafe; color: #1e40af; }
+    .badge-logout { background: #f3f4f6; color: #374151; }
+    .badge-generate { background: #e0e7ff; color: #3730a3; }
+    .badge-confirm { background: #ccfbf1; color: #115e59; }
+    .badge-upload { background: #fce7f3; color: #9d174d; }
+    .badge-default { background: #f1f5f9; color: #475569; }
+
+    .empty-state {
+        padding: 4rem 2rem;
+        text-align: center;
+        color: var(--text-secondary);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div>
+        <h1 class="page-title">Activity Log</h1>
+        <p class="page-subtitle">Track system events, user actions, and administrative operations</p>
+    </div>
+</div>
+
+<div class="log-container">
+    <form class="log-filters" method="get" action="{{ url_for('activity_log') }}">
+        <div class="filter-group">
+            <label for="search">Search</label>
+            <input type="text" id="search" name="search" value="{{ search }}" placeholder="Search name or details...">
+        </div>
+        
+        <div class="filter-group">
+            <label for="action">Action</label>
+            <select id="action" name="action">
+                <option value="">All Actions</option>
+                {% for a in actions %}
+                <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>{{ a|capitalize }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="target">Category</label>
+            <select id="target" name="target">
+                <option value="">All Categories</option>
+                {% for t in targets %}
+                <option value="{{ t }}" {% if target_filter == t %}selected{% endif %}>{{ t|replace('_', ' ')|capitalize }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary">
+                <i class="bx bx-filter-alt"></i> Filter
+            </button>
+            <a href="{{ url_for('activity_log') }}" class="btn btn-secondary">
+                <i class="bx bx-reset"></i> Clear
+            </a>
+        </div>
+    </form>
+
+    <div class="log-table-card">
+        {% if logs %}
+        <div class="table-responsive">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Category</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td style="white-space: nowrap; color: var(--text-secondary);">
+                            {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </td>
+                        <td>
+                            <div style="font-weight: 500;">{{ log.username }}</div>
+                            <small class="text-muted">ID: {{ log.user_id }}</small>
+                        </td>
+                        <td>
+                            {% set badge_class = 'badge-' ~ log.action %}
+                            <span class="badge {{ badge_class if badge_class in ['badge-create', 'badge-edit', 'badge-delete', 'badge-login', 'badge-logout', 'badge-generate', 'badge-confirm', 'badge-upload'] else 'badge-default' }}">
+                                {{ log.action }}
+                            </span>
+                        </td>
+                        <td style="text-transform: capitalize;">{{ log.target_type|replace('_', ' ') }}</td>
+                        <td>{{ log.target_detail }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bx bx-list-ol"></i>
+            <h3>No activity found</h3>
+            <p>Try adjusting your filters or search terms.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

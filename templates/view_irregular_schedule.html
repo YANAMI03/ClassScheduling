@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ student.first_name }} {{ student.last_name }} - Irregular Schedule{% endblock %}
+{% block header_title %}<h5 class="header__title">Irregular Schedule</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h1 class="page-title">{{ student.first_name }} {{ student.last_name }} — Irregular Schedule</h1>
+        <p class="page-subtitle">Student ID: <strong>{{ student.student_id_number }}</strong> | Program: <strong>{{ student.program }}</strong> | Selected Years: <strong>{{ student.year_level }}</strong></p>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary" onclick="window.print()">
+            <i class="bx bx-printer me-1"></i> Print Schedule
+        </button>
+        <a href="/irregular_students/{{ student.student_id }}/schedule" class="btn btn-primary">
+            <i class="bx bx-cog me-1"></i> Manage Schedule
+        </a>
+        <a href="/irregular_students" class="btn btn-outline-secondary">
+            <i class="bx bx-arrow-back me-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="card-custom mb-4">
+    <div class="card-custom__header d-flex justify-content-between align-items-center">
+        <h5 class="card-custom__title mb-0"><i class="bx bx-calendar me-2"></i>Assigned Class Schedule</h5>
+        <span class="badge-custom badge-primary">{{ assigned_entries | length }} class session{{ 's' if assigned_entries | length != 1 else '' }}</span>
+    </div>
+
+    {% if assigned_entries %}
+    <div class="table-responsive">
+        <table class="table-custom">
+            <thead>
+                <tr>
+                    <th>Course</th>
+                    <th>Professor</th>
+                    <th>Section</th>
+                    <th>Room</th>
+                    <th>Day</th>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Schedule Type</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in assigned_entries %}
+                <tr>
+                    <td><strong>{{ entry.course_name or 'TBA' }}</strong></td>
+                    <td>{{ entry.professor or 'TBA' }}</td>
+                    <td><span class="badge-custom badge-primary">{{ entry.section or 'TBA' }}</span></td>
+                    <td>{{ entry.room or 'TBA' }}</td>
+                    <td><strong>{{ entry.day or 'TBA' }}</strong></td>
+                    <td><span class="badge-custom badge-primary">{{ entry.start_time_fmt }}</span></td>
+                    <td><span class="badge-custom badge-primary">{{ entry.end_time_fmt }}</span></td>
+                    <td>
+                        <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
+                            {{ entry.session_type or 'TBA' }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state py-4 text-center">
+        <div class="empty-state__icon text-muted fs-1 mb-2"><i class="bx bx-calendar-x"></i></div>
+        <div class="empty-state__text text-muted">No courses assigned to this irregular student yet.</div>
+        <a href="/irregular_students/{{ student.student_id }}/schedule" class="btn btn-primary mt-3">
+            <i class="bx bx-cog me-1"></i> Manage & Assign Courses
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

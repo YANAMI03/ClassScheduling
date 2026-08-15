@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Irregular Students - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Irregular Students</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Irregular Students</h1>
+        <p class="page-subtitle">Register and manage individual course schedules for irregular students</p>
+    </div>
+</div>
+
+{% if user_role != 'Viewer' %}
+<div class="card-custom mb-4">
+    <div class="card-custom__header">
+        <h5 class="card-custom__title"><i class="bx bx-user-plus me-2"></i>Add Irregular Student</h5>
+    </div>
+    <form method="post" action="{{ url_for('irregular_students') }}" class="row g-3">
+        <div class="col-md-3">
+            <label class="form-label" for="student_id_number">Student ID Number <span class="text-danger">*</span></label>
+            <input type="text" id="student_id_number" name="student_id_number" class="form-control" placeholder="e.g. 2024-12345" required>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="first_name">First Name <span class="text-danger">*</span></label>
+            <input type="text" id="first_name" name="first_name" class="form-control" placeholder="e.g. Juan" required>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="last_name">Last Name <span class="text-danger">*</span></label>
+            <input type="text" id="last_name" name="last_name" class="form-control" placeholder="e.g. Dela Cruz" required>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="program">Program <span class="text-danger">*</span></label>
+            <select id="program" name="program" class="form-select" required>
+                <option value="" disabled selected>Select Program</option>
+                <option value="BSIT">BSIT</option>
+                <option value="BSCS">BSCS</option>
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label d-block">Year Levels <span class="text-danger">*</span> <small class="text-muted">(Select all applicable)</small></label>
+            <div class="d-flex flex-wrap gap-3 pt-1 border rounded-2 p-2 bg-light">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="year_level" value="1st Year" id="yl_1" checked>
+                    <label class="form-check-label fw-medium" for="yl_1">1st Year</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="year_level" value="2nd Year" id="yl_2">
+                    <label class="form-check-label fw-medium" for="yl_2">2nd Year</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="year_level" value="3rd Year" id="yl_3">
+                    <label class="form-check-label fw-medium" for="yl_3">3rd Year</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="year_level" value="4th Year" id="yl_4">
+                    <label class="form-check-label fw-medium" for="yl_4">4th Year</label>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 text-end">
+            <button type="submit" class="btn btn-primary px-4">
+                <i class="bx bx-plus-circle me-1"></i> Add Student
+            </button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card-custom">
+    <div class="card-custom__header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="card-custom__title mb-0"><i class="bx bx-list-ul me-2"></i>Registered Irregular Students</h5>
+        <div class="input-group input-group-sm" style="max-width: 340px;">
+            <span class="input-group-text bg-white"><i class="bx bx-search text-muted"></i></span>
+            <input type="text" id="irregularSearchInput" class="form-control border-start-0 ps-0" placeholder="Search Student ID, First or Last Name..." value="{{ search_query or '' }}">
+        </div>
+    </div>
+    {% if students %}
+    <div class="table-responsive">
+        <table class="table-custom" id="irregular-students-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Student ID</th>
+                    <th>Student Name</th>
+                    <th>Program</th>
+                    <th>Year Levels</th>
+                    <th>Assigned Subjects</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in students %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><span class="badge bg-light text-dark border font-monospace">{{ s.student_id_number }}</span></td>
+                    <td><strong>{{ s.first_name }} {{ s.last_name }}</strong></td>
+                    <td><span class="badge-custom badge-primary">{{ s.program }}</span></td>
+                    <td>
+                        {% for y in s.year_level.split(',') %}
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary border me-1 mb-1">{{ y.strip() }}</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <span class="badge-custom {% if s.class_count > 0 %}badge-success{% else %}badge-warning{% endif %}">
+                            {{ s.class_count }} subject{{ 's' if s.class_count != 1 else '' }}
+                        </span>
+                    </td>
+                    <td class="text-end">
+                        <div class="d-inline-flex gap-2 flex-wrap justify-content-end">
+                            <a href="/irregular_students/{{ s.student_id }}/schedule" class="btn btn-sm btn-primary" title="Manage Schedule">
+                                <i class="bx bx-cog me-1"></i> Manage Schedule
+                            </a>
+                            {% if s.class_count > 0 %}
+                            <a href="/irregular_students/{{ s.student_id }}/view_schedule" class="btn btn-sm btn-outline-primary" title="View Schedule">
+                                <i class="bx bx-calendar me-1"></i> View Schedule
+                            </a>
+                            {% endif %}
+                            {% if user_role != 'Viewer' %}
+                            <a href="/delete_irregular_student/{{ s.student_id }}" class="btn btn-sm btn-outline-danger" data-confirm="Are you sure you want to delete {{ s.first_name }} {{ s.last_name }}?" title="Delete Student">
+                                <i class="bx bx-trash"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state py-4 text-center">
+        <div class="empty-state__icon text-muted fs-1 mb-2"><i class="bx bx-user-pin"></i></div>
+        <div class="empty-state__text text-muted">No irregular students registered yet.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function(){
+    $('#irregularSearchInput').on('input', function() {
+        var query = $(this).val().toLowerCase().trim();
+        $('#irregular-students-table tbody tr').each(function() {
+            var text = $(this).text().toLowerCase();
+            $(this).toggle(!query || text.indexOf(query) > -1);
+        });
+    });
+});
+</script>
+{% endblock %}

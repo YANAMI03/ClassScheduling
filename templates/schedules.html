@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block title %}Section Schedule - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Section Schedule</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Section Schedule</h1>
+        <p class="page-subtitle">View and manage generated class schedules by section</p>
+    </div>
+    {% if user_role != 'Viewer' %}
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-danger" id="delete-all-btn">
+            <i class="bx bx-trash"></i> Delete All
+        </button>
+        <a href="/" class="btn btn-primary">
+            <i class="bx bx-plus-circle"></i> Generate New Schedule
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card-custom mb-4">
+    <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3" style="width: 15%">
+            <label class="form-label" for="yearFilter">Year Level</label>
+            <select id="yearFilter" name="year" class="form-select">
+                <option value="">All Years</option>
+                {% for year in year_options %}
+                <option value="{{ year }}" {% if year == year_filter %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3" style="width: 15%">
+            <label class="form-label" for="semesterFilter">Semester</label>
+            <select id="semesterFilter" name="semester" class="form-select">
+                <option value="">All Semesters</option>
+                {% for sem in semester_options %}
+                <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3" style="width: 15%">
+            <label class="form-label" for="majorFilter">Major</label>
+            <select id="majorFilter" name="major" class="form-select">
+                <option value="">All Majors</option>
+                {% for m in major_options %}
+                <option value="{{ m }}" {% if m == major_filter %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3" style="width: 15%">
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bx bx-filter"></i> Apply Filters
+            </button>
+        </div>
+    </form>
+</div>
+
+{% if no_professor_match %}
+<div class="card-custom">
+    <div class="empty-state">
+        <div class="empty-state__icon"><i class="bx bx-user-x"></i></div>
+        <div class="empty-state__text">Your account is not linked to a professor profile. Please contact the Scheduler/Admin.</div>
+    </div>
+</div>
+{% elif sections %}
+<div class="d-grid gap-3">
+    {% for section in sections %}
+    <div class="section-card" data-href="/schedule/{{ section.section }}?semester={{ section.semester | urlencode }}&major={{ section.major | urlencode if section.major else '' }}" tabindex="0" role="button" aria-label="View schedule for Section {{ section.section_name }}">
+        <div class="section-card__info">
+            <h5 class="mb-1">
+                Section {{ section.section_name }}
+                {% if section.major %}
+                <span class="badge-custom badge-primary ms-2">{{ section.major }}</span>
+                {% endif %}
+                <span class="badge-custom badge-success ms-1">{{ section.semester or 'No Semester' }}</span>
+            </h5>
+            <div class="section-card__meta">
+                Year {{ section.year_level }}
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="view-hint">
+                View Schedule <i class="bx bx-chevron-right fs-5"></i>
+            </span>
+            {% if user_role != 'Viewer' %}
+            <button type="button" class="btn btn-outline-secondary btn-sm stop-prop edit-schedule-btn"
+                    data-section="{{ section.section }}"
+                    data-year="{{ section.year_level }}"
+                    data-semester="{{ section.semester or '' }}"
+                    data-major="{{ section.major or '' }}"
+                    title="Edit Schedule">
+                <i class="bx bx-edit"></i> Edit
+            </button>
+            <a href="{{ url_for('delete_section_schedule', section_name=section.section, semester=section.semester, major=section.major) }}" class="btn btn-danger btn-sm stop-prop" data-confirm="Are you sure you want to delete the entire schedule for Section {{ section.section }}?" title="Delete Schedule">
+                <i class="bx bx-trash"></i> Delete
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card-custom">
+    <div class="empty-state">
+        <div class="empty-state__icon"><i class="bx bx-grid-alt"></i></div>
+        <div class="empty-state__text">No schedules have been generated yet</div>
+        {% if user_role != 'Viewer' %}
+        <a href="/" class="btn btn-primary mt-3">
+            <i class="bx bx-plus-circle"></i> Generate Your First Schedule
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="deleteAllModal" tabindex="-1" aria-labelledby="deleteAllModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteAllModalLabel"><i class="bx bx-trash me-2"></i>Delete All Schedules</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <strong>Warning:</strong> This action will permanently delete ALL generated schedules. This cannot be undone.
+                </div>
+                <label class="form-label" for="delete-all-password">Enter your password</label>
+                <div class="input-group">
+                    <input type="password" class="form-control" id="delete-all-password" placeholder="Password">
+                    <button class="btn btn-outline-secondary" type="button" id="toggle-delete-password">
+                        <i class="bx bx-show"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-all">Delete All</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editScheduleModal" tabindex="-1" aria-labelledby="editScheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editScheduleModalLabel"><i class="bx bx-edit me-2"></i>Edit Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-schedule-form">
+                    <input type="hidden" id="edit-section-name">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit-section-input">Section Name</label>
+                            <input type="text" class="form-control" id="edit-section-input" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit-year-input">Year Level</label>
+                            <select class="form-select" id="edit-year-input">
+                                <option value="1">1st Year</option>
+                                <option value="2">2nd Year</option>
+                                <option value="3">3rd Year</option>
+                                <option value="4">4th Year</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit-semester-input">Semester</label>
+                            <input type="text" class="form-control" id="edit-semester-input">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit-major-input">Major</label>
+                            <input type="text" class="form-control" id="edit-major-input">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-schedule-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function(){
+    var deleteAllModal = new bootstrap.Modal(document.getElementById('deleteAllModal'));
+    var editScheduleModal = new bootstrap.Modal(document.getElementById('editScheduleModal'));
+    var deleteAllBtn = document.getElementById('delete-all-btn');
+    var confirmDeleteAllBtn = document.getElementById('confirm-delete-all');
+    var deleteAllPassword = document.getElementById('delete-all-password');
+    var toggleDeletePasswordBtn = document.getElementById('toggle-delete-password');
+    var editScheduleBtn = document.querySelectorAll('.edit-schedule-btn');
+    var saveScheduleBtn = document.getElementById('save-schedule-btn');
+    var editSectionInput = document.getElementById('edit-section-input');
+    var editYearInput = document.getElementById('edit-year-input');
+    var editSemesterInput = document.getElementById('edit-semester-input');
+    var editMajorInput = document.getElementById('edit-major-input');
+    var editSectionNameInput = document.getElementById('edit-section-name');
+    var activeSectionName = '';
+
+    function showToast(message, type){
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        }
+    }
+
+    function resetDeleteModal(){
+        deleteAllPassword.value = '';
+        deleteAllPassword.type = 'password';
+        toggleDeletePasswordBtn.innerHTML = '<i class="bx bx-show"></i>';
+    }
+
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', function(){
+            resetDeleteModal();
+            deleteAllModal.show();
+        });
+    }
+
+    if (toggleDeletePasswordBtn) {
+        toggleDeletePasswordBtn.addEventListener('click', function(){
+            var isPassword = deleteAllPassword.type === 'password';
+            deleteAllPassword.type = isPassword ? 'text' : 'password';
+            toggleDeletePasswordBtn.innerHTML = '<i class="bx ' + (isPassword ? 'bx-hide' : 'bx-show') + '"></i>';
+        });
+    }
+
+    if (confirmDeleteAllBtn) {
+        confirmDeleteAllBtn.addEventListener('click', function(){
+            if (!deleteAllPassword.value.trim()) {
+                showToast('Please enter your password.', 'warning');
+                return;
+            }
+
+            confirmDeleteAllBtn.disabled = true;
+            confirmDeleteAllBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Deleting...';
+
+            fetch('/delete_all_schedules', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: deleteAllPassword.value})
+            })
+            .then(function(response){
+                if (!response.ok) {
+                    return response.json().then(function(data){
+                        throw new Error(data.message || 'Something went wrong. Please try again.');
+                    });
+                }
+                return response.json();
+            })
+            .then(function(data){
+                deleteAllModal.hide();
+                showToast(data.message || 'All schedules were deleted successfully.', 'success');
+                setTimeout(function(){ window.location.reload(); }, 800);
+            })
+            .catch(function(err){
+                showToast(err.message || 'Something went wrong. Please try again.', 'error');
+            })
+            .finally(function(){
+                confirmDeleteAllBtn.disabled = false;
+                confirmDeleteAllBtn.innerHTML = 'Delete All';
+            });
+        });
+    }
+
+    $('.section-card').on('click', function(e){
+        if ($(e.target).closest('.stop-prop, button, a').length) return;
+        var href = $(this).data('href');
+        if (href) window.location.href = href;
+    });
+
+    $('.section-card').on('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ') {
+            if ($(e.target).closest('.stop-prop, button, a').length) return;
+            e.preventDefault();
+            var href = $(this).data('href');
+            if (href) window.location.href = href;
+        }
+    });
+
+    $('.stop-prop').on('click', function(e){
+        e.stopPropagation();
+    });
+
+    editScheduleBtn.forEach(function(button){
+        button.addEventListener('click', function(e){
+            e.stopPropagation();
+            activeSectionName = button.getAttribute('data-section') || '';
+            editSectionNameInput.value = activeSectionName;
+            editSectionInput.value = activeSectionName || '';
+            editYearInput.value = button.getAttribute('data-year') || '1';
+            editSemesterInput.value = button.getAttribute('data-semester') || '';
+            editMajorInput.value = button.getAttribute('data-major') || '';
+            editScheduleModal.show();
+        });
+    });
+
+    if (saveScheduleBtn) {
+        saveScheduleBtn.addEventListener('click', function(){
+            var payload = {
+                year_level: editYearInput.value,
+                semester: editSemesterInput.value,
+                major: editMajorInput.value
+            };
+
+            saveScheduleBtn.disabled = true;
+            saveScheduleBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+            fetch('/edit_schedule/' + encodeURIComponent(activeSectionName), {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(function(response){
+                if (!response.ok) {
+                    return response.json().then(function(data){
+                        throw new Error(data.message || 'Something went wrong. Please try again.');
+                    });
+                }
+                return response.json();
+            })
+            .then(function(data){
+                editScheduleModal.hide();
+                showToast(data.message || 'Schedule updated successfully.', 'success');
+                setTimeout(function(){ window.location.reload(); }, 800);
+            })
+            .catch(function(err){
+                showToast(err.message || 'Something went wrong. Please try again.', 'error');
+            })
+            .finally(function(){
+                saveScheduleBtn.disabled = false;
+                saveScheduleBtn.innerHTML = 'Save Changes';
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Professor Schedule Details - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Professor Schedule Details</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Professor Schedule Details</h1>
+        <p class="page-subtitle">Click any schedule entry row to inspect full details</p>
+    </div>
+    <a href="/professor_schedule" class="btn btn-outline-secondary">
+        <i class="bx bx-arrow-back"></i> Back to Professor Schedule
+    </a>
+</div>
+
+{% if entries %}
+<div class="card-custom mb-4">
+    <div class="card-custom__header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h5 class="card-custom__title mb-1">
+                Professor: {{ professor_name }}
+                {% if professor.department %}
+                <span class="badge-custom badge-primary ms-2">{{ professor.department }}</span>
+                {% endif %}
+            </h5>
+            {% if semester_filter %}
+            <span class="badge-custom badge-success">{{ semester_filter }}</span>
+            {% endif %}
+            {% if year_filter %}
+            <span class="badge-custom badge-primary">Year {{ year_filter }}</span>
+            {% endif %}
+            {% if major_filter %}
+            <span class="badge-custom badge-warning">{{ major_filter }}</span>
+            {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small fw-semibold"><i class="bx bx-sort-alt-2 me-1"></i>Sort by Day:</span>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Sort by Day">
+                <button type="button" class="btn btn-sm {% if sort_day == 'desc' %}btn-outline-primary{% else %}btn-primary{% endif %}" id="btnSortAsc" title="Sort Monday to Saturday">
+                    <i class="bx bx-sort-a-z me-1"></i> Monday → Saturday
+                </button>
+                <button type="button" class="btn btn-sm {% if sort_day == 'desc' %}btn-primary{% else %}btn-outline-primary{% endif %}" id="btnSortDesc" title="Sort Saturday to Monday">
+                    <i class="bx bx-sort-z-a me-1"></i> Saturday → Monday
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table-custom">
+            <thead>
+                <tr>
+                    <th>Course</th>
+                    <th>Section</th>
+                    <th>Room</th>
+                    <th>Day</th>
+                    <th>Time</th>
+                    <th>Semester</th>
+                    <th>Year Level</th>
+                    <th>Type</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                <tr class="schedule-row"
+                    tabindex="0"
+                    role="button"
+                    data-course="{{ entry.course_name or 'TBA' }}"
+                    data-section="{{ entry.section or 'TBA' }}"
+                    data-room="{{ entry.room or 'TBA' }}"
+                    data-day="{{ entry.day or 'TBA' }}"
+                    data-time="{{ entry.start_time ~ ' - ' ~ entry.end_time if entry.start_time and entry.end_time else 'TBA' }}"
+                    data-session="{{ entry.session_type or 'TBA' }}"
+                    data-semester="{{ entry.semester or 'N/A' }}"
+                    data-major="{{ entry.major or 'N/A' }}"
+                    data-year="{{ 'Year ' ~ entry.year_level if entry.year_level else 'N/A' }}"
+                    title="Click to view full details">
+                    <td>
+                        <strong>{{ entry.course_name or 'TBA' }}</strong>
+                        <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
+                    </td>
+                    <td>{{ entry.section or 'TBA' }}</td>
+                    <td>{{ entry.room or 'TBA' }}</td>
+                    <td><strong>{{ entry.day or 'TBA' }}</strong></td>
+                    <td><span class="badge-custom badge-primary">{{ entry.start_time }} - {{ entry.end_time }}</span></td>
+                    <td>{{ entry.semester or 'TBA' }}</td>
+                    <td>Year {{ entry.year_level or 'TBA' }}</td>
+                    <td>
+                        <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
+                            {{ entry.session_type or 'TBA' }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card-custom">
+    <div class="empty-state">
+        <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
+        <div class="empty-state__text">No schedule entries found for this professor</div>
+        <a href="/professor_schedule" class="btn btn-primary mt-3">
+            <i class="bx bx-arrow-back"></i> Back to Professor Schedule
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<!-- Detail Modal -->
+<div class="modal fade" id="scheduleDetailModal" tabindex="-1" aria-labelledby="scheduleDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scheduleDetailModalLabel">
+                    <i class="bx bx-calendar-event text-primary me-2"></i>Class Schedule Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="p-3 bg-light rounded-3 mb-3 border">
+                    <h6 class="fw-bold text-primary mb-1" id="modalCourseName">Course Name</h6>
+                    <small class="text-muted" id="modalMeta">Section Details</small>
+                </div>
+
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--indigo fs-4"><i class="bx bx-user"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Professor</span>
+                            <strong class="text-dark fs-6">{{ professor_name }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--emerald fs-4"><i class="bx bx-building"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Room</span>
+                            <strong class="text-dark fs-6" id="modalRoom">Room Name</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--amber fs-4"><i class="bx bx-calendar"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Day</span>
+                            <strong class="text-dark fs-6" id="modalDay">Day</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--amber fs-4"><i class="bx bx-time-five"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Time</span>
+                            <strong class="text-dark fs-6" id="modalTime">Time</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--indigo fs-4"><i class="bx bx-category"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Session Type</span>
+                            <span class="badge-custom badge-success" id="modalSession">Session Type</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function(){
+    $('#scheduleDetailModal').appendTo("body");
+
+    var scheduleDetailModal = new bootstrap.Modal(document.getElementById('scheduleDetailModal'));
+
+    function showToast(message, type){
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        }
+    }
+
+    $('.schedule-row').on('click', function(e){
+        if ($(e.target).closest('.stop-prop, button, a, input').length) {
+            e.stopPropagation();
+            return;
+        }
+        var $t = $(this);
+        $('#modalCourseName').text($t.data('course'));
+        $('#modalMeta').text('Section ' + $t.data('section') + ' | ' + $t.data('semester') + ($t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + $t.data('year'));
+        $('#modalRoom').text($t.data('room'));
+        $('#modalDay').text($t.data('day'));
+        $('#modalTime').text($t.data('time'));
+        $('#modalSession').text($t.data('session')).attr('class', 'badge-custom ' + ($t.data('session') === 'Laboratory' ? 'badge-warning' : 'badge-success'));
+        scheduleDetailModal.show();
+    });
+
+    $('.schedule-row').on('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ') {
+            if ($(e.target).closest('.stop-prop, button, a, input').length) return;
+            e.preventDefault();
+            $(this).trigger('click');
+        }
+    });
+
+    $(document).on('click', '.stop-prop', function(e){
+        e.stopPropagation();
+    });
+
+    // --- Day Sorting Logic ---
+    const dayRankAsc = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7 };
+    const dayRankDesc = { 'Saturday': 1, 'Friday': 2, 'Thursday': 3, 'Wednesday': 4, 'Tuesday': 5, 'Monday': 6, 'Sunday': 7 };
+
+    function sortTableByDay(order) {
+        var tbody = $('table.table-custom tbody');
+        var rows = tbody.find('tr.schedule-row').get();
+        var rankMap = (order === 'desc') ? dayRankDesc : dayRankAsc;
+
+        rows.sort(function(a, b) {
+            var dayA = $(a).data('day') || '';
+            var dayB = $(b).data('day') || '';
+            var rankA = rankMap[dayA] || 99;
+            var rankB = rankMap[dayB] || 99;
+
+            if (rankA !== rankB) {
+                return rankA - rankB;
+            }
+
+            var timeA = $(a).data('time') || '';
+            var timeB = $(b).data('time') || '';
+            return timeA.localeCompare(timeB);
+        });
+
+        $.each(rows, function(index, row) {
+            tbody.append(row);
+        });
+
+        if (order === 'desc') {
+            $('#btnSortDesc').removeClass('btn-outline-primary').addClass('btn-primary');
+            $('#btnSortAsc').removeClass('btn-primary').addClass('btn-outline-primary');
+        } else {
+            $('#btnSortAsc').removeClass('btn-outline-primary').addClass('btn-primary');
+            $('#btnSortDesc').removeClass('btn-primary').addClass('btn-outline-primary');
+        }
+    }
+
+    $('#btnSortAsc').on('click', function() {
+        sortTableByDay('asc');
+    });
+
+    $('#btnSortDesc').on('click', function() {
+        sortTableByDay('desc');
+    });
+});
+</script>
+{% endblock %}

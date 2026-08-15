@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Rooms - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Room Management</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Rooms</h1>
+        <p class="page-subtitle">Manage classrooms and laboratories</p>
+    </div>
+</div>
+
+<div class="card-custom mb-4">
+    <div class="card-custom__header">
+        <h5 class="card-custom__title"><i class="bx bx-door-open me-2"></i>Add New Room</h5>
+    </div>
+    <form action="/add_room" method="POST">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Department</label>
+                <input type="text" name="department" class="form-control" placeholder="e.g. CICT" value="{{ department or '' }}" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Room Name</label>
+                <div class="room-search-wrapper">
+                    <input type="text" name="room_name" id="add_room_name" class="form-control" placeholder="e.g. Room 101" autocomplete="off" required>
+                    <i id="roomValidationIcon" class="room-validation-icon bx d-none"></i>
+                    <div id="roomSearchDropdown" class="room-search-dropdown d-none"></div>
+                </div>
+                <div id="roomDuplicateWarning" class="room-duplicate-warning d-none">
+                    <i class="bx bx-error-circle"></i> Room already exists
+                </div>
+                <div id="roomAvailableSuccess" class="room-available-success d-none">
+                    <i class="bx bx-check-circle"></i> Room name is available
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Room Type</label>
+                <select class="form-select" name="room_type" required>
+                    <option value="" selected disabled>Select Type</option>
+                    <option value="Lecture Room">Lecture Room</option>
+                    <option value="Laboratory Room">Laboratory Room</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" id="addRoomBtn" class="btn btn-primary">
+                    <i class="bx bx-plus"></i> Add Room
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card-custom">
+    <div class="card-custom__header">
+        <h5 class="card-custom__title">Room List</h5>
+        <span class="badge-custom badge-primary">{{ rooms|length }} rooms</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table-custom">
+            <thead>
+                <tr>
+                    <th>Room Name</th>
+                    <th>Department</th>
+                    <th>Type</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for room in rooms %}
+                <tr>
+                    <td><strong>{{ room.room_name }}</strong></td>
+                    <td><span class="badge-custom badge-info">{{ room.department }}</span></td>
+                    <td><span class="badge-custom {% if 'Lab' in room.room_type %}badge-warning{% else %}badge-success{% endif %}">{{ room.room_type }}</span></td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-warning btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{room.room_id}}" data-name="{{room.room_name}}" data-room_type="{{room.room_type}}">
+                            <i class="bx bx-edit"></i> Edit
+                        </button>
+                        <a href="/delete_room/{{room.room_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this room?">
+                            <i class="bx bx-trash"></i> Delete
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">
+                        <div class="empty-state">
+                            <div class="empty-state__icon"><i class="bx bx-building"></i></div>
+                            <div class="empty-state__text">No rooms added yet</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bx bx-edit me-2"></i>Edit Room</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Room Name</label>
+                        <input type="text" name="room_name" id="edit_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Room Type</label>
+                        <select class="form-select" name="room_type" id="edit_room_type" required>
+                            <option value="Lecture Room">Lecture Room</option>
+                            <option value="Laboratory Room">Laboratory Room</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+$(function(){
+    $('#editModal').appendTo("body");
+    $('.edit-btn').on('click', function(){
+        var $t = $(this);
+        $('#edit_name').val($t.data('name'));
+        $('#edit_room_type').val($t.data('room_type'));
+        $('#editForm').attr('action', '/edit_room/' + $t.data('id'));
+    });
+
+    // Real-time Room Search & Duplicate Detection
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text.replace(/[&<>"']/g, function(m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+        });
+    }
+
+    function highlightMatch(text, query) {
+        if (!query) return escapeHtml(text);
+        var escapedText = escapeHtml(text);
+        var escapedQuery = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var regex = new RegExp('(' + escapedQuery + ')', 'gi');
+        return escapedText.replace(regex, '<span class="room-search-item__highlight">$1</span>');
+    }
+
+    function debounce(func, wait) {
+        var timeout;
+        return function() {
+            var context = this, args = arguments;
+            clearTimeout(timeout);
+            timeout = setTimeout(function() {
+                func.apply(context, args);
+            }, wait);
+        };
+    }
+
+    function performSearch() {
+        var query = $('#add_room_name').val().trim();
+        var $dropdown = $('#roomSearchDropdown');
+        var $warning = $('#roomDuplicateWarning');
+        var $success = $('#roomAvailableSuccess');
+        var $valIcon = $('#roomValidationIcon');
+        var $input = $('#add_room_name');
+        var $submitBtn = $('#addRoomBtn');
+
+        if (!query) {
+            $dropdown.addClass('d-none').empty();
+            $warning.addClass('d-none');
+            $success.addClass('d-none');
+            $valIcon.addClass('d-none').removeClass('bx-error-circle text-danger bx-check-circle text-success');
+            $input.removeClass('is-invalid is-valid');
+            $submitBtn.prop('disabled', false);
+            return;
+        }
+
+        $.getJSON('/search_rooms', { q: query })
+            .done(function(data) {
+                var rooms = data.rooms || [];
+                var exactMatch = data.exact_match || false;
+
+                if (rooms.length === 0) {
+                    $dropdown.html(
+                        '<div class="room-search-empty"><i class="bx bx-info-circle"></i> No existing rooms found</div>'
+                    ).removeClass('d-none');
+                } else {
+                    var html = rooms.map(function(room) {
+                        var highlightedName = highlightMatch(room.room_name, query);
+                        var deptBadge = room.department ? '<span class="badge-custom badge-info">' + escapeHtml(room.department) + '</span>' : '';
+                        var typeBadge = room.room_type ? '<span class="badge-custom ' + (room.room_type.indexOf('Lab') !== -1 ? 'badge-warning' : 'badge-success') + '">' + escapeHtml(room.room_type) + '</span>' : '';
+                        return '<div class="room-search-item">' +
+                               '  <span class="room-search-item__name">' + highlightedName + '</span>' +
+                               '  <div class="room-search-item__details">' + deptBadge + ' ' + typeBadge + '</div>' +
+                               '</div>';
+                    }).join('');
+                    $dropdown.html(html).removeClass('d-none');
+                }
+
+                if (exactMatch) {
+                    // Duplicate state (Red border, error icon, warning message)
+                    $warning.removeClass('d-none');
+                    $success.addClass('d-none');
+                    $input.addClass('is-invalid').removeClass('is-valid');
+                    $valIcon.removeClass('d-none bx-check-circle text-success').addClass('bx-error-circle text-danger');
+                    $submitBtn.prop('disabled', true);
+                } else {
+                    // Available state (Green border, check icon, success message)
+                    $warning.addClass('d-none');
+                    $success.removeClass('d-none');
+                    $input.addClass('is-valid').removeClass('is-invalid');
+                    $valIcon.removeClass('d-none bx-error-circle text-danger').addClass('bx-check-circle text-success');
+                    $submitBtn.prop('disabled', false);
+                }
+            })
+            .fail(function() {
+                $dropdown.addClass('d-none').empty();
+            });
+    }
+
+    var debouncedSearch = debounce(performSearch, 300);
+
+    $('#add_room_name').on('input focus', debouncedSearch);
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.room-search-wrapper').length) {
+            $('#roomSearchDropdown').addClass('d-none');
+        }
+    });
+});
+</script>
+{% endblock %}

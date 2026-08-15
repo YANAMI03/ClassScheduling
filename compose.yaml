@@ -1,0 +1,28 @@
+# ==============================================================================
+# ClassScheduling Docker Compose Configuration
+# Modern Compose Specification for local development & containerization
+# ==============================================================================
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: class_scheduling_app
+    ports:
+      - "${PORT:-5000}:5000"
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=5000
+      - FLASK_DEBUG=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Live reload: mount local workspace into container
+      - .:/app
+      # Anonymous volumes to isolate host/container cache and build artifacts
+      - /app/__pycache__
+      - /app/.pytest_cache
+      - /app/node_modules
+    restart: unless-stopped

@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Preview Schedule - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Preview Schedule</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Preview Schedule</h1>
+        <p class="page-subtitle">Review the generated schedule before saving it.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <form action="/confirm_preview" method="post" class="m-0">
+            <button type="submit" class="btn btn-success">
+                <i class="bx bx-check-circle"></i> Confirm Schedule
+            </button>
+        </form>
+        <form action="/discard_preview" method="post" class="m-0">
+            <button type="submit" class="btn btn-outline-secondary">
+                <i class="bx bx-x-circle"></i> Discard Preview
+            </button>
+        </form>
+        <a href="/" class="btn btn-outline-secondary">
+            <i class="bx bx-arrow-back"></i> Back to Generate Schedule
+        </a>
+    </div>
+</div>
+
+{% if sections_with_entries %}
+    {% for item in sections_with_entries %}
+    <div class="card-custom mb-4">
+        <div class="card-custom__header">
+            <div>
+                <h5 class="card-custom__title mb-1">
+                    Section {{ item.section.section_name }} - {{ item.section.semester or 'Semester not set' }}
+                </h5>
+                {% if item.section.major %}
+                <span class="badge-custom badge-primary">{{ item.section.major }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table-custom">
+                <thead>
+                    <tr>
+                        <th>Course</th>
+                        <th>Professor</th>
+                        <th>Room</th>
+                        <th>Timeslot</th>
+                        <th>Type</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if item.entries %}
+                        {% for entry in item.entries %}
+                        <tr class="schedule-row"
+                            tabindex="0"
+                            role="button"
+                            data-course="{{ entry.course_name or 'TBA' }}"
+                            data-professor="{{ entry.professor_name }}"
+                            data-room="{{ entry.room_name or 'TBA' }}"
+                            data-timeslot="{{ entry.time_range }}"
+                            data-session="{{ entry.session_type or 'TBA' }}"
+                            title="Click to view full details">
+                            <td>
+                                <strong>{{ entry.course_name or 'TBA' }}</strong>
+                                <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
+                            </td>
+                            <td>{{ entry.professor_name }}</td>
+                            <td>{{ entry.room_name or 'TBA' }}</td>
+                            <td><span class="badge-custom badge-primary">{{ entry.time_range }}</span></td>
+                            <td>
+                                <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
+                                    {{ entry.session_type or 'TBA' }}
+                                </span>
+                            </td>
+                            <td class="text-end align-middle">
+                                <button type="button" class="btn btn-outline-secondary btn-sm edit-preview-entry-btn" 
+                                    data-entry-id="{{ entry.id }}"
+                                    data-course-id="{{ entry.course_id or '' }}"
+                                    data-course="{{ entry.course_name or 'TBA' }}"
+                                    data-section="{{ entry.section or '' }}"
+                                    data-prof-id="{{ entry.prof_id or '' }}"
+                                    data-room-id="{{ entry.room_id or '' }}"
+                                    data-day="{{ entry.day or '' }}"
+                                    data-start="{{ entry.start or '' }}"
+                                    data-end="{{ entry.end or '' }}">
+                                    <i class="bx bx-edit"></i> Edit
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5">
+                                <div class="empty-state">
+                                    <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
+                                    <div class="empty-state__text">No schedule entries found</div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+<div class="card-custom">
+    <div class="empty-state">
+        <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
+        <div class="empty-state__text">No preview schedule is available.</div>
+        <a href="/" class="btn btn-primary mt-3">
+            <i class="bx bx-arrow-back"></i> Back to Generate Schedule
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<!-- Detail Modal -->
+<div class="modal fade" id="scheduleDetailModal" tabindex="-1" aria-labelledby="scheduleDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scheduleDetailModalLabel">
+                    <i class="bx bx-calendar-event text-primary me-2"></i>Class Schedule Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="p-3 bg-light rounded-3 mb-3 border">
+                    <h6 class="fw-bold text-primary mb-1" id="modalCourseName">Course Name</h6>
+                    <small class="text-muted" id="modalMeta">Section Details</small>
+                </div>
+
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--indigo fs-4"><i class="bx bx-user"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Professor</span>
+                            <strong class="text-dark fs-6" id="modalProfessor">Professor Name</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--emerald fs-4"><i class="bx bx-building"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Room</span>
+                            <strong class="text-dark fs-6" id="modalRoom">Room Name</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--amber fs-4"><i class="bx bx-time-five"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Schedule / Timeslot</span>
+                            <strong class="text-dark fs-6" id="modalTimeslot">Timeslot</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--indigo fs-4"><i class="bx bx-category"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Session Type</span>
+                            <span class="badge-custom badge-success" id="modalSession">Session Type</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editPreviewEntryModal" tabindex="-1" aria-labelledby="editPreviewEntryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editPreviewEntryModalLabel"><i class="bx bx-edit text-primary me-2"></i>Edit Preview Entry</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-preview-entry-form">
+                    <input type="hidden" id="edit-preview-entry-id" name="id">
+                        <div class="mb-3">
+                        <label class="form-label" for="edit-preview-course">Course</label>
+                        <select class="form-select" id="edit-preview-course" name="course_id">
+                            <option value="">Select Course</option>
+                            {% for course in courses %}
+                            <option value="{{ course.course_id }}">{{ course.course_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="edit-preview-section">Section</label>
+                        <input type="text" class="form-control" id="edit-preview-section" name="section" placeholder="e.g. 1A">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="edit-preview-professor">Professor</label>
+                        <select class="form-select" id="edit-preview-professor" name="prof_id">
+                            <option value="">TBA</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="edit-preview-room">Room</label>
+                        <select class="form-select" id="edit-preview-room" name="room_id">
+                            <option value="">TBA</option>
+                            {% for room in rooms %}
+                            <option value="{{ room.room_id }}">{{ room.room_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="edit-preview-day">Day</label>
+                        <select class="form-select" id="edit-preview-day" name="day">
+                            <option value="Monday">Monday</option>
+                            <option value="Tuesday">Tuesday</option>
+                            <option value="Wednesday">Wednesday</option>
+                            <option value="Thursday">Thursday</option>
+                            <option value="Friday">Friday</option>
+                            <option value="Saturday">Saturday</option>
+                            <option value="Sunday">Sunday</option>
+                        </select>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit-preview-start">Start Time</label>
+                            <input type="text" class="form-control" id="edit-preview-start" name="start" placeholder="e.g. 8:00 AM">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit-preview-end">End Time</label>
+                            <input type="text" class="form-control" id="edit-preview-end" name="end" placeholder="e.g. 9:00 AM">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-preview-entry-btn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function(){
+    $('#scheduleDetailModal').appendTo('body');
+    var scheduleDetailModal = new bootstrap.Modal(document.getElementById('scheduleDetailModal'));
+    function showToast(message, type){
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        }
+    }
+
+    $('.schedule-row').on('click', function(e){
+        if ($(e.target).closest('.stop-prop, button, a, input').length) {
+            e.stopPropagation();
+            return;
+        }
+        var $t = $(this);
+        $('#modalCourseName').text($t.data('course'));
+        $('#modalMeta').text('Section ' + $t.data('section'));
+        $('#modalProfessor').text($t.data('professor'));
+        $('#modalRoom').text($t.data('room'));
+        $('#modalTimeslot').text($t.data('timeslot'));
+        $('#modalSession').text($t.data('session'));
+        scheduleDetailModal.show();
+    });
+
+    $(document).on('click', '.stop-prop, .edit-preview-entry-btn', function(e){
+        e.stopPropagation();
+    });
+
+    var editPreviewEntryModal = new bootstrap.Modal(document.getElementById('editPreviewEntryModal'));
+    var editEntryId = document.getElementById('edit-preview-entry-id');
+    var editProfessor = document.getElementById('edit-preview-professor');
+    var editRoom = document.getElementById('edit-preview-room');
+    var editDay = document.getElementById('edit-preview-day');
+    var editStart = document.getElementById('edit-preview-start');
+    var editEnd = document.getElementById('edit-preview-end');
+    var savePreviewEntryBtn = document.getElementById('save-preview-entry-btn');
+
+    var profCourseAssignments = {{ prof_course_assignments|tojson }};
+    var editCourse = document.getElementById('edit-preview-course');
+    var editSection = document.getElementById('edit-preview-section');
+
+    function populateProfessorOptions(courseId, selectedProfId) {
+        var html = '<option value="">TBA</option>';
+        var selected = selectedProfId || '';
+        if (courseId && profCourseAssignments[courseId]) {
+            profCourseAssignments[courseId].forEach(function(prof){
+                html += '<option value="' + prof.id + '">' + prof.name + '</option>';
+            });
+        }
+        editProfessor.innerHTML = html;
+        if (selected && editProfessor.querySelector('option[value="' + selected + '"]')) {
+            editProfessor.value = selected;
+        } else {
+            editProfessor.value = '';
+        }
+    }
+
+    function clearEditValidation() {
+        [editCourse, editSection, editProfessor, editRoom, editDay, editStart, editEnd].forEach(function(el){
+            el.classList.remove('is-invalid');
+        });
+    }
+
+    editCourse.addEventListener('change', function(){
+        populateProfessorOptions(editCourse.value, editProfessor.value);
+    });
+
+    $('.edit-preview-entry-btn').on('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        var $btn = $(this);
+        editEntryId.value = $btn.data('entry-id');
+        editCourse.value = $btn.data('course-id') || '';
+        editSection.value = $btn.data('section') || '';
+        editRoom.value = $btn.data('room-id') || '';
+        editDay.value = $btn.data('day') || 'Monday';
+        editStart.value = $btn.data('start') || '';
+        editEnd.value = $btn.data('end') || '';
+        populateProfessorOptions(editCourse.value, $btn.data('prof-id') || '');
+        clearEditValidation();
+        editPreviewEntryModal.show();
+    });
+
+    savePreviewEntryBtn.addEventListener('click', function(){
+        var payload = {
+            id: editEntryId.value,
+            course_id: editCourse.value,
+            section: editSection.value,
+            prof_id: editProfessor.value,
+            room_id: editRoom.value,
+            day: editDay.value,
+            start: editStart.value,
+            end: editEnd.value
+        };
+
+        fetch('/edit_preview_entry', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(function(response){
+            return response.json();
+        })
+        .then(function(data){
+            if (data.success) {
+                location.reload();
+            } else {
+                showToast(data.error || 'Unable to save changes.', 'error');
+            }
+        })
+        .catch(function(){
+            showToast('Unable to save changes.', 'error');
+        });
+    });
+});
+</script>
+{% endblock %}

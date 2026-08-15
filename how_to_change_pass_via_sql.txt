@@ -1,0 +1,11 @@
+UPDATE auth.users 
+SET encrypted_password = crypt('password123', gen_salt('bf'))
+WHERE email = 'admin@example.com';
+
+UPDATE auth.users 
+SET encrypted_password = crypt('password123', gen_salt('bf'))
+WHERE email = 'scheduler@example.com';
+
+UPDATE auth.users 
+SET encrypted_password = crypt('password123', gen_salt('bf'))
+WHERE email = 'viewer@example.com';

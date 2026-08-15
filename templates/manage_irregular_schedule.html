@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Manage Irregular Schedule - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Manage Irregular Schedule</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Manage Schedule: {{ student.first_name }} {{ student.last_name }}</h1>
+        <p class="page-subtitle">Student ID: <strong>{{ student.student_id_number }}</strong> | Program: <strong>{{ student.program }}</strong> | Selected Years: <strong>{{ student.year_level }}</strong></p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/irregular_students/{{ student.student_id }}/view_schedule" class="btn btn-primary">
+            <i class="bx bx-calendar me-1"></i> View Schedule
+        </a>
+        <a href="/irregular_students" class="btn btn-outline-secondary">
+            <i class="bx bx-arrow-back me-1"></i> Back to Irregular Students
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Available Courses & Sections Grouped by Year Level -->
+    <div class="col-lg-6">
+        <div class="card-custom mb-4">
+            <div class="card-custom__header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="card-custom__title mb-0"><i class="bx bx-book-content me-2"></i>Select Courses & Sections</h5>
+                <form method="get" class="d-flex gap-2 align-items-center">
+                    <select name="semester" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="1st Semester" {% if semester_filter == '1st Semester' %}selected{% endif %}>1st Semester</option>
+                        <option value="2nd Semester" {% if semester_filter == '2nd Semester' %}selected{% endif %}>2nd Semester</option>
+                    </select>
+                </form>
+            </div>
+
+            {% if courses_by_year %}
+            <div class="p-3">
+                {% for yl, c_list in courses_by_year.items() %}
+                <div class="mb-4">
+                    <div class="bg-light p-2 rounded-2 border mb-2 d-flex align-items-center justify-content-between">
+                        <h6 class="fw-bold text-primary mb-0"><i class="bx bx-layer me-2"></i>{{ yl }}</h6>
+                        <span class="badge bg-secondary">{{ c_list | length }} course{{ 's' if c_list | length != 1 else '' }}</span>
+                    </div>
+                    <div class="accordion" id="coursesAccordion-{{ loop.index }}">
+                        {% for course in c_list %}
+                        {% set cid = course.course_id %}
+                        {% set is_assigned = cid in assigned_course_ids %}
+                        <div class="accordion-item mb-2 border rounded-3 overflow-hidden" id="course-accordion-{{ cid }}">
+                            <h2 class="accordion-header" id="heading-{{ cid }}">
+                                <button class="accordion-button collapsed py-2 px-3 bg-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ cid }}" aria-expanded="false" aria-controls="collapse-{{ cid }}">
+                                    <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                                        <div>
+                                            <strong class="text-dark">{{ course.course_name }}</strong>
+                                            <small class="text-muted d-block">{{ course.semester or 'All Semesters' }}</small>
+                                        </div>
+                                        <span class="badge-custom {% if is_assigned %}badge-success{% else %}badge-warning{% endif %} status-badge-{{ cid }}">
+                                            {% if is_assigned %}Assigned{% else %}Unassigned{% endif %}
+                                        </span>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="collapse-{{ cid }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ cid }}">
+                                <div class="accordion-body p-3 bg-light">
+                                    {% if course_sections.get(cid) %}
+                                    <p class="small text-muted mb-2">Available generated sections for this subject:</p>
+                                    <div class="d-flex flex-column gap-2">
+                                        {% for sec_name, sec_data in course_sections[cid].items() %}
+                                        <div class="border rounded-2 p-2 bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <div>
+                                                <strong class="text-primary fs-6">Section {{ sec_name }}</strong>
+                                                <div class="small text-secondary">
+                                                    <i class="bx bx-user me-1"></i>Prof: {{ sec_data.professor }} | <i class="bx bx-building me-1"></i>Room: {{ sec_data.room }}
+                                                </div>
+                                                <div class="small text-dark mt-1">
+                                                    {% for e in sec_data.entries %}
+                                                    <span class="badge bg-light text-dark border me-1">
+                                                        {{ e.day }}: {{ e.class_start }} - {{ e.class_end }} ({{ e.session_type }})
+                                                    </span>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary btn-assign-section" data-student-id="{{ student.student_id }}" data-course-id="{{ cid }}" data-section="{{ sec_name }}">
+                                                <i class="bx bx-plus-circle me-1"></i> Assign Section
+                                            </button>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <div class="text-muted small py-2 text-center">
+                                        <i class="bx bx-info-circle me-1"></i>No generated schedule sections available for this course in {{ semester_filter }}.
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bx bx-book-x fs-1 d-block mb-2"></i>
+                No courses found for {{ student.program }} in {{ semester_filter }}.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Right Column: Current Student Schedule -->
+    <div class="col-lg-6">
+        <div class="card-custom mb-4">
+            <div class="card-custom__header">
+                <h5 class="card-custom__title"><i class="bx bx-calendar me-2"></i>Assigned Schedule</h5>
+            </div>
+            {% if assigned_entries %}
+            <div class="table-responsive">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>Subject</th>
+                            <th>Section</th>
+                            <th>Day</th>
+                            <th>Time</th>
+                            <th>Room / Prof</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="assigned-schedule-tbody">
+                        {% for entry in assigned_entries %}
+                        <tr id="assigned-row-{{ entry.course_id }}">
+                            <td><strong>{{ entry.course_name }}</strong></td>
+                            <td><span class="badge-custom badge-primary">{{ entry.section }}</span></td>
+                            <td><strong>{{ entry.day }}</strong></td>
+                            <td><span class="badge-custom badge-primary">{{ entry.class_start }} - {{ entry.class_end }}</span></td>
+                            <td>
+                                <div class="small">R: {{ entry.room or 'TBA' }}</div>
+                                <div class="small text-muted">P: {{ entry.professor or 'TBA' }}</div>
+                            </td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-unassign-section" data-student-id="{{ student.student_id }}" data-course-id="{{ entry.course_id }}" title="Remove Subject">
+                                    <i class="bx bx-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted" id="assigned-empty-state">
+                <i class="bx bx-calendar-x fs-1 d-block mb-2"></i>
+                No courses assigned to {{ student.first_name }} yet. Select a section on the left to assign.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function(){
+    function showToast(message, type) {
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        }
+    }
+
+    // Assign section AJAX
+    $(document).on('click', '.btn-assign-section', function(e){
+        e.preventDefault();
+        var $btn = $(this);
+        var studentId = $btn.data('student-id');
+        var courseId = $btn.data('course-id');
+        var section = $btn.data('section');
+
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status"></span>');
+
+        fetch('/irregular_students/' + studentId + '/assign_section', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ course_id: courseId, section: section })
+        })
+        .then(function(res){ return res.json(); })
+        .then(function(data){
+            $btn.prop('disabled', false).html('<i class="bx bx-plus-circle me-1"></i> Assign Section');
+            if (data.success) {
+                showToast(data.message || 'Section assigned successfully.', 'success');
+                setTimeout(function(){ location.reload(); }, 600);
+            } else {
+                showToast(data.message || 'Could not assign section.', 'warning');
+            }
+        })
+        .catch(function(err){
+            $btn.prop('disabled', false).html('<i class="bx bx-plus-circle me-1"></i> Assign Section');
+            showToast('Error processing assignment.', 'danger');
+        });
+    });
+
+    // Unassign section AJAX
+    $(document).on('click', '.btn-unassign-section', function(e){
+        e.preventDefault();
+        var $btn = $(this);
+        var studentId = $btn.data('student-id');
+        var courseId = $btn.data('course-id');
+
+        $btn.prop('disabled', true);
+
+        fetch('/irregular_students/' + studentId + '/unassign_section/' + courseId, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(res){ return res.json(); })
+        .then(function(data){
+            if (data.success) {
+                showToast(data.message || 'Section unassigned.', 'success');
+                setTimeout(function(){ location.reload(); }, 600);
+            } else {
+                $btn.prop('disabled', false);
+                showToast(data.message || 'Could not unassign section.', 'warning');
+            }
+        })
+        .catch(function(err){
+            $btn.prop('disabled', false);
+            showToast('Error removing assignment.', 'danger');
+        });
+    });
+});
+</script>
+{% endblock %}

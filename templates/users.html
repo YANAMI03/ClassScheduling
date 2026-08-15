@@ -1,0 +1,548 @@
+{% extends 'base.html' %}
+
+{% block title %}User Management - Scheduler{% endblock %}
+
+{% block header_title %}<h5 class="header__title">User Management</h5>{% endblock %}
+
+{% block head_extra %}
+<style>
+    .users-header {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .users-header__search {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+    
+    .users-header__search input {
+        flex: 1;
+        max-width: 400px;
+    }
+    
+    .users-table {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .users-table table {    
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .users-table th {
+        background: #f8f9fa;
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #495057;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .users-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #dee2e6;
+        vertical-align: middle;
+    }
+    
+    .users-table tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .users-table tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #dee2e6;
+    }
+    
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .user-name {
+        font-weight: 500;
+        color: #212529;
+    }
+    
+    .user-username {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .badge-custom {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .badge-admin {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .badge-scheduler {
+        background: #0d6efd;
+        color: white;
+    }
+    
+    .badge-viewer {
+        background: #198754;
+        color: white;
+    }
+    
+    .btn-action {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+        border-radius: 6px;
+        margin-right: 0.5rem;
+    }
+    
+    .btn-edit {
+        background: #0d6efd;
+        color: white;
+        border: none;
+    }
+    
+    .btn-edit:hover {
+        background: #0b5ed7;
+    }
+    
+    .btn-delete {
+        background: #dc3545;
+        color: white;
+        border: none;
+    }
+    
+    .btn-delete:hover {
+        background: #bb2d3b;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        color: #dee2e6;
+    }
+    
+    .modal-header {
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 1rem 1.5rem;
+    }
+    
+    .modal-title {
+        font-weight: 600;
+        color: #212529;
+    }
+    
+    .modal-body {
+        padding: 1.5rem;
+    }
+    
+    .form-label {
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-control:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .modal-footer {
+        border-top: 1px solid #dee2e6;
+        padding: 1rem 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div>
+        <h1 class="page-title">User Management</h1>
+        <p class="page-subtitle">Manage system users, credentials, and access roles</p>
+    </div>
+</div>
+
+<div class="users-header">
+    <div class="users-header__search">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, program, or role..." value="{{ search_query }}">
+        <button class="btn btn-primary" onclick="searchUsers()">
+            <i class="bx bx-search"></i> Search
+        </button>
+        {% if search_query %}
+        <a href="/users" class="btn btn-outline-secondary">
+            <i class="bx bx-x"></i> Clear
+        </a>
+        {% endif %}
+        <button class="btn btn-success ms-auto" onclick="openCreateModal()">
+            <i class="bx bx-plus"></i> Create User
+        </button>
+    </div>
+</div>
+
+<div class="users-table">
+    {% if users %}
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Program</th>
+                <th>Role</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>
+                    <div class="user-info">
+                        <img src="{{ url_for('static', filename='profile/' + (user.profile_picture or 'default.png')) }}" alt="Profile" class="user-avatar" onerror="this.onerror=null;this.src='{{ url_for('static', filename='profile/default.png') }}';">
+                        <div>
+                            <div class="user-name">{{ user.first_name }} {{ user.last_name }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <div class="user-username">{{ user.username }}</div>
+                </td>
+                <td>
+                    {% if user.role.lower() == 'admin' %}
+                    <span class="text-muted fst-italic">Global / All Programs</span>
+                    {% else %}
+                    {{ user.program or '-' }}
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge-custom badge-{{ user.role.lower() }}">{{ user.role }}</span>
+                </td>
+                <td>
+                    <button class="btn-action btn-edit" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.last_name }}', '{{ user.username }}', '{{ user.program or '' }}', '{{ user.role }}')">
+                        <i class="bx bx-edit"></i> Edit
+                    </button>
+                    <button class="btn-action btn-delete" onclick="confirmDelete('{{ user.id }}', '{{ user.username }}')">
+                        <i class="bx bx-trash"></i> Delete
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <i class="bx bx-user-x"></i>
+        <div>No users found</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Create User Modal -->
+<div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createUserForm">
+                    <div class="mb-3">
+                        <label for="createFirstName" class="form-label">First Name</label>
+                        <input type="text" class="form-control" id="createFirstName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="createLastName" class="form-label">Last Name</label>
+                        <input type="text" class="form-control" id="createLastName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="createEmail" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="createEmail" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="createPassword" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="createPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="createRole" class="form-label">Role</label>
+                        <select class="form-control" id="createRole" onchange="toggleProgramRole('createRole', 'createProgram')" required>
+                            <option value="Viewer">Viewer</option>
+                            <option value="Scheduler">Scheduler</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="createProgramGroup">
+                        <label for="createProgram" class="form-label">Program</label>
+                        <select class="form-control" id="createProgram" required>
+                            <option value="">Select Program</option>
+                            <option value="BSIT">BSIT</option>
+                            <option value="BSBA">BSBA</option>
+                        </select>
+                        <small class="text-muted d-none" id="createProgramHelp">Admin has global access across all programs.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createUser()">Create User</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="mb-3">
+                        <label for="editFirstName" class="form-label">First Name</label>
+                        <input type="text" class="form-control" id="editFirstName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editLastName" class="form-label">Last Name</label>
+                        <input type="text" class="form-control" id="editLastName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editEmail" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="editEmail" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editRole" class="form-label">Role</label>
+                        <select class="form-control" id="editRole" onchange="toggleProgramRole('editRole', 'editProgram')" required>
+                            <option value="admin">Admin</option>
+                            <option value="Scheduler">Scheduler</option>
+                            <option value="Viewer">Viewer</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="editProgramGroup">
+                        <label for="editProgram" class="form-label">Program</label>
+                        <select class="form-control" id="editProgram" required>
+                            <option value="">Select Program</option>
+                            <option value="BSIT">BSIT</option>
+                            <option value="BSBA">BSBA</option>
+                        </select>
+                        <small class="text-muted d-none" id="editProgramHelp">Admin has global access across all programs.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveUser()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let deleteUserId = null;
+
+function toggleProgramRole(roleSelectId, programSelectId) {
+    const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
+    const progSelect = document.getElementById(programSelectId);
+    const helpText = document.getElementById(roleSelectId === 'createRole' ? 'createProgramHelp' : 'editProgramHelp');
+    
+    if (roleVal === 'admin') {
+        progSelect.value = '';
+        progSelect.disabled = true;
+        progSelect.required = false;
+        if (helpText) helpText.classList.remove('d-none');
+    } else {
+        progSelect.disabled = false;
+        progSelect.required = true;
+        if (helpText) helpText.classList.add('d-none');
+    }
+}
+
+function searchUsers() {
+    const searchQuery = document.getElementById('searchInput').value.trim();
+    window.location.href = `/users?search=${encodeURIComponent(searchQuery)}`;
+}
+
+// Live search on Enter key
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchUsers();
+    }
+});
+
+function openCreateModal() {
+    // Clear form
+    document.getElementById('createFirstName').value = '';
+    document.getElementById('createLastName').value = '';
+    document.getElementById('createEmail').value = '';
+    document.getElementById('createPassword').value = '';
+    document.getElementById('createProgram').value = '';
+    document.getElementById('createRole').value = 'Viewer';
+    toggleProgramRole('createRole', 'createProgram');
+    
+    const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+    modal.show();
+}
+
+function createUser() {
+    const firstName = document.getElementById('createFirstName').value.trim();
+    const lastName = document.getElementById('createLastName').value.trim();
+    const email = document.getElementById('createEmail').value.trim();
+    const password = document.getElementById('createPassword').value;
+    const role = document.getElementById('createRole').value;
+    const program = document.getElementById('createProgram').value;
+    
+    if (!firstName || !lastName || !email || !password || !role) {
+        alert('Please fill in all required fields.');
+        return;
+    }
+    
+    if (role.toLowerCase() !== 'admin' && !program) {
+        alert('Please select a program for Scheduler or Viewer.');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('first_name', firstName);
+    formData.append('last_name', lastName);
+    formData.append('email', email);
+    formData.append('password', password);
+    formData.append('program', role.toLowerCase() === 'admin' ? '' : program);
+    formData.append('role', role);
+    
+    fetch('/create_user', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('An error occurred. Please try again.', 'error');
+    });
+}
+
+function openEditModal(userId, firstName, lastName, email, program, role) {
+    document.getElementById('editUserId').value = userId;
+    document.getElementById('editFirstName').value = firstName;
+    document.getElementById('editLastName').value = lastName;
+    document.getElementById('editEmail').value = email;
+    document.getElementById('editRole').value = role;
+    document.getElementById('editProgram').value = program;
+    toggleProgramRole('editRole', 'editProgram');
+    
+    const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+    modal.show();
+}
+
+function saveUser() {
+    const userId = document.getElementById('editUserId').value;
+    const firstName = document.getElementById('editFirstName').value.trim();
+    const lastName = document.getElementById('editLastName').value.trim();
+    const email = document.getElementById('editEmail').value.trim();
+    const role = document.getElementById('editRole').value;
+    const program = document.getElementById('editProgram').value;
+    
+    if (!firstName || !lastName || !email || !role) {
+        showToast('Please fill in all required fields.', 'warning');
+        return;
+    }
+    
+    if (role.toLowerCase() !== 'admin' && !program) {
+        showToast('Please select a program for Scheduler or Viewer.', 'warning');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('first_name', firstName);
+    formData.append('last_name', lastName);
+    formData.append('email', email);
+    formData.append('program', role.toLowerCase() === 'admin' ? '' : program);
+    formData.append('role', role);
+    
+    fetch(`/edit_user/${userId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('An error occurred. Please try again.', 'error');
+    });
+}
+
+function confirmDelete(userId, username) {
+    if (typeof window.showConfirmModal === 'function') {
+        window.showConfirmModal({
+            title: 'Delete User',
+            message: `Are you sure you want to delete user "${username}"?`,
+            subtext: 'This action cannot be undone.',
+            confirmText: 'Delete',
+            confirmBtnClass: 'btn-danger',
+            onConfirm: function() {
+                deleteUserId = userId;
+                deleteUser();
+            }
+        });
+    }
+}
+
+function deleteUser() {
+    if (!deleteUserId) return;
+    
+    fetch(`/delete_user/${deleteUserId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            showToast(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('An error occurred. Please try again.', 'error');
+    });
+}
+</script>
+{% endblock %}

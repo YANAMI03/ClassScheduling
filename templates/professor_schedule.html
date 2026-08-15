@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Professor Schedule - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Professor Schedule</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Professor Schedule</h1>
+        <p class="page-subtitle">View and manage professor schedules based on existing Section Schedule</p>
+    </div>
+    {% if user_role != 'Viewer' %}
+    <div class="d-flex gap-2">
+        <a href="/" class="btn btn-primary">
+            <i class="bx bx-plus-circle"></i> Generate New Schedule
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card-custom mb-4">
+    <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3" style="width: 15%">
+            <label class="form-label" for="yearFilter">Year Level</label>
+            <select id="yearFilter" name="year" class="form-select">
+                <option value="">All Years</option>
+                {% for year in year_options %}
+                <option value="{{ year }}" {% if year == year_filter %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3" style="width: 15%">
+            <label class="form-label" for="semesterFilter">Semester</label>
+            <select id="semesterFilter" name="semester" class="form-select">
+                <option value="">All Semesters</option>
+                {% for sem in semester_options %}
+                <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3" style="width: 15%">
+            <label class="form-label" for="majorFilter">Major</label>
+            <select id="majorFilter" name="major" class="form-select">
+                <option value="">All Majors</option>
+                {% for m in major_options %}
+                <option value="{{ m }}" {% if m == major_filter %}selected{% endif %}">{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3" style="width: 15%">
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="bx bx-filter"></i> Apply Filters
+            </button>
+        </div>
+    </form>
+</div>
+
+{% if no_professor_match %}
+<div class="card-custom">
+    <div class="empty-state">
+        <div class="empty-state__icon"><i class="bx bx-user-x"></i></div>
+        <div class="empty-state__text">Your account is not linked to a professor profile. Please contact the Scheduler/Admin.</div>
+    </div>
+</div>
+{% elif professors %}
+<div class="d-grid gap-3">
+    {% for professor in professors %}
+    <div class="section-card" data-href="/professor_schedule/{{ professor.professor_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}" tabindex="0" role="button" aria-label="View schedule for Professor {{ professor.professor_name }}">
+        <div class="section-card__info">
+            <h5 class="mb-1">
+                {{ professor.professor_name }}
+                {% if professor.department %}
+                <span class="badge-custom badge-primary ms-2">{{ professor.department }}</span>
+                {% endif %}
+            </h5>
+            <div class="section-card__meta">
+                {{ professor.class_count }} class{{ 'es' if professor.class_count != 1 else '' }} assigned
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="view-hint">
+                View Schedule <i class="bx bx-chevron-right fs-5"></i>
+            </span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card-custom">
+    <div class="empty-state">
+        <div class="empty-state__icon"><i class="bx bx-user"></i></div>
+        <div class="empty-state__text">No professors with assigned schedules found</div>
+        {% if user_role != 'Viewer' %}
+        <a href="/" class="btn btn-primary mt-3">
+            <i class="bx bx-plus-circle"></i> Generate Schedule
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function(){
+    $('.section-card').on('click', function(e){
+        if ($(e.target).closest('.stop-prop, button, a').length) return;
+        var href = $(this).data('href');
+        if (href) window.location.href = href;
+    });
+
+    $('.section-card').on('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ') {
+            if ($(e.target).closest('.stop-prop, button, a').length) return;
+            e.preventDefault();
+            var href = $(this).data('href');
+            if (href) window.location.href = href;
+        }
+    });
+
+    $('.stop-prop').on('click', function(e){
+        e.stopPropagation();
+    });
+});
+</script>
+{% endblock %}
