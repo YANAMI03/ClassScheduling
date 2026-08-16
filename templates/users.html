@@ -209,11 +209,12 @@
     <table>
         <thead>
             <tr>
-                <th>User</th>
+                <th>First Name</th>
+                <th>Last Name</th>
                 <th>Email</th>
                 <th>Program</th>
                 <th>Role</th>
-                <th>Actions</th>
+                <th class="text-end">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -222,29 +223,26 @@
                 <td>
                     <div class="user-info">
                         <img src="{{ url_for('static', filename='profile/' + (user.profile_picture or 'default.png')) }}" alt="Profile" class="user-avatar" onerror="this.onerror=null;this.src='{{ url_for('static', filename='profile/default.png') }}';">
-                        <div>
-                            <div class="user-name">{{ user.first_name }} {{ user.last_name }}</div>
-                        </div>
+                        <div class="user-name"><strong>{{ user.first_name or '—' }}</strong></div>
                     </div>
                 </td>
+                <td>{{ user.last_name or '—' }}</td>
+                <td>{{ user.email or '—' }}</td>
                 <td>
-                    <div class="user-username">{{ user.username }}</div>
-                </td>
-                <td>
-                    {% if user.role.lower() == 'admin' %}
+                    {% if user.role and user.role.lower() == 'admin' %}
                     <span class="text-muted fst-italic">Global / All Programs</span>
                     {% else %}
-                    {{ user.program or '-' }}
+                    {{ user.program or '—' }}
                     {% endif %}
                 </td>
                 <td>
-                    <span class="badge-custom badge-{{ user.role.lower() }}">{{ user.role }}</span>
+                    <span class="badge-custom badge-{{ (user.role or 'viewer').lower() }}">{{ user.role or 'Viewer' }}</span>
                 </td>
-                <td>
-                    <button class="btn-action btn-edit" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.last_name }}', '{{ user.username }}', '{{ user.program or '' }}', '{{ user.role }}')">
+                <td class="text-end">
+                    <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.last_name }}', '{{ user.email }}', '{{ user.program or '' }}', '{{ user.role }}')">
                         <i class="bx bx-edit"></i> Edit
                     </button>
-                    <button class="btn-action btn-delete" onclick="confirmDelete('{{ user.id }}', '{{ user.username }}')">
+                    <button type="button" class="btn-action btn-delete btn-sm" onclick="confirmDelete('{{ user.id }}', '{{ user.first_name }} {{ user.last_name }}')">
                         <i class="bx bx-trash"></i> Delete
                     </button>
                 </td>
@@ -510,11 +508,11 @@ function saveUser() {
     });
 }
 
-function confirmDelete(userId, username) {
+function confirmDelete(userId, displayName) {
     if (typeof window.showConfirmModal === 'function') {
         window.showConfirmModal({
             title: 'Delete User',
-            message: `Are you sure you want to delete user "${username}"?`,
+            message: `Are you sure you want to delete user "${displayName}"?`,
             subtext: 'This action cannot be undone.',
             confirmText: 'Delete',
             confirmBtnClass: 'btn-danger',

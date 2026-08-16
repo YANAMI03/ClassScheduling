@@ -236,4 +236,88 @@ def test_generate_schedule_second_semester_with_major_sections(monkeypatch):
         assert not any(s.startswith('4') for s in sections)
 
 
+def test_group_preview_sections_collapsible_blocks():
+    sections_with_entries = [
+        {'section': {'section_name': '1A', 'major': None}, 'entries': []},
+        {'section': {'section_name': '1B', 'major': None}, 'entries': []},
+        {'section': {'section_name': '2A', 'major': None}, 'entries': []},
+        {'section': {'section_name': '3A', 'major': None}, 'entries': []},
+        {'section': {'section_name': '4A WST', 'major': 'WST'}, 'entries': []},
+        {'section': {'section_name': '4B WST', 'major': 'Web Development'}, 'entries': []},
+        {'section': {'section_name': '4A DST', 'major': 'DST'}, 'entries': []},
+        {'section': {'section_name': '4A NST', 'major': 'NST'}, 'entries': []},
+    ]
+
+    groups = app_module._group_preview_sections(sections_with_entries)
+    
+    assert len(groups) == 6
+    group_dict = {g['id']: g for g in groups}
+
+    assert len(group_dict['1st-year']['sections']) == 2
+    assert len(group_dict['2nd-year']['sections']) == 1
+    assert len(group_dict['3rd-year']['sections']) == 1
+    assert len(group_dict['4th-year-wst']['sections']) == 2
+    assert len(group_dict['4th-year-dst']['sections']) == 1
+    assert len(group_dict['4th-year-nst']['sections']) == 1
+
+    assert group_dict['1st-year']['title'] == '1st Year Schedules'
+    assert group_dict['2nd-year']['title'] == '2nd Year Schedules'
+    assert group_dict['3rd-year']['title'] == '3rd Year Schedules'
+    assert group_dict['4th-year-wst']['title'] == '4th Year Schedules — WST'
+    assert group_dict['4th-year-dst']['title'] == '4th Year Schedules — DST'
+    assert group_dict['4th-year-nst']['title'] == '4th Year Schedules — NST'
+
+
+def test_time_formatting_preserves_pm_and_am():
+    assert app_module._to_time_string('01:00 PM') == '13:00:00'
+    assert app_module._to_time_string('03:00 PM') == '15:00:00'
+    assert app_module._to_time_string('08:00 AM') == '08:00:00'
+    assert app_module._to_time_string('12:00 PM') == '12:00:00'
+    assert app_module._to_time_string('12:00 AM') == '00:00:00'
+
+    assert app_module._format_time('13:00:00') == '01:00 PM'
+    assert app_module._format_time('15:00:00') == '03:00 PM'
+    assert app_module._format_time('08:00:00') == '08:00 AM'
+    assert app_module._format_time('12:00:00') == '12:00 PM'
+    assert app_module._format_time('00:00:00') == '12:00 AM'
+
+
+def test_group_preview_sections_filter_by_year_and_major():
+    sections_with_entries = [
+        {'section': {'section_name': '1A', 'major': None}, 'entries': []},
+        {'section': {'section_name': '2A', 'major': None}, 'entries': []},
+        {'section': {'section_name': '3A', 'major': None}, 'entries': []},
+        {'section': {'section_name': '4A WST', 'major': 'Web Development'}, 'entries': []},
+        {'section': {'section_name': '4A DST', 'major': 'Database Systems'}, 'entries': []},
+        {'section': {'section_name': '4A NST', 'major': 'Network Systems'}, 'entries': []},
+    ]
+
+    g_yr1 = app_module._group_preview_sections(sections_with_entries, year_filter='1')
+    assert len(g_yr1) == 1
+    assert g_yr1[0]['id'] == '1st-year'
+
+    g_yr4 = app_module._group_preview_sections(sections_with_entries, year_filter='4')
+    assert len(g_yr4) == 3
+    assert {g['id'] for g in g_yr4} == {'4th-year-wst', '4th-year-dst', '4th-year-nst'}
+
+    g_dst = app_module._group_preview_sections(sections_with_entries, year_filter='4', major_filter='Database Systems')
+    assert len(g_dst) == 1
+    assert g_dst[0]['id'] == '4th-year-dst'
+
+
+def test_group_preview_sections_excludes_empty_blocks():
+    sections_with_entries = [
+        {'section': {'section_name': '1A', 'major': None}, 'entries': []},
+    ]
+
+    groups = app_module._group_preview_sections(sections_with_entries)
+    assert len(groups) == 1
+    assert groups[0]['id'] == '1st-year'
+    assert groups[0]['title'] == '1st Year Schedules'
+
+
+
+
+
+
 

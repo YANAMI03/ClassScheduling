@@ -386,6 +386,70 @@ a {
     margin: 0;
 }
 
+/* === Collapsible Multi-Year Blocks === */
+
+.collapsible-year-block {
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+}
+
+.collapsible-year-header {
+    width: 100%;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 1.125rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+    box-shadow: var(--shadow-sm);
+    text-align: left;
+    outline: none;
+    user-select: none;
+}
+
+.collapsible-year-header:hover,
+.collapsible-year-header:focus-visible {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    box-shadow: var(--shadow);
+}
+
+.collapsible-year-header[aria-expanded="true"] {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-color: var(--border-color);
+    background: #f8fafc;
+    box-shadow: var(--shadow-sm);
+}
+
+.collapsible-year-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.collapse-icon {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    transition: transform var(--transition);
+}
+
+.collapsible-year-header[aria-expanded="true"] .collapse-icon {
+    transform: rotate(90deg);
+}
+
+.collapsible-year-content {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+    padding: 1.25rem 1.25rem 0.25rem 1.25rem;
+}
+
 /* === Page Title === */
 
 .page-header {
@@ -477,15 +541,19 @@ a {
 }
 
 .btn-outline-secondary {
-    background: transparent;
-    border: 1.5px solid var(--border-color);
-    color: var(--text-secondary);
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #475569;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: all 0.2s ease;
 }
 
 .btn-outline-secondary:hover {
-    background: var(--body-bg);
-    border-color: #cbd5e1;
-    color: var(--text-primary);
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #1e293b;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
 .btn-success {

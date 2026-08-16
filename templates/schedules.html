@@ -22,16 +22,17 @@
 
 <div class="card-custom mb-4">
     <form method="get" class="row g-3 align-items-end">
-        <div class="col-md-3" style="width: 15%">
+        <div class="col-md-3">
             <label class="form-label" for="yearFilter">Year Level</label>
             <select id="yearFilter" name="year" class="form-select">
                 <option value="">All Years</option>
-                {% for year in year_options %}
-                <option value="{{ year }}" {% if year == year_filter %}selected{% endif %}>{{ year }}</option>
-                {% endfor %}
+                <option value="1" {% if year_filter == '1' %}selected{% endif %}>1st Year</option>
+                <option value="2" {% if year_filter == '2' %}selected{% endif %}>2nd Year</option>
+                <option value="3" {% if year_filter == '3' %}selected{% endif %}>3rd Year</option>
+                <option value="4" {% if year_filter == '4' %}selected{% endif %}>4th Year</option>
             </select>
         </div>
-        <div class="col-md-3" style="width: 15%">
+        <div class="col-md-3">
             <label class="form-label" for="semesterFilter">Semester</label>
             <select id="semesterFilter" name="semester" class="form-select">
                 <option value="">All Semesters</option>
@@ -40,16 +41,16 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3" style="width: 15%">
-            <label class="form-label" for="majorFilter">Major</label>
-            <select id="majorFilter" name="major" class="form-select">
+        <div class="col-md-3" id="majorFilterWrap" style="{% if year_filter in ['1', '2', '3'] %}display: none;{% endif %}">
+            <label class="form-label" for="majorFilter">Major / Specialization</label>
+            <select id="majorFilter" name="major" class="form-select" {% if year_filter in ['1', '2', '3'] %}disabled{% endif %}>
                 <option value="">All Majors</option>
                 {% for m in major_options %}
                 <option value="{{ m }}" {% if m == major_filter %}selected{% endif %}>{{ m }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3" style="width: 15%">
+        <div class="col-md-3">
             <button type="submit" class="btn btn-primary w-100">
                 <i class="bx bx-filter"></i> Apply Filters
             </button>
@@ -64,43 +65,135 @@
         <div class="empty-state__text">Your account is not linked to a professor profile. Please contact the Scheduler/Admin.</div>
     </div>
 </div>
-{% elif sections %}
-<div class="d-grid gap-3">
-    {% for section in sections %}
-    <div class="section-card" data-href="/schedule/{{ section.section }}?semester={{ section.semester | urlencode }}&major={{ section.major | urlencode if section.major else '' }}" tabindex="0" role="button" aria-label="View schedule for Section {{ section.section_name }}">
-        <div class="section-card__info">
-            <h5 class="mb-1">
-                Section {{ section.section_name }}
-                {% if section.major %}
-                <span class="badge-custom badge-primary ms-2">{{ section.major }}</span>
-                {% endif %}
-                <span class="badge-custom badge-success ms-1">{{ section.semester or 'No Semester' }}</span>
-            </h5>
-            <div class="section-card__meta">
-                Year {{ section.year_level }}
+{% elif sections_with_entries or sections %}
+    {% if year_groups %}
+        <div class="accordion-year-wrapper mb-4">
+            {% for group in year_groups %}
+            <div class="collapsible-year-block">
+                <button type="button" 
+                        class="collapsible-year-header" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#collapse-sched-{{ group.id }}" 
+                        aria-expanded="false" 
+                        aria-controls="collapse-sched-{{ group.id }}">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bx bx-calendar-event text-primary fs-5"></i>
+                        <span class="collapsible-year-title">{{ group.title }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="badge-custom badge-primary">
+                            {{ group.sections|length }} Section{% if group.sections|length != 1 %}s{% endif %}
+                        </span>
+                        <i class="bx bx-chevron-right collapse-icon"></i>
+                    </div>
+                </button>
+                <div id="collapse-sched-{{ group.id }}" class="collapse collapsible-year-content">
+                    {% if group.sections %}
+                        {% for item in group.sections %}
+                        <div class="card-custom mb-3 bg-white">
+                            <div class="card-custom__header">
+                                <div>
+                                    <h5 class="card-custom__title mb-1">
+                                        Section {{ item.section.section_name }}
+                                        {% if item.section.major %}
+                                        <span class="badge-custom badge-primary ms-2">{{ item.section.major }}</span>
+                                        {% endif %}
+                                        <span class="badge-custom badge-success ms-1">{{ item.section.semester or 'No Semester' }}</span>
+                                    </h5>
+                                    <small class="text-muted">Year {{ item.section.year_level }}</small>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <a href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Full Schedule Details">
+                                        <i class="bx bx-show"></i> View Details
+                                    </a>
+                                    {% if user_role != 'Viewer' %}
+                                    <button type="button" class="btn btn-outline-secondary btn-sm stop-prop edit-schedule-btn"
+                                            data-section="{{ item.section.section }}"
+                                            data-year="{{ item.section.year_level }}"
+                                            data-semester="{{ item.section.semester or '' }}"
+                                            data-major="{{ item.section.major or '' }}"
+                                            title="Edit Section Info">
+                                        <i class="bx bx-edit"></i> Edit
+                                    </button>
+                                    <a href="{{ url_for('delete_section_schedule', section_name=item.section.section, semester=item.section.semester, major=item.section.major) }}" class="btn btn-danger btn-sm stop-prop" data-confirm="Are you sure you want to delete the entire schedule for Section {{ item.section.section }}?" title="Delete Section Schedule">
+                                        <i class="bx bx-trash"></i> Delete
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table-custom">
+                                    <thead>
+                                        <tr>
+                                            <th>Course</th>
+                                            <th>Professor</th>
+                                            <th>Room</th>
+                                            <th>Timeslot</th>
+                                            <th>Type</th>
+                                            {% if user_role != 'Viewer' %}
+                                            <th class="text-end">Actions</th>
+                                            {% endif %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% if item.entries %}
+                                            {% for entry in item.entries %}
+                                            <tr class="schedule-row"
+                                                tabindex="0"
+                                                role="button"
+                                                data-course="{{ entry.course_name or 'TBA' }}"
+                                                data-professor="{{ entry.professor_name }}"
+                                                data-room="{{ entry.room_name or 'TBA' }}"
+                                                data-timeslot="{{ entry.time_range }}"
+                                                data-session="{{ entry.session_type or 'TBA' }}"
+                                                title="Click to view details">
+                                                <td>
+                                                    <strong>{{ entry.course_name or 'TBA' }}</strong>
+                                                    <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
+                                                </td>
+                                                <td>{{ entry.professor_name }}</td>
+                                                <td>{{ entry.room_name or 'TBA' }}</td>
+                                                <td><span class="badge-custom badge-primary">{{ entry.time_range }}</span></td>
+                                                <td>
+                                                    <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
+                                                        {{ entry.session_type or 'TBA' }}
+                                                    </span>
+                                                </td>
+                                                {% if user_role != 'Viewer' %}
+                                                <td class="text-end align-middle">
+                                                    <a href="/delete_schedule/{{ entry.schedule_id }}?section_name={{ item.section.section }}&semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-danger btn-sm stop-prop" data-confirm="Delete this schedule entry?" title="Delete Entry">
+                                                        <i class="bx bx-trash"></i> Delete
+                                                    </a>
+                                                </td>
+                                                {% endif %}
+                                            </tr>
+                                            {% endfor %}
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="{% if user_role != 'Viewer' %}6{% else %}5{% endif %}">
+                                                    <div class="empty-state py-3">
+                                                        <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
+                                                        <div class="empty-state__text">No schedule entries found for this section</div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state py-4">
+                            <div class="empty-state__icon"><i class="bx bx-folder-open"></i></div>
+                            <div class="empty-state__text text-muted">No sections found for {{ group.title }}</div>
+                        </div>
+                    {% endif %}
+                </div>
             </div>
+            {% endfor %}
         </div>
-        <div class="d-flex align-items-center gap-3">
-            <span class="view-hint">
-                View Schedule <i class="bx bx-chevron-right fs-5"></i>
-            </span>
-            {% if user_role != 'Viewer' %}
-            <button type="button" class="btn btn-outline-secondary btn-sm stop-prop edit-schedule-btn"
-                    data-section="{{ section.section }}"
-                    data-year="{{ section.year_level }}"
-                    data-semester="{{ section.semester or '' }}"
-                    data-major="{{ section.major or '' }}"
-                    title="Edit Schedule">
-                <i class="bx bx-edit"></i> Edit
-            </button>
-            <a href="{{ url_for('delete_section_schedule', section_name=section.section, semester=section.semester, major=section.major) }}" class="btn btn-danger btn-sm stop-prop" data-confirm="Are you sure you want to delete the entire schedule for Section {{ section.section }}?" title="Delete Schedule">
-                <i class="bx bx-trash"></i> Delete
-            </a>
-            {% endif %}
-        </div>
-    </div>
-    {% endfor %}
-</div>
+    {% endif %}
 {% else %}
 <div class="card-custom">
     <div class="empty-state">
@@ -338,6 +431,30 @@ $(function(){
                 saveScheduleBtn.innerHTML = 'Save Changes';
             });
         });
+    }
+
+    var yearFilterSelect = document.getElementById('yearFilter');
+    var majorFilterSelect = document.getElementById('majorFilter');
+    var majorFilterWrap = document.getElementById('majorFilterWrap');
+
+    function updateMajorFilterVisibility() {
+        if (!yearFilterSelect) return;
+        var val = yearFilterSelect.value;
+        if (val === '1' || val === '2' || val === '3') {
+            if (majorFilterWrap) majorFilterWrap.style.display = 'none';
+            if (majorFilterSelect) {
+                majorFilterSelect.value = '';
+                majorFilterSelect.disabled = true;
+            }
+        } else {
+            if (majorFilterWrap) majorFilterWrap.style.display = '';
+            if (majorFilterSelect) majorFilterSelect.disabled = false;
+        }
+    }
+
+    if (yearFilterSelect) {
+        yearFilterSelect.addEventListener('change', updateMajorFilterVisibility);
+        updateMajorFilterVisibility();
     }
 });
 </script>
