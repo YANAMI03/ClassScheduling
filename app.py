@@ -92,10 +92,19 @@ def _user_to_dict(user):
         'profile_picture': metadata.get('profile_picture'),
     }
 
+
 def _list_users():
     """Return all Supabase Auth users as template-ready dicts."""
-    raw_users = _admin_auth().list_users(per_page=1000)
-    return [_user_to_dict(u) for u in raw_users]
+    try:
+        res = _admin_auth().list_users(per_page=1000)
+        raw_users = getattr(res, 'users', res) if res is not None else []
+        if isinstance(raw_users, list):
+            return [_user_to_dict(u) for u in raw_users]
+        return []
+    except Exception as err:
+        logging.error(f"Error listing users: {err}")
+        return []
+
 
 def _find_email_by_username_or_email(identifier):
     """Resolve a username or email input to the registered Supabase Auth email."""
@@ -104,7 +113,8 @@ def _find_email_by_username_or_email(identifier):
     identifier = identifier.strip()
     if admin_supabase is not None:
         try:
-            raw_users = _admin_auth().list_users(per_page=1000)
+            res = _admin_auth().list_users(per_page=1000)
+            raw_users = getattr(res, 'users', res) if res is not None else []
             for u in raw_users:
                 u_email = (getattr(u, 'email', None) or '').strip()
                 metadata = getattr(u, 'user_metadata', None) or {}
@@ -617,12 +627,146 @@ def _major_matches(course_major, selected_major):
         return normalized_course in aliases[normalized_selected]
 
     return normalized_course == normalized_selected
-
-
 def _normalize_major_key(major):
     if not major or str(major).strip().lower() in ('general', 'none', 'null', ''):
         return None
     return str(major).strip()
+
+
+def _group_preview_sections(sections_with_entries, year_filter=None, major_filter=None):
+    """Group sections_with_entries into year level and track accordion blocks for schedule preview & section schedule."""
+    groups = [
+        {
+            'id': '1st-year',
+            'title': '1st Year Schedules',
+            'year_level': '1',
+            'track': None,
+            'sections': [],
+        },
+        {
+            'id': '2nd-year',
+            'title': '2nd Year Schedules',
+            'year_level': '2',
+            'track': None,
+            'sections': [],
+        },
+        {
+            'id': '3rd-year',
+            'title': '3rd Year Schedules',
+            'year_level': '3',
+            'track': None,
+            'sections': [],
+        },
+        {
+            'id': '4th-year-wst',
+            'title': '4th Year Schedules — WST',
+            'year_level': '4',
+            'track': 'WST',
+            'sections': [],
+        },
+        {
+            'id': '4th-year-dst',
+            'title': '4th Year Schedules — DST',
+            'year_level': '4',
+            'track': 'DST',
+            'sections': [],
+        },
+        {
+            'id': '4th-year-nst',
+            'title': '4th Year Schedules — NST',
+            'year_level': '4',
+            'track': 'NST',
+            'sections': [],
+        },
+    ]
+
+    other_group = {
+        'id': 'other-schedules',
+        'title': 'Other Schedules',
+        'year_level': 'Other',
+        'track': None,
+        'sections': [],
+    }
+
+    group_map = {g['id']: g for g in groups}
+
+    for item in sections_with_entries:
+        sec_info = item.get('section') or {}
+        sec_name = str(sec_info.get('section_name') or sec_info.get('section') or '').strip()
+        sec_major = str(sec_info.get('major') or '').strip()
+        entries = item.get('entries') or []
+
+        # Determine year level
+        year_level = None
+        if sec_name and sec_name[0] in ('1', '2', '3', '4'):
+            year_level = sec_name[0]
+        else:
+            for entry in entries:
+                yr = str(entry.get('year_level') or '')
+                if yr in ('1', '2', '3', '4'):
+                    year_level = yr
+                    break
+
+        if year_level == '1':
+            group_map['1st-year']['sections'].append(item)
+        elif year_level == '2':
+            group_map['2nd-year']['sections'].append(item)
+        elif year_level == '3':
+            group_map['3rd-year']['sections'].append(item)
+        elif year_level == '4':
+            combined_str = f"{sec_name} {sec_major}".upper()
+            for entry in entries:
+                combined_str += f" {entry.get('course_name','')} {entry.get('major','')}".upper()
+
+            if any(k in combined_str for k in ['WST', 'WEB', 'WEB DEVELOPMENT']) or sec_name.endswith('WST') or ' WST' in combined_str or ' W ' in f" {combined_str} ":
+                group_map['4th-year-wst']['sections'].append(item)
+            elif any(k in combined_str for k in ['DST', 'DB', 'DATABASE']) or sec_name.endswith('DST') or ' DST' in combined_str or ' D ' in f" {combined_str} ":
+                group_map['4th-year-dst']['sections'].append(item)
+            elif any(k in combined_str for k in ['NST', 'NET', 'NETWORKING']) or sec_name.endswith('NST') or ' NST' in combined_str or ' N ' in f" {combined_str} ":
+                group_map['4th-year-nst']['sections'].append(item)
+            else:
+                group_map['4th-year-wst']['sections'].append(item)
+        else:
+            other_group['sections'].append(item)
+
+    if other_group['sections']:
+        groups.append(other_group)
+
+    active_groups = []
+    for g in groups:
+        # Only display a schedule block if it contains at least one section
+        if not g.get('sections'):
+            continue
+
+        if year_filter and str(g['year_level']) != str(year_filter):
+            continue
+
+        if major_filter and g['year_level'] == '4':
+            m_str = str(major_filter).upper()
+            g_track = str(g['track'] or '').upper()
+            g_title = str(g['title']).upper()
+            match = False
+            if 'WST' in g_track or 'WST' in g_title:
+                if any(k in m_str for k in ['WST', 'WEB']):
+                    match = True
+            if 'DST' in g_track or 'DST' in g_title:
+                if any(k in m_str for k in ['DST', 'DB', 'DATABASE']):
+                    match = True
+            if 'NST' in g_track or 'NST' in g_title:
+                if any(k in m_str for k in ['NST', 'NET', 'NETWORK']):
+                    match = True
+            if not match and g['sections']:
+                for sec_item in g['sections']:
+                    s_maj = str((sec_item.get('section') or {}).get('major') or '').upper()
+                    if m_str in s_maj or s_maj in m_str:
+                        match = True
+                        break
+            if not match:
+                continue
+
+        active_groups.append(g)
+
+    return active_groups
 
 
 def _build_preview_context(preview_entries=None):
@@ -646,6 +790,7 @@ def _build_preview_context(preview_entries=None):
         sections_by_key[key]['entries'].append(entry)
 
     sections_with_entries = list(sections_by_key.values())
+    year_groups = _group_preview_sections(sections_with_entries)
 
     courses = []
     rooms = []
@@ -678,15 +823,11 @@ def _build_preview_context(preview_entries=None):
             rooms = rooms_res.data or []
 
         # Admin and Scheduler see all prof_course assignments, Viewer sees only their department's
-        if user_role == 'Viewer':
-            if not department:
-                assignments = []
-            else:
-                pc_res = supabase.table('prof_course').select('course_id, professor(prof_id, first_name, last_name)').eq('professor.department', department).execute()
-                assignments = pc_res.data or []
+        if user_role == 'Viewer' and department:
+            pc_res = supabase.table('prof_course').select('course_id, professor(prof_id, first_name, last_name)').eq('professor.department', department).execute()
         else:
             pc_res = supabase.table('prof_course').select('course_id, professor(prof_id, first_name, last_name)').execute()
-            assignments = pc_res.data or []
+        assignments = pc_res.data or []
         for row in assignments:
             p = _rel(row, 'professor')
             if not p:
@@ -702,6 +843,7 @@ def _build_preview_context(preview_entries=None):
 
     return {
         'sections_with_entries': sections_with_entries,
+        'year_groups': year_groups,
         'courses': courses,
         'rooms': rooms,
         'prof_course_assignments': prof_course_assignments,
@@ -1925,7 +2067,7 @@ def delete_prof_course(prof_course_id):
         return f"Error: {err}"
 #-------------------------------------------------------time helpers----------------------------------------------------------------------------------------------
 def _format_time(value):
-    # Format a timedelta or time-like object/string as a 12-hour clock string
+    # Format a timedelta or time-like object/string as a 12-hour clock string (HH:MM AM/PM)
     if not value:
         return ''
     if isinstance(value, timedelta):
@@ -1934,7 +2076,7 @@ def _format_time(value):
         minutes = (total_seconds % 3600) // 60
         suffix = 'AM' if hours < 12 else 'PM'
         hour_12 = hours % 12 or 12
-        return f"{hour_12}:{minutes:02d} {suffix}"
+        return f"{hour_12:02d}:{minutes:02d} {suffix}"
     if isinstance(value, str):
         td = _parse_time(value)
         if td is not None:
@@ -1943,12 +2085,12 @@ def _format_time(value):
             minutes = (total_seconds % 3600) // 60
             suffix = 'AM' if hours < 12 else 'PM'
             hour_12 = hours % 12 or 12
-            return f"{hour_12}:{minutes:02d} {suffix}"
+            return f"{hour_12:02d}:{minutes:02d} {suffix}"
     return str(value)
 
 
 def _parse_time(value):
-    # Parse value (timedelta, time-like, or string) into a timedelta
+    # Parse value (timedelta, time-like, or string) into a timedelta, preserving AM/PM correctly
     if value is None:
         return None
     if isinstance(value, timedelta):
@@ -1956,16 +2098,33 @@ def _parse_time(value):
     if hasattr(value, 'hour'):
         return timedelta(hours=value.hour, minutes=value.minute, seconds=getattr(value, 'second', 0))
     if isinstance(value, str):
-        value = value.strip()
-        if not value:
+        val_str = value.strip().upper()
+        if not val_str:
             return None
-        if ' ' in value:
-            value = value.split(' ', 1)[0]
+
+        is_pm = 'PM' in val_str
+        is_am = 'AM' in val_str
+
+        # Remove AM/PM indicators to extract numeric time string
+        clean_time = val_str.replace('AM', '').replace('PM', '').strip()
+        if ' ' in clean_time:
+            clean_time = clean_time.split(' ', 1)[0]
+
         try:
-            hour_text, minute_text, *rest = value.split(':')
-            seconds = int(rest[0]) if rest else 0
-            return timedelta(hours=int(hour_text), minutes=int(minute_text), seconds=seconds)
-        except ValueError:
+            parts = clean_time.split(':')
+            hour = int(parts[0])
+            minute = int(parts[1]) if len(parts) > 1 else 0
+            seconds = int(parts[2]) if len(parts) > 2 else 0
+
+            if is_pm:
+                if hour < 12:
+                    hour += 12
+            elif is_am:
+                if hour == 12:
+                    hour = 0
+
+            return timedelta(hours=hour, minutes=minute, seconds=seconds)
+        except (ValueError, IndexError):
             return None
     return None
 
@@ -2623,7 +2782,10 @@ def schedules():
     user_last_name = (session.get('last_name') or '').strip()
 
     try:
-        sched_cols = 'prof_id, section, semester, major, program'
+        sched_cols = (
+            'schedule_id, prof_id, section, semester, major, program, day, class_start, class_end, session_type, course_id, room_id, '
+            'course(course_name), room(room_name), professor(first_name, last_name)'
+        )
         query = supabase.table('schedule').select(sched_cols)
 
         if user_role == 'admin':
@@ -2653,60 +2815,124 @@ def schedules():
                 return False
             return True
 
-        sections = []
+        target_rows = []
         if user_role == 'Viewer':
             match = supabase.table('professor').select('prof_id').ilike('first_name', user_first_name).ilike('last_name', user_last_name).execute()
             professor = _first(match.data or [])
             if not professor:
-                return render_template('schedules.html', active_page='schedules', sections=[], year_options=year_options, semester_options=semester_options, major_options=major_options, year_filter=year_filter, semester_filter=semester_filter, major_filter=major_filter, no_professor_match=True)
+                return render_template(
+                    'schedules.html',
+                    active_page='schedules',
+                    sections=[],
+                    sections_with_entries=[],
+                    year_groups=[],
+                    year_options=year_options,
+                    semester_options=semester_options,
+                    major_options=major_options,
+                    year_filter=year_filter,
+                    semester_filter=semester_filter,
+                    major_filter=major_filter,
+                    no_professor_match=True
+                )
 
             prof_id = professor['prof_id']
-            seen = {}
             for r in sched_rows:
-                if r.get('prof_id') != prof_id:
-                    continue
-                if not _matches(r):
-                    continue
-                sec = r.get('section')
-                sec_key = (sec, r.get('major'), r.get('semester'))
-                if sec and sec_key not in seen:
-                    seen[sec_key] = r
-            for sec_key, r in seen.items():
-                sec = r.get('section')
-                sections.append({
-                    'section': sec,
-                    'section_name': sec,
-                    'semester': r.get('semester'),
-                    'major': r.get('major'),
-                    'year_level': _year_of_section(sec),
-                })
+                if r.get('prof_id') == prof_id and _matches(r):
+                    target_rows.append(r)
         else:
-            seen = {}
             for r in sched_rows:
-                if not _matches(r):
-                    continue
-                sec = r.get('section')
-                sec_key = (sec, r.get('major'), r.get('semester'))
-                if sec and sec_key not in seen:
-                    seen[sec_key] = r
-            for sec_key, r in seen.items():
-                sec = r.get('section')
+                if _matches(r):
+                    target_rows.append(r)
+
+        sections = []
+        sections_by_key = {}
+        seen = set()
+
+        for r in target_rows:
+            sec = r.get('section')
+            if not sec:
+                continue
+            semester = r.get('semester', '')
+            major_key = r.get('major')
+            key = (sec, semester, major_key)
+
+            if key not in seen:
+                seen.add(key)
                 sections.append({
                     'section': sec,
                     'section_name': sec,
-                    'semester': r.get('semester'),
-                    'major': r.get('major'),
+                    'semester': semester,
+                    'major': major_key,
                     'year_level': _year_of_section(sec),
                 })
+
+            if key not in sections_by_key:
+                sections_by_key[key] = {
+                    'section': {
+                        'section': sec,
+                        'section_name': sec,
+                        'semester': semester,
+                        'major': major_key,
+                        'year_level': _year_of_section(sec),
+                    },
+                    'entries': []
+                }
+
+            if r.get('schedule_id'):
+                c = _rel(r, 'course') or {}
+                rm = _rel(r, 'room') or {}
+                p = _rel(r, 'professor') or {}
+                fname = p.get('first_name') or ''
+                lname = p.get('last_name') or ''
+                prof_name = f"{fname} {lname}".strip() or 'TBA'
+                start_fmt = _format_time(r.get('class_start'))
+                end_fmt = _format_time(r.get('class_end'))
+                sections_by_key[key]['entries'].append({
+                    'id': r.get('schedule_id'),
+                    'schedule_id': r.get('schedule_id'),
+                    'course_id': r.get('course_id'),
+                    'course_name': c.get('course_name') or 'TBA',
+                    'professor_name': prof_name,
+                    'room_name': rm.get('room_name') or 'TBA',
+                    'day': r.get('day') or '',
+                    'start': start_fmt,
+                    'end': end_fmt,
+                    'time_range': f"{r.get('day')} | {start_fmt} - {end_fmt}" if r.get('day') and start_fmt else 'TBA',
+                    'session_type': r.get('session_type') or 'Lecture',
+                    'section': sec,
+                    'semester': semester,
+                    'major': major_key,
+                })
+
         sections.sort(key=lambda s: str(s.get('section') or ''))
+        sections_with_entries = list(sections_by_key.values())
+        for item in sections_with_entries:
+            item['entries'].sort(key=lambda e: (_DAY_ORDER.get(e.get('day') or '', 99), str(e.get('start') or '')))
+
+        year_groups = _group_preview_sections(sections_with_entries)
     except Exception as err:
         logging.error(f"Error loading schedules: {err}")
         sections = []
+        sections_with_entries = []
+        year_groups = []
         year_options = []
         semester_options = []
         major_options = []
 
-    return render_template('schedules.html', active_page='schedules', sections=sections, year_options=year_options, semester_options=semester_options, major_options=major_options, year_filter=year_filter, semester_filter=semester_filter, major_filter=major_filter, no_professor_match=False)
+    return render_template(
+        'schedules.html',
+        active_page='schedules',
+        sections=sections,
+        sections_with_entries=sections_with_entries,
+        year_groups=year_groups,
+        year_options=year_options,
+        semester_options=semester_options,
+        major_options=major_options,
+        year_filter=year_filter,
+        semester_filter=semester_filter,
+        major_filter=major_filter,
+        no_professor_match=False
+    )
 
 
 @app.route('/schedule/<section_name>')

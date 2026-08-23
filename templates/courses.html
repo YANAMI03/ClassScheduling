@@ -192,7 +192,7 @@
                     <td><span class="badge-custom badge-success">Year {{course.year_level}}</span></td>
                     <td>{{ course.semester or '—' }}</td>
                     <td class="text-end">
-                        <button type="button" class="btn btn-warning btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-major="{{course.major or ''}}" data-semester="{{course.semester or ''}}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-major="{{course.major or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_course/{{course.course_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this course?">
