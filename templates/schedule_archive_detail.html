@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Archived Schedule Details - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Archived Schedule Details</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <a href="{{ url_for('schedule_archive') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bx bx-arrow-back me-1"></i> Back to Archive
+            </a>
+            <span class="badge bg-secondary">Archived Version</span>
+        </div>
+        <h1 class="page-title mb-1">{{ batch_info.semester }} ({{ batch_info.program or 'All Programs' }})</h1>
+        <p class="page-subtitle mb-0">
+            Archived on <strong>{{ batch_info.archived_at_fmt }}</strong> by <strong>{{ batch_info.archived_by or 'Scheduler' }}</strong>
+            {% if batch_info.archive_reason %} &bull; <em>{{ batch_info.archive_reason }}</em>{% endif %}
+        </p>
+    </div>
+    {% if session.get('role') | lower in ['admin', 'scheduler'] %}
+    <div>
+        <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#restoreArchiveModal">
+            <i class="bx bx-reset me-1"></i> Restore This Version
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Summary Card -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card-custom h-100 p-3 border-start border-primary border-4">
+            <div class="text-muted small">Total Class Entries</div>
+            <div class="fs-4 fw-bold text-dark">{{ entries | length }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card-custom h-100 p-3 border-start border-success border-4">
+            <div class="text-muted small">Sections Count</div>
+            <div class="fs-4 fw-bold text-dark">{{ sections | length }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card-custom h-100 p-3 border-start border-info border-4">
+            <div class="text-muted small">Semester & Batch ID</div>
+            <div class="fw-semibold text-dark">{{ batch_info.semester }}</div>
+            <code class="small text-muted" style="font-size: 0.75rem;">{{ batch_info.batch_id }}</code>
+        </div>
+    </div>
+</div>
+
+<!-- Year-Level Group Accordions -->
+{% if year_groups %}
+<div class="accordion-year-wrapper mb-4">
+    {% for group in year_groups %}
+    <div class="collapsible-year-block mb-3">
+        <button type="button" 
+                class="collapsible-year-header" 
+                data-bs-toggle="collapse" 
+                data-bs-target="#collapse-arch-{{ group.id }}" 
+                aria-expanded="false" 
+                aria-controls="collapse-arch-{{ group.id }}">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bx bx-calendar-event text-primary fs-5"></i>
+                <span class="collapsible-year-title">{{ group.title }}</span>
+                {% if group.track %}
+                <span class="badge bg-info-subtle text-info-emphasis ms-2" style="font-size: 0.75rem;">{{ group.track }}</span>
+                {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.75rem;">
+                    {{ group.sections | length }} Section(s)
+                </span>
+                <i class="bx bx-chevron-down collapsible-year-icon"></i>
+            </div>
+        </button>
+
+        <div id="collapse-arch-{{ group.id }}" class="collapse">
+            <div class="collapsible-year-body p-3">
+                {% for item in group.sections %}
+                <div class="card-custom mb-3 border">
+                    <div class="card-custom__header d-flex justify-content-between align-items-center py-2 px-3 bg-light">
+                        <h6 class="mb-0 fw-bold text-primary">
+                            <i class="bx bx-group me-1 text-muted"></i> Section {{ item.section.section_name or item.section.section }}
+                            {% if item.section.major %}
+                            <span class="badge bg-secondary-subtle text-secondary ms-2" style="font-size: 0.75rem;">{{ item.section.major }}</span>
+                            {% endif %}
+                        </h6>
+                        <span class="small text-muted">{{ item.entries | length }} Class(es)</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3" style="width: 30%;">Course</th>
+                                    <th style="width: 22%;">Professor</th>
+                                    <th style="width: 18%;">Room</th>
+                                    <th style="width: 18%;">Schedule / Timeslot</th>
+                                    <th class="pe-3" style="width: 12%;">Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in item.entries %}
+                                <tr>
+                                    <td class="ps-3 fw-medium text-dark">{{ entry.course_name or 'Course #' ~ entry.course_id }}</td>
+                                    <td>
+                                        <i class="bx bx-user me-1 text-muted"></i>
+                                        <span>{{ entry.professor_name or 'TBA' }}</span>
+                                    </td>
+                                    <td>
+                                        <i class="bx bx-building me-1 text-muted"></i>
+                                        <span>{{ entry.room_name or 'TBA' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">
+                                            {{ entry.time_range or (entry.day ~ ' | ' ~ entry.start ~ ' - ' ~ entry.end) }}
+                                        </span>
+                                    </td>
+                                    <td class="pe-3">
+                                        <span class="badge {% if entry.session_type == 'Laboratory' %}bg-warning-subtle text-warning-emphasis{% else %}bg-primary-subtle text-primary-emphasis{% endif %}">
+                                            {{ entry.session_type or 'Lecture' }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card-custom p-4 text-center text-muted">
+    No classes found for this archived schedule.
+</div>
+{% endif %}
+
+<!-- Restore Confirmation Modal -->
+<div class="modal fade" id="restoreArchiveModal" tabindex="-1" aria-labelledby="restoreArchiveModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title d-flex align-items-center" id="restoreArchiveModalLabel">
+                    <i class="bx bx-reset fs-4 me-2"></i> Restore Schedule Version
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('restore_schedule_archive', batch_id=batch_info.batch_id) }}">
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning d-flex align-items-start mb-3">
+                        <i class="bx bx-error-circle fs-4 me-2 flex-shrink-0 mt-1"></i>
+                        <div>
+                            <strong>Automatic Archive Protection:</strong>
+                            <p class="mb-0 small">The currently active schedule for {{ batch_info.semester }} will be safely moved to the archive before restoring this version.</p>
+                        </div>
+                    </div>
+                    <p class="text-secondary mb-2">Confirm restoring this archived schedule version?</p>
+                    <ul class="list-group list-group-flush border rounded mb-0">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Semester:</span>
+                            <strong class="text-dark">{{ batch_info.semester }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Program:</span>
+                            <strong class="text-dark">{{ batch_info.program or 'All Programs' }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Archived On:</span>
+                            <strong class="text-dark">{{ batch_info.archived_at_fmt }}</strong>
+                        </li>
+                    </ul>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bx bx-check-circle me-1"></i> Yes, Restore This Version
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

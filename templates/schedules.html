@@ -8,16 +8,19 @@
         <h1 class="page-title">Section Schedule</h1>
         <p class="page-subtitle">View and manage generated class schedules by section</p>
     </div>
-    {% if user_role != 'Viewer' %}
     <div class="d-flex gap-2">
+        <a href="/schedule_archive" class="btn btn-outline-secondary">
+            <i class="bx bx-archive"></i> Archive History
+        </a>
+        {% if user_role != 'Viewer' %}
         <button type="button" class="btn btn-danger" id="delete-all-btn">
             <i class="bx bx-trash"></i> Delete All
         </button>
         <a href="/" class="btn btn-primary">
             <i class="bx bx-plus-circle"></i> Generate New Schedule
         </a>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
 <div class="card-custom mb-4">
