@@ -108,12 +108,12 @@
             
             <!-- Schedules Dropdown -->
             <div class="sidebar__dropdown" id="schedules-dropdown">
-                <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
+                <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
                     <i class="bx bx-grid-alt sidebar__icon"></i>
                     <span class="sidebar__label">Schedules</span>
-                    <i class="bx bx-chevron-down sidebar__chevron {% if active_page in ['schedules', 'professor_schedule', 'room_schedule'] %}sidebar__chevron--expanded{% endif %}"></i>
+                    <i class="bx bx-chevron-down sidebar__chevron {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__chevron--expanded{% endif %}"></i>
                 </a>
-                <div class="sidebar__submenu {% if active_page in ['schedules', 'professor_schedule', 'room_schedule'] %}sidebar__submenu--expanded{% endif %}" id="schedules-submenu">
+                <div class="sidebar__submenu {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__submenu--expanded{% endif %}" id="schedules-submenu">
                     <a href="/schedules" class="sidebar__link sidebar__link--submenu {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
                         <i class="bx bx-grid-alt sidebar__icon"></i>
                         <span class="sidebar__label">Section Schedule</span>
@@ -125,6 +125,10 @@
                     <a href="/room_schedule" class="sidebar__link sidebar__link--submenu {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
                         <i class="bx bx-building sidebar__icon"></i>
                         <span class="sidebar__label">Room Schedule</span>
+                    </a>
+                    <a href="/schedule_archive" class="sidebar__link sidebar__link--submenu {% if active_page == 'schedule_archive' %}sidebar__link--active{% endif %}" title="Schedule Archive">
+                        <i class="bx bx-archive sidebar__icon"></i>
+                        <span class="sidebar__label">Schedule Archive</span>
                     </a>
                 </div>
             </div>
@@ -196,25 +200,31 @@
                          style="background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35);">
                         <i class="bx bx-error-circle fs-5 flex-shrink-0" style="color: #f87171; margin-top: 1px;"></i>
                         <p class="mb-0 small" style="color: #fca5a5;">
-                            <strong>Warning:</strong> This will overwrite the current database. All existing data will be replaced by the contents of the uploaded file. This action cannot be undone.
+                            <strong>Warning:</strong> Restoring will update database records with the contents of the uploaded JSON backup file. Ensure you have backed up the current database before proceeding.
                         </p>
                     </div>
-                    <form id="restoreDbForm" method="POST" action="{{ url_for('restore_database') }}" enctype="multipart/form-data" novalidate>
+                    <form id="restoreDbForm" method="POST" action="{{ url_for('restore_database') }}" enctype="multipart/form-data">
                         <div class="mb-3">
-                            <label for="restoreSqlFile" class="form-label small fw-semibold" style="color: #94a3b8; letter-spacing: .04em;">SELECT BACKUP FILE</label>
+                            <label for="restoreBackupFile" class="form-label small fw-semibold" style="color: #94a3b8; letter-spacing: .04em;">SELECT BACKUP FILE (.JSON)</label>
                             <div class="input-group">
                                 <span class="input-group-text border-0" style="background: #1e293b; color: #38bdf8;">
                                     <i class="bx bx-file"></i>
                                 </span>
                                 <input type="file"
                                        class="form-control border-0"
-                                       id="restoreSqlFile"
-                                       name="sql_file"
-                                       accept=".sql"
+                                       id="restoreBackupFile"
+                                       name="backup_file"
+                                       accept=".json,application/json"
                                        required
                                        style="background: #1e293b; color: #e2e8f0;">
                             </div>
-                            <div class="form-text" style="color: #64748b;">Only <code style="color:#38bdf8;">.sql</code> files are accepted.</div>
+                            <div class="form-text" style="color: #64748b;">Only <code style="color:#38bdf8;">.json</code> backup files are accepted.</div>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="clear_existing" value="true" id="clearExistingData" checked style="background-color: #1e293b; border-color: #475569;">
+                            <label class="form-check-label small" for="clearExistingData" style="color: #cbd5e1;">
+                                Clear existing table data before restore (Recommended)
+                            </label>
                         </div>
                     </form>
                 </div>
@@ -565,6 +575,26 @@
                         if (badge) badge.remove();
                     }
                 }).catch(function(){});
+            });
+        }
+
+        // Restore Database Form Submission handling
+        var restoreForm = document.getElementById('restoreDbForm');
+        var restoreBtn = document.getElementById('restoreSubmitBtn');
+        if (restoreForm && restoreBtn) {
+            restoreForm.addEventListener('submit', function (e) {
+                var fileInput = document.getElementById('restoreBackupFile');
+                if (!fileInput || !fileInput.files.length) {
+                    e.preventDefault();
+                    alert('Please select a .json backup file first.');
+                    return false;
+                }
+                if (!confirm('Are you sure you want to restore the database? Current records may be overwritten.')) {
+                    e.preventDefault();
+                    return false;
+                }
+                restoreBtn.disabled = true;
+                restoreBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Restoring database...';
             });
         }
     });

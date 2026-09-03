@@ -64,3 +64,24 @@ def test_generate_mock_registrar_data_second_semester_3rd_year_majors():
     assert data['years']['4']['section_count'] == 0
 
 
+def test_generate_mock_registrar_data_first_semester_4th_year_majors():
+    data = app_module._generate_mock_registrar_data(semester='1st Semester')
+
+    assert 'years' in data
+    assert '4' in data['years']
+    y4 = data['years']['4']
+    assert 'majors' in y4
+    assert 'database' in y4['majors']
+    assert 'web' in y4['majors']
+    assert 'networking' in y4['majors']
+
+    db_cnt = y4['majors']['database']
+    web_cnt = y4['majors']['web']
+    net_cnt = y4['majors']['networking']
+    assert db_cnt >= 1
+    assert web_cnt >= 1
+    assert net_cnt >= 1
+    assert db_cnt + web_cnt + net_cnt == y4['section_count']
+
+
+

@@ -28,6 +28,12 @@ class FakeQuery:
     def single(self):
         return self
 
+    def delete(self, *args, **kwargs):
+        return self
+
+    def insert(self, *args, **kwargs):
+        return self
+
     def execute(self):
         if self.table_name == 'course':
             return FakeResponse([
@@ -43,10 +49,19 @@ class FakeQuery:
                 {'course_id': 3, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}},
                 {'course_id': 4, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}},
             ])
+        elif self.table_name == 'professor':
+            return FakeResponse([
+                {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40, 'department': 'CICT'},
+                {'prof_id': 2, 'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40, 'department': 'CICT'},
+                {'prof_id': 3, 'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40, 'department': 'CICT'},
+                {'prof_id': 4, 'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40, 'department': 'CICT'},
+                {'prof_id': 5, 'first_name': 'Margaret', 'last_name': 'Hamilton', 'max_hours': 40, 'department': 'CICT'},
+            ])
         elif self.table_name == 'room':
             return FakeResponse([
                 {'room_id': 1, 'room_name': 'Lab 101', 'room_type': 'Laboratory', 'department': 'CICT'},
                 {'room_id': 2, 'room_name': 'Room 201', 'room_type': 'Lecture', 'department': 'CICT'},
+                {'room_id': 3, 'room_name': 'Room 202', 'room_type': 'Lecture', 'department': 'CICT'},
             ])
         elif self.table_name == 'timeslot':
             return FakeResponse([
@@ -62,6 +77,13 @@ class FakeQuery:
 class FakeSupabase:
     def table(self, table_name):
         return FakeQuery(table_name)
+
+    def rpc(self, func_name, params=None):
+        class FakeRpc:
+            def execute(self):
+                return FakeResponse({'success': True, 'deleted_count': 5, 'inserted_count': 10})
+        return FakeRpc()
+
 
 
 def test_generate_schedule_post_renders_inline_preview_all_years(monkeypatch):
@@ -236,6 +258,80 @@ def test_generate_schedule_second_semester_with_major_sections(monkeypatch):
         assert not any(s.startswith('4') for s in sections)
 
 
+def test_generate_schedule_first_semester_with_4th_year_major_sections(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+
+    class FakeQuery1st(FakeQuery):
+        def execute(self):
+            if self.table_name == 'course':
+                return FakeResponse([
+                    {'course_id': 10, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 20, 'course_name': 'IT201 - Data Structures', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 30, 'course_name': 'IT301 - Systems Analysis', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 40, 'course_name': 'IT401 - Advanced DB Project', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Database Systems'},
+                    {'course_id': 41, 'course_name': 'IT402 - Enterprise Web Apps', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Development'},
+                    {'course_id': 42, 'course_name': 'IT403 - Enterprise Networking', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking'},
+                ])
+            elif self.table_name == 'prof_course':
+                return FakeResponse([
+                    {'course_id': 10, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'course_id': 20, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                    {'course_id': 30, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}},
+                    {'course_id': 40, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}},
+                    {'course_id': 41, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'course_id': 42, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                ])
+            return super().execute()
+
+    class FakeSupabase1st:
+        def table(self, table_name):
+            return FakeQuery1st(table_name)
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase1st())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+    monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+
+    response = client.post('/generate_schedule', data={
+        'semester': '1st Semester',
+        'students[1]': '30',
+        'sections[1]': '1',
+        'students[2]': '30',
+        'sections[2]': '1',
+        'students[3]': '30',
+        'sections[3]': '1',
+        'students[4]': '90',
+        'sections_major[4][database]': '1',
+        'sections_major[4][web]': '1',
+        'sections_major[4][networking]': '1',
+    })
+
+    assert response.status_code == 200
+
+    with client.session_transaction() as session:
+        preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
+        assert len(preview) > 0
+        sections = {entry.get('section') for entry in preview}
+        # Year 1, 2, 3 have standard section names
+        assert any(s.startswith('1') for s in sections)
+        assert any(s.startswith('2') for s in sections)
+        assert any(s.startswith('3') for s in sections)
+        # Year 4 sections have distinct major suffixes
+        assert '4A-DB' in sections
+        assert '4A-WEB' in sections
+        assert '4A-NET' in sections
+        # Verify entries exist across all three majors
+        majors = {entry.get('major') for entry in preview}
+        assert 'Database Systems' in majors
+        assert 'Web Development' in majors
+        assert 'Networking' in majors
+
+
 def test_group_preview_sections_collapsible_blocks():
     sections_with_entries = [
         {'section': {'section_name': '1A', 'major': None}, 'entries': []},
@@ -314,6 +410,372 @@ def test_group_preview_sections_excludes_empty_blocks():
     assert len(groups) == 1
     assert groups[0]['id'] == '1st-year'
     assert groups[0]['title'] == '1st Year Schedules'
+
+
+def test_confirm_preview_saves_and_clears_preview(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+        session['preview_id'] = 'prev_123'
+        session['schedule_preview'] = [
+            {
+                'course_id': 1,
+                'course_name': 'IT101',
+                'section': '1A',
+                'prof_id': 1,
+                'room_id': 2,
+                'day': 'Monday',
+                'start': '8:00 AM',
+                'end': '9:00 AM',
+                'session_type': 'Lecture',
+                'semester': '1st Semester',
+                'major': None,
+                'program': 'BSIT',
+            }
+        ]
+
+    fake_sb = FakeSupabase()
+    monkeypatch.setattr(app_module, 'supabase', fake_sb)
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+    monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
+
+    response = client.post('/confirm_preview', follow_redirects=False)
+    assert response.status_code == 302
+    assert '/schedules' in response.headers.get('Location', '')
+
+    with client.session_transaction() as session:
+        assert session.get('schedule_preview') in ([], None)
+        assert len(session.get('generated_sections', [])) == 1
+        assert session['generated_sections'][0]['section'] == '1A'
+
+
+def test_confirm_preview_fallback_deletes_scope_and_inserts(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+        session['preview_id'] = 'prev_456'
+        session['schedule_preview'] = [
+            {
+                'course_id': 10,
+                'course_name': 'IT401',
+                'section': '4A-DB',
+                'prof_id': 2,
+                'room_id': 2,
+                'day': 'Tuesday',
+                'start': '10:00 AM',
+                'end': '12:00 PM',
+                'session_type': 'Lecture',
+                'semester': '1st Semester',
+                'major': 'Database Systems',
+                'program': 'BSIT',
+            }
+        ]
+
+    class FakeSupabaseNoRpc:
+        def table(self, table_name):
+            return FakeQuery(table_name)
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabaseNoRpc())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+    monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
+
+    response = client.post('/confirm_preview', follow_redirects=False)
+    assert response.status_code == 302
+    assert '/schedules' in response.headers.get('Location', '')
+
+    with client.session_transaction() as session:
+        assert session.get('schedule_preview') in ([], None)
+        assert len(session.get('generated_sections', [])) == 1
+        assert session['generated_sections'][0]['section'] == '4A-DB'
+        assert session['generated_sections'][0]['major'] == 'Database Systems'
+
+
+def test_group_preview_sections_third_year_majors():
+    sample_sections = [
+        {
+            'section': {'section': '1A', 'section_name': '1A', 'major': None},
+            'entries': [{'section': '1A', 'course_name': 'IT101', 'year_level': '1'}]
+        },
+        {
+            'section': {'section': '2A', 'section_name': '2A', 'major': None},
+            'entries': [{'section': '2A', 'course_name': 'IT201', 'year_level': '2'}]
+        },
+        {
+            'section': {'section': '3A-WEB', 'section_name': '3A-WEB', 'major': 'Web Development'},
+            'entries': [{'section': '3A-WEB', 'course_name': 'IT301-WEB', 'year_level': '3', 'major': 'Web Development'}]
+        },
+        {
+            'section': {'section': '3A-DB', 'section_name': '3A-DB', 'major': 'Database Systems'},
+            'entries': [{'section': '3A-DB', 'course_name': 'IT302-DB', 'year_level': '3', 'major': 'Database Systems'}]
+        },
+        {
+            'section': {'section': '3A-NET', 'section_name': '3A-NET', 'major': 'Networking'},
+            'entries': [{'section': '3A-NET', 'course_name': 'IT303-NET', 'year_level': '3', 'major': 'Networking'}]
+        }
+    ]
+
+    groups = app_module._group_preview_sections(sample_sections)
+    group_titles = [g['title'] for g in groups]
+
+    assert '1st Year Schedules' in group_titles
+    assert '2nd Year Schedules' in group_titles
+    assert any('3rd Year Schedules' in t and 'WST' in t for t in group_titles)
+    assert any('3rd Year Schedules' in t and 'DST' in t for t in group_titles)
+    assert any('3rd Year Schedules' in t and 'NST' in t for t in group_titles)
+
+
+def test_generate_schedule_zero_tba_and_professor_fallback(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+    monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+
+    response = client.post('/generate_schedule', data={
+        'semester': '1st Semester',
+        'number_of_sections': '1',
+    })
+
+    assert response.status_code == 200
+
+    with client.session_transaction() as session:
+        preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
+        assert len(preview) > 0
+        # Verify no unnecessary TBA
+        for entry in preview:
+            assert entry.get('prof_id') is not None, f"Entry {entry} has TBA professor"
+            assert entry.get('room_id') is not None, f"Entry {entry} has TBA room"
+            assert entry.get('professor_name') not in (None, '', 'TBA')
+            assert entry.get('room_name') not in (None, '', 'TBA')
+
+
+def test_generate_schedule_ignores_other_semester_schedule_bookings(monkeypatch):
+    """Test that existing bookings from a different semester do not block room/prof allocation."""
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+
+    class FakeSupabaseWithOtherSemBookings(FakeSupabase):
+        def table(self, table_name):
+            if table_name == 'schedule':
+                class FakeSchedQuery(FakeQuery):
+                    def execute(self):
+                        return FakeResponse([
+                            {
+                                'section': '1A', 'room_id': 1, 'day': 'Monday',
+                                'class_start': '08:00:00', 'class_end': '12:00:00',
+                                'prof_id': 1, 'semester': '2nd Semester', 'program': 'BSIT'
+                            }
+                        ])
+                return FakeSchedQuery(table_name)
+            return FakeQuery(table_name)
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabaseWithOtherSemBookings())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+    monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+
+    response = client.post('/generate_schedule', data={
+        'semester': '1st Semester',
+        'number_of_sections': '1',
+    })
+
+    assert response.status_code == 200
+
+    with client.session_transaction() as session:
+        preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
+        assert len(preview) > 0
+        for entry in preview:
+            assert entry.get('prof_id') is not None
+            assert entry.get('room_id') is not None
+
+
+def test_professor_and_room_schedule_non_military_time(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'admin_tester'
+        session['role'] = 'admin'
+
+    class FakeSupabaseForDetail(FakeSupabase):
+        def table(self, table_name):
+            if table_name == 'schedule':
+                class FakeSchedQuery(FakeQuery):
+                    def execute(self):
+                        return FakeResponse([
+                            {
+                                'schedule_id': 101,
+                                'course_id': 1,
+                                'prof_id': 1,
+                                'room_id': 1,
+                                'day': 'Monday',
+                                'class_start': '14:30:00',
+                                'class_end': '17:30:00',
+                                'section': '1A',
+                                'semester': '1st Semester',
+                                'major': None,
+                                'session_type': 'Lecture',
+                                'course': {'course_name': 'IT101'},
+                                'room': {'room_name': 'Room 201'},
+                                'professor': {'first_name': 'Alan', 'last_name': 'Turing'}
+                            }
+                        ])
+                return FakeSchedQuery(table_name)
+            return FakeQuery(table_name)
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabaseForDetail())
+
+    # Check Professor Schedule View
+    prof_resp = client.get('/professor_schedule/1')
+    assert prof_resp.status_code == 200
+    assert b'02:30 PM - 05:30 PM' in prof_resp.data
+    assert b'14:30:00' not in prof_resp.data
+
+    # Check Room Schedule View
+    room_resp = client.get('/room_schedule/1')
+    assert room_resp.status_code == 200
+    assert b'02:30 PM - 05:30 PM' in room_resp.data
+    assert b'14:30:00' not in room_resp.data
+
+
+def test_generate_schedule_strict_room_type_enforcement(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+    monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+
+    response = client.post('/generate_schedule', data={
+        'semester': '1st Semester',
+        'number_of_sections': '1',
+    })
+
+    assert response.status_code == 200
+
+    with client.session_transaction() as session:
+        preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
+        assert len(preview) > 0
+
+        rooms_res = FakeSupabase().table('room').execute().data
+        rooms_by_id = {r['room_id']: r for r in rooms_res}
+
+        for entry in preview:
+            rid = entry.get('room_id')
+            if rid:
+                room = rooms_by_id.get(rid)
+                stype = entry.get('session_type')
+                assert app_module._room_matches_session(room, stype), (
+                    f"Room mismatch: {entry.get('course_name')} ({stype}) assigned to {room.get('room_name')} ({room.get('room_type')})"
+                )
+
+
+def test_edit_preview_entry_blocks_cross_type_room_assignment(monkeypatch):
+    client = app_module.app.test_client()
+
+    preview_entry = {
+        'id': 1,
+        'course_id': 1,
+        'course_name': 'IT101',
+        'section': '1A',
+        'prof_id': 1,
+        'room_id': 2,
+        'day': 'Monday',
+        'start': '8:00 AM',
+        'end': '11:00 AM',
+        'session_type': 'Lecture',
+        'semester': '1st Semester',
+        'program': 'BSIT'
+    }
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+        session['preview_id'] = 'test_prev'
+        session['schedule_preview'] = [preview_entry]
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+
+    # Attempt to assign room_id=1 (Lab 101 - Laboratory) to Lecture class
+    resp = client.post('/edit_preview_entry', data={
+        'id': 1,
+        'course_id': 1,
+        'section': '1A',
+        'prof_id': 1,
+        'room_id': 1, # Lab 101
+        'day': 'Monday',
+        'start': '8:00 AM',
+        'end': '11:00 AM'
+    })
+
+    assert resp.status_code == 400
+    json_data = resp.get_json()
+    assert 'Room type mismatch' in json_data.get('error', '')
+
+
+def test_confirm_preview_blocks_on_room_type_mismatch(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+        session['preview_id'] = 'prev_invalid'
+        session['schedule_preview'] = [
+            {
+                'course_id': 1,
+                'course_name': 'IT101',
+                'section': '1A',
+                'prof_id': 1,
+                'room_id': 1, # Lab 101 assigned to Lecture
+                'day': 'Monday',
+                'start': '8:00 AM',
+                'end': '11:00 AM',
+                'session_type': 'Lecture',
+                'semester': '1st Semester',
+                'major': None,
+                'program': 'BSIT',
+            }
+        ]
+
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+
+    resp = client.post('/confirm_preview', follow_redirects=False)
+    assert resp.status_code == 302
+    assert '/generate_schedule' in resp.headers.get('Location', '')
+
+
+
+
 
 
 

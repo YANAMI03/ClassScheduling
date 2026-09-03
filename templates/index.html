@@ -222,6 +222,52 @@
                                             </div>
                                         </div>
                                     </div>
+                                    {% elif y == 4 %}
+                                    <!-- Single section input fallback -->
+                                    <div id="year-4-sections-single" class="input-loading-wrap" style="display: none;">
+                                        <input type="number" id="sections-input-4" name="sections[4]"
+                                            class="form-control form-control-sm year-sections-input" min="1"
+                                            placeholder="Choose Semester First" readonly>
+                                        <span class="input-loading-spinner" aria-hidden="true"></span>
+                                    </div>
+                                    <!-- Separate section inputs for 4th Year - 1st Semester majors -->
+                                    <div id="year-4-sections-majors" style="display: none;">
+                                        <div class="d-flex flex-column gap-2 py-1">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span class="small fw-semibold text-secondary me-2" style="font-size: 0.8rem; min-width: 90px;">
+                                                    <i class="bx bx-data text-info me-1"></i>Database:
+                                                </span>
+                                                <div class="input-loading-wrap flex-grow-1">
+                                                    <input type="number" id="sections-input-4-database" name="sections_major[4][database]"
+                                                        class="form-control form-control-sm year-sections-input year-sections-major-input" min="1"
+                                                        placeholder="Database" readonly>
+                                                    <span class="input-loading-spinner" aria-hidden="true"></span>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span class="small fw-semibold text-secondary me-2" style="font-size: 0.8rem; min-width: 90px;">
+                                                    <i class="bx bx-globe text-primary me-1"></i>Web:
+                                                </span>
+                                                <div class="input-loading-wrap flex-grow-1">
+                                                    <input type="number" id="sections-input-4-web" name="sections_major[4][web]"
+                                                        class="form-control form-control-sm year-sections-input year-sections-major-input" min="1"
+                                                        placeholder="Web" readonly>
+                                                    <span class="input-loading-spinner" aria-hidden="true"></span>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span class="small fw-semibold text-secondary me-2" style="font-size: 0.8rem; min-width: 90px;">
+                                                    <i class="bx bx-network-chart text-success me-1"></i>Networking:
+                                                </span>
+                                                <div class="input-loading-wrap flex-grow-1">
+                                                    <input type="number" id="sections-input-4-networking" name="sections_major[4][networking]"
+                                                        class="form-control form-control-sm year-sections-input year-sections-major-input" min="1"
+                                                        placeholder="Networking" readonly>
+                                                    <span class="input-loading-spinner" aria-hidden="true"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     {% else %}
                                     <div class="input-loading-wrap">
                                         <input type="number" id="sections-input-{{ y }}" name="sections[{{ y }}]"
@@ -573,13 +619,26 @@
     (function () {
         var studentInputs = [1, 2, 3, 4].map(function (y) { return document.getElementById('students-input-' + y); });
         var sectionInputs = [1, 2, 3, 4].map(function (y) { return document.getElementById('sections-input-' + y); });
+
+        // 3rd Year containers & inputs
         var year3SectionsSingle = document.getElementById('year-3-sections-single');
         var year3SectionsMajors = document.getElementById('year-3-sections-majors');
-        var majorDbInput = document.getElementById('sections-input-3-database');
-        var majorWebInput = document.getElementById('sections-input-3-web');
-        var majorNetInput = document.getElementById('sections-input-3-networking');
-        var majorSectionInputs = [majorDbInput, majorWebInput, majorNetInput];
+        var major3DbInput = document.getElementById('sections-input-3-database');
+        var major3WebInput = document.getElementById('sections-input-3-web');
+        var major3NetInput = document.getElementById('sections-input-3-networking');
+        var major3SectionInputs = [major3DbInput, major3WebInput, major3NetInput];
 
+        // 4th Year containers & inputs
+        var year4SectionsSingle = document.getElementById('year-4-sections-single');
+        var year4SectionsMajors = document.getElementById('year-4-sections-majors');
+        var major4DbInput = document.getElementById('sections-input-4-database');
+        var major4WebInput = document.getElementById('sections-input-4-web');
+        var major4NetInput = document.getElementById('sections-input-4-networking');
+        var major4SectionInputs = [major4DbInput, major4WebInput, major4NetInput];
+
+        var allMajorSectionInputs = major3SectionInputs.concat(major4SectionInputs);
+
+        // UI elements
         var summaryText = document.getElementById('registrar-summary-text');
         var loadingIndicator = document.getElementById('registrar-loading');
         var errorIndicator = document.getElementById('registrar-error');
@@ -598,66 +657,98 @@
             return val === '2nd semester' || val === '2nd' || val === '2';
         }
 
+        function isFirstSemester() {
+            var val = (semesterSelect && semesterSelect.value) ? semesterSelect.value.trim().toLowerCase() : '';
+            return val === '1st semester' || val === '1st' || val === '1';
+        }
+
         function updateYearRowsVisibility() {
             var is2nd = isSecondSemester();
+            var is1st = isFirstSemester();
             var row4 = document.getElementById('year-row-4');
             var s4 = document.getElementById('students-input-4');
             var c4 = document.getElementById('sections-input-4');
             var s3Single = document.getElementById('sections-input-3');
 
-            if (row4) {
-                row4.style.display = is2nd ? 'none' : '';
-            }
-
             if (is2nd) {
+                // 2nd Semester: 4th year is hidden (OJT)
+                if (row4) row4.style.display = 'none';
+                if (s4) { s4.value = ''; s4.disabled = true; }
+                if (c4) { c4.value = ''; c4.disabled = true; }
+                if (year4SectionsSingle) year4SectionsSingle.style.display = 'none';
+                if (year4SectionsMajors) year4SectionsMajors.style.display = 'none';
+                major4SectionInputs.forEach(function (inp) { if (inp) { inp.value = ''; inp.disabled = true; } });
+
+                // 3rd year splits into majors
                 if (year3SectionsSingle) year3SectionsSingle.style.display = 'none';
                 if (s3Single) { s3Single.disabled = true; }
                 if (year3SectionsMajors) year3SectionsMajors.style.display = 'block';
-                majorSectionInputs.forEach(function (inp) {
-                    if (inp) { inp.disabled = false; }
-                });
+                major3SectionInputs.forEach(function (inp) { if (inp) { inp.disabled = false; } });
 
-                if (s4) { s4.value = ''; s4.disabled = true; }
-                if (c4) { c4.value = ''; c4.disabled = true; }
                 if (submitBtn) {
                     submitBtn.innerHTML = '<i class="bx bx-play-circle"></i> Generate 3-Year Schedule';
                 }
-            } else {
+            } else if (is1st) {
+                // 1st Semester: 4th year is active and splits into majors
+                if (row4) row4.style.display = '';
+                if (s4) { s4.disabled = false; }
+                if (c4) { c4.disabled = true; }
+                if (year4SectionsSingle) year4SectionsSingle.style.display = 'none';
+                if (year4SectionsMajors) year4SectionsMajors.style.display = 'block';
+                major4SectionInputs.forEach(function (inp) { if (inp) { inp.disabled = false; } });
+
+                // 3rd year remains single unified field
                 if (year3SectionsSingle) year3SectionsSingle.style.display = 'block';
                 if (s3Single) { s3Single.disabled = false; }
                 if (year3SectionsMajors) year3SectionsMajors.style.display = 'none';
-                majorSectionInputs.forEach(function (inp) {
-                    if (inp) { inp.value = ''; inp.disabled = true; }
-                });
+                major3SectionInputs.forEach(function (inp) { if (inp) { inp.value = ''; inp.disabled = true; } });
 
-                if (s4) { s4.disabled = false; }
-                if (c4) { c4.disabled = false; }
                 if (submitBtn) {
                     submitBtn.innerHTML = '<i class="bx bx-play-circle"></i> Generate 4-Year Schedule';
                 }
+            } else {
+                // No semester selected: reset to default display
+                if (row4) row4.style.display = '';
+                if (year3SectionsSingle) year3SectionsSingle.style.display = 'block';
+                if (year3SectionsMajors) year3SectionsMajors.style.display = 'none';
+                if (year4SectionsSingle) year4SectionsSingle.style.display = 'block';
+                if (year4SectionsMajors) year4SectionsMajors.style.display = 'none';
+
+                allMajorSectionInputs.forEach(function (inp) {
+                    if (inp) { inp.value = ''; inp.disabled = true; }
+                });
             }
         }
 
         function setLoadingState(loading) {
             isLoading = loading;
             var is2nd = isSecondSemester();
-            var allInputs = studentInputs.concat(sectionInputs).concat(majorSectionInputs);
+            var is1st = isFirstSemester();
+            var allInputs = studentInputs.concat(sectionInputs).concat(allMajorSectionInputs);
 
             allInputs.forEach(function (input) {
                 if (!input) return;
+
+                // Handle 4th year inputs
                 var isYear4 = input.id && input.id.indexOf('-4') !== -1;
                 if (is2nd && isYear4) {
                     input.value = '';
                     input.disabled = true;
                     return;
                 }
+                if (is1st && input.id === 'sections-input-4') {
+                    input.disabled = true;
+                    return;
+                }
+
+                // Handle 3rd year inputs
                 var isYear3Single = input.id === 'sections-input-3';
                 if (is2nd && isYear3Single) {
                     input.disabled = true;
                     return;
                 }
-                var isMajorInput = input.classList && input.classList.contains('year-sections-major-input');
-                if (!is2nd && isMajorInput) {
+                var isMajor3 = input.id && input.id.indexOf('-3-') !== -1;
+                if (!is2nd && isMajor3) {
                     input.disabled = true;
                     return;
                 }
@@ -665,11 +756,19 @@
                 var wrapper = input.closest('.input-loading-wrap');
                 if (wrapper) wrapper.classList.toggle('is-loading', loading);
                 input.disabled = loading;
+
                 if (loading) {
                     input.value = '';
                     input.setAttribute('placeholder', 'Loading...');
                 } else {
-                    input.setAttribute('placeholder', isMajorInput ? (input.id.indexOf('database') !== -1 ? 'Database' : (input.id.indexOf('web') !== -1 ? 'Web' : 'Networking')) : 'Auto-calculated');
+                    var isMajorInput = input.classList && input.classList.contains('year-sections-major-input');
+                    if (isMajorInput) {
+                        var ph = input.id.indexOf('database') !== -1 ? 'Database' :
+                                 (input.id.indexOf('web') !== -1 ? 'Web' : 'Networking');
+                        input.setAttribute('placeholder', ph);
+                    } else {
+                        input.setAttribute('placeholder', 'Auto-calculated');
+                    }
                 }
             });
 
@@ -680,7 +779,7 @@
         }
 
         function clearRegistrarFields() {
-            studentInputs.concat(sectionInputs).concat(majorSectionInputs).forEach(function (input) {
+            studentInputs.concat(sectionInputs).concat(allMajorSectionInputs).forEach(function (input) {
                 if (input) input.value = '';
             });
             updateYearRowsVisibility();
@@ -742,6 +841,7 @@
                         if (loadId !== activeLoadId) return;
 
                         var is2nd = isSecondSemester();
+                        var is1st = isFirstSemester();
                         var years = (data && data.years) ? data.years : {};
                         for (var y = 1; y <= 4; y++) {
                             if (is2nd && y === 4) {
@@ -757,15 +857,38 @@
                             if (stuInput) stuInput.value = yData.student_count || '';
                             if (secInput) secInput.value = yData.section_count || '';
 
+                            // 3rd Year - 2nd Semester Major Sections
                             if (is2nd && y === 3) {
-                                var majors = yData.majors || yData.sections_by_major || {};
-                                var dbCount = majors.database !== undefined ? majors.database : (majors['Database Systems'] || '');
-                                var webCount = majors.web !== undefined ? majors.web : (majors['Web Development'] || '');
-                                var netCount = majors.networking !== undefined ? majors.networking : (majors['Networking'] || '');
+                                var majors3 = yData.majors || yData.sections_by_major || {};
+                                var dbCount3 = majors3.database !== undefined ? majors3.database : (majors3['Database Systems'] || '');
+                                var webCount3 = majors3.web !== undefined ? majors3.web : (majors3['Web Development'] || '');
+                                var netCount3 = majors3.networking !== undefined ? majors3.networking : (majors3['Networking'] || '');
 
-                                if (majorDbInput) majorDbInput.value = dbCount;
-                                if (majorWebInput) majorWebInput.value = webCount;
-                                if (majorNetInput) majorNetInput.value = netCount;
+                                if (major3DbInput) major3DbInput.value = dbCount3;
+                                if (major3WebInput) major3WebInput.value = webCount3;
+                                if (major3NetInput) major3NetInput.value = netCount3;
+                            }
+
+                            // 4th Year - 1st Semester Major Sections
+                            if (is1st && y === 4) {
+                                var majors4 = yData.majors || yData.sections_by_major || {};
+                                var secCount4 = parseInt(yData.section_count || 0, 10);
+
+                                var dbCount4 = majors4.database !== undefined ? majors4.database : majors4['Database Systems'];
+                                var webCount4 = majors4.web !== undefined ? majors4.web : majors4['Web Development'];
+                                var netCount4 = majors4.networking !== undefined ? majors4.networking : majors4['Networking'];
+
+                                if (dbCount4 === undefined && secCount4 > 0) {
+                                    var base = Math.floor(secCount4 / 3);
+                                    var rem = secCount4 % 3;
+                                    dbCount4 = Math.max(1, base + (rem > 0 ? 1 : 0));
+                                    webCount4 = Math.max(1, base + (rem > 1 ? 1 : 0));
+                                    netCount4 = Math.max(1, base);
+                                }
+
+                                if (major4DbInput) major4DbInput.value = dbCount4 || '';
+                                if (major4WebInput) major4WebInput.value = webCount4 || '';
+                                if (major4NetInput) major4NetInput.value = netCount4 || '';
                             }
                         }
 
@@ -829,6 +952,32 @@
                     e.preventDefault();
                     showToast('A schedule for this semester already exists.', 'warning');
                     return;
+                }
+
+                // 4th-Year 1st-Semester Specialization Validation
+                if (isFirstSemester()) {
+                    var db4 = parseInt(major4DbInput ? major4DbInput.value : 0, 10);
+                    var web4 = parseInt(major4WebInput ? major4WebInput.value : 0, 10);
+                    var net4 = parseInt(major4NetInput ? major4NetInput.value : 0, 10);
+
+                    if (isNaN(db4) || db4 < 1 || isNaN(web4) || web4 < 1 || isNaN(net4) || net4 < 1) {
+                        e.preventDefault();
+                        showToast('Please enter a valid number of sections (>= 1) for all 4th-year specializations.', 'warning');
+                        return;
+                    }
+                }
+
+                // 3rd-Year 2nd-Semester Specialization Validation
+                if (isSecondSemester()) {
+                    var db3 = parseInt(major3DbInput ? major3DbInput.value : 0, 10);
+                    var web3 = parseInt(major3WebInput ? major3WebInput.value : 0, 10);
+                    var net3 = parseInt(major3NetInput ? major3NetInput.value : 0, 10);
+
+                    if (isNaN(db3) || db3 < 1 || isNaN(web3) || web3 < 1 || isNaN(net3) || net3 < 1) {
+                        e.preventDefault();
+                        showToast('Please enter a valid number of sections (>= 1) for all 3rd-year specializations.', 'warning');
+                        return;
+                    }
                 }
             });
         }
