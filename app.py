@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file
+from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort
 from datetime import timedelta, datetime
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -33,22 +33,9 @@ if not SUPABASE_URL or not SUPABASE_ANON_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-# Optional service-role client used ONLY for server-side auth admin operations
-# (creating users). It is never used for data access — all table reads/writes
-# still go through the `supabase` (anon) client above, so RLS is enforced.
-admin_supabase = None
-if os.environ.get("SUPABASE_SECRET_KEY"):
-    admin_supabase = create_client(SUPABASE_URL, os.environ.get("SUPABASE_SECRET_KEY"))
-
-
-def _admin_auth():
-    if admin_supabase is None:
-        raise RuntimeError(
-            "Admin user management requires the SUPABASE_SECRET_KEY (service_role) "
-            "to be set. This key is used only for auth admin operations, never for "
-            "data access."
-        )
-    return admin_supabase.auth.admin
+# All database reads and writes go through the authenticated Supabase client
+# using the public/anon key with the user session JWT. Row Level Security (RLS)
+# is strictly enforced by PostgreSQL policies. No service role or secret key is used.
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'scheduler-secret-key')
@@ -77,7 +64,20 @@ def _rel(row, key):
     return None
 
 def _user_to_dict(user):
-    """Convert a Supabase Auth user object into the dict shape the templates expect."""
+    """Convert a database row or user object into the dict shape the templates expect."""
+    if isinstance(user, dict):
+        email = user.get('email') or ''
+        username = user.get('username') or (email.split('@')[0] if '@' in email else email)
+        return {
+            'id': user.get('id'),
+            'email': email,
+            'username': username,
+            'first_name': user.get('first_name', '') or '',
+            'last_name': user.get('last_name', '') or '',
+            'program': user.get('program', '') or '',
+            'role': user.get('role', 'Viewer') or 'Viewer',
+            'profile_picture': user.get('profile_picture'),
+        }
     metadata = getattr(user, 'user_metadata', None) or {}
     email = getattr(user, 'email', None) or ''
     username = metadata.get('username') or (email.split('@')[0] if '@' in email else email)
@@ -94,39 +94,51 @@ def _user_to_dict(user):
 
 
 def _list_users():
-    """Return all Supabase Auth users as template-ready dicts."""
-    try:
-        res = _admin_auth().list_users(per_page=1000)
-        raw_users = getattr(res, 'users', res) if res is not None else []
-        if isinstance(raw_users, list):
-            return [_user_to_dict(u) for u in raw_users]
-        return []
-    except Exception as err:
-        logging.error(f"Error listing users: {err}")
-        return []
+    """Return all users from public.users as template-ready dicts.
+
+    Queries the public.users database table via the authenticated Supabase client.
+    Row Level Security (RLS) policies enforce that only authenticated users
+    with the 'admin' role can read all user records.
+    """
+    res = supabase.table('users').select('*').execute()
+    raw_users = res.data or []
+    if isinstance(raw_users, list):
+        return [_user_to_dict(u) for u in raw_users]
+    return []
 
 
 def _find_email_by_username_or_email(identifier):
-    """Resolve a username or email input to the registered Supabase Auth email."""
+    """Resolve a username or email input to the registered email by checking both columns simultaneously."""
     if not identifier:
         return None
     identifier = identifier.strip()
-    if admin_supabase is not None:
-        try:
-            res = _admin_auth().list_users(per_page=1000)
-            raw_users = getattr(res, 'users', res) if res is not None else []
-            for u in raw_users:
-                u_email = (getattr(u, 'email', None) or '').strip()
-                metadata = getattr(u, 'user_metadata', None) or {}
-                u_name = (metadata.get('username') or '').strip()
-                if identifier.lower() in (u_name.lower(), u_email.lower()):
-                    return u_email
-                if u_email and u_email.split('@')[0].lower() == identifier.lower():
-                    return u_email
-        except Exception as err:
-            logging.error(f"Error resolving username to email: {err}")
+
+    # 1. Try secure RPC lookup checking both email and username simultaneously
+    try:
+        if hasattr(supabase, 'rpc'):
+            rpc_res = supabase.rpc('get_email_by_username', {'p_username': identifier}).execute()
+            if rpc_res and rpc_res.data:
+                return str(rpc_res.data).strip()
+    except Exception as err:
+        logging.debug(f"RPC get_email_by_username fallback: {err}")
+
+    # 2. Try table select checking both email and username columns simultaneously
+    try:
+        res = supabase.table('users').select('email, username').or_(f"email.ilike.{identifier},username.ilike.{identifier}").limit(1).execute()
+        if res.data and len(res.data) > 0:
+            user_row = res.data[0]
+            if user_row.get('email'):
+                return user_row['email']
+            elif user_row.get('username'):
+                return f"{user_row['username'].lower()}@example.com"
+    except Exception as err:
+        logging.debug(f"Could not resolve identifier via public.users: {err}")
+
+    # 3. Fallback: If formatted as an email, return directly
     if '@' in identifier:
         return identifier
+
+    # 4. Default domain convention fallback for username
     return f"{identifier.lower()}@example.com"
 
 def _to_datetime(value):
@@ -1061,13 +1073,19 @@ def signup():
         first_name = request.form.get('first_name', '').strip()
         last_name = request.form.get('last_name', '').strip()
         program = request.form.get('program', '').strip()
-        username_input = (request.form.get('username') or request.form.get('email') or '').strip()
+        email = request.form.get('email', '').strip()
+        username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
 
         # Validate required fields
-        if not first_name or not last_name or not program or not username_input or not password or not confirm_password:
+        if not first_name or not last_name or not program or not password or not confirm_password:
             error = 'All fields are required.'
+        elif not email and not username:
+            error = 'Please provide an email, a username, or both.'
+        # Validate email format if email was provided
+        elif email and ('@' not in email or '.' not in email.split('@')[-1]):
+            error = 'Please enter a valid email address.'
         # Validate program selection
         elif program not in ['BSIT', 'BSBA']:
             error = 'Please select a valid program.'
@@ -1076,34 +1094,48 @@ def signup():
             error = 'Passwords do not match.'
         else:
             try:
-                email = username_input if '@' in username_input else f"{username_input.lower()}@example.com"
+                provided_email = bool(email)
+                provided_username = bool(username)
+
+                effective_email = email if provided_email else f"{username.lower()}@example.com"
+                effective_username = username if provided_username else email.split('@')[0]
 
                 res = supabase.auth.sign_up({
-                    'email': email,
+                    'email': effective_email,
                     'password': password,
                     'options': {
                         'data': {
                             'first_name': first_name,
                             'last_name': last_name,
-                            'username': username_input,
+                            'username': effective_username,
                             'program': program,
                             'role': 'Viewer',
+                            'provided_email': provided_email,
+                            'provided_username': provided_username,
                         }
                     }
                 })
 
-                if not res.user:
+                if not res or not res.user:
                     error = 'Unable to create account. Please try again.'
                 else:
                     try:
                         full_name = f"{first_name} {last_name}".strip()
                         if not full_name:
-                            full_name = username_input
+                            full_name = effective_username
+
+                        if provided_email and provided_username:
+                            detail = f'Self-registered: {effective_username} ({effective_email})'
+                        elif provided_email:
+                            detail = f'Self-registered: {effective_email}'
+                        else:
+                            detail = f'Self-registered: {effective_username}'
+
                         supabase.table('activity_log').insert({
                             'username': full_name,
                             'action': 'create',
                             'target_type': 'user',
-                            'target_detail': f'Self-registered: {username_input}',
+                            'target_detail': detail,
                         }).execute()
                     except Exception:
                         pass
@@ -1112,7 +1144,11 @@ def signup():
 
             except Exception as err:
                 logging.error(f"Signup error: {err}")
-                error = 'Username/email already registered or database error. Please try again.'
+                msg = str(err).lower()
+                if 'already registered' in msg or 'already been registered' in msg or 'already exists' in msg:
+                    error = 'Email or username already registered.'
+                else:
+                    error = 'Username/email already registered or database error. Please try again.'
 
     return render_template('login.html', error=error)
 
@@ -1234,18 +1270,8 @@ def add_user_columns():
 @app.route('/set_admin_role/<email>')
 def set_admin_role(email):
     try:
-        found = None
-        for u in _admin_auth().list_users(per_page=1000):
-            if getattr(u, 'email', None) == email:
-                found = u
-                break
-        if not found:
-            return f"User '{email}' not found."
-
-        metadata = dict(getattr(found, 'user_metadata', None) or {})
-        metadata['role'] = 'admin'
-        _admin_auth().update_user_by_id(found.id, {'user_metadata': metadata})
-        return f"User '{email}' set to admin role. You can close this page."
+        supabase.table('users').update({'role': 'admin'}).eq('email', email).execute()
+        return f"User '{email}' updated to admin role in database. You can close this page."
     except Exception as err:
         return f"Error: {err}"
 
@@ -1254,6 +1280,7 @@ def set_admin_role(email):
 @admin_required
 def users():
     search_query = request.args.get('search', '').strip()
+    users_list = []
 
     try:
         users_list = _list_users()
@@ -1261,11 +1288,12 @@ def users():
             q = search_query.lower()
             users_list = [
                 u for u in users_list
-                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'last_name', 'username', 'program', 'role'))
+                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'last_name', 'username', 'email', 'program', 'role'))
             ]
         users_list.sort(key=lambda u: (str(u.get('role') or ''), str(u.get('last_name') or ''), str(u.get('first_name') or '')))
-    except Exception:
-        users_list = []
+    except Exception as err:
+        logging.error(f"Error fetching users: {err}")
+        flash(f'Error fetching users: {err}', 'error')
 
     return render_template('users.html', active_page='users', users=users_list, search_query=search_query)
 
@@ -1280,11 +1308,12 @@ def search_users():
             q = query_str.lower()
             users_list = [
                 u for u in users_list
-                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'last_name', 'username', 'program', 'role'))
+                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'last_name', 'username', 'email', 'program', 'role'))
             ]
         users_list.sort(key=lambda u: (str(u.get('role') or ''), str(u.get('last_name') or ''), str(u.get('first_name') or '')))
-    except Exception:
-        users_list = []
+    except Exception as err:
+        logging.error(f"Error fetching users: {err}")
+        return jsonify({'users': [], 'error': str(err)}), 500
 
     return jsonify({'users': users_list})
 
@@ -1292,12 +1321,6 @@ def search_users():
 @admin_required
 def edit_user(user_id):
     try:
-        res = _admin_auth().get_user_by_id(user_id)
-        user = res.user if res else None
-
-        if not user:
-            return jsonify({'success': False, 'message': 'User not found.'}), 404
-
         # Check if admin is trying to change their own role
         current_user_id = session.get('user_id')
         if str(current_user_id) == str(user_id):
@@ -1315,19 +1338,18 @@ def edit_user(user_id):
         if role.lower() != 'admin' and not program:
             return jsonify({'success': False, 'message': 'Program is required for Scheduler and Viewer roles.'}), 400
 
-        # admin.update_user_by_id replaces user_metadata, so merge over the existing.
-        metadata = dict(getattr(user, 'user_metadata', None) or {})
-        metadata['first_name'] = first_name
-        metadata['last_name'] = last_name
-        metadata['program'] = program
-        metadata['role'] = role
-
-        attrs = {'user_metadata': metadata}
+        update_payload = {
+            'first_name': first_name,
+            'last_name': last_name,
+            'role': role,
+            'program': program,
+        }
         if email:
-            attrs['email'] = email
-            attrs['email_confirm'] = True
+            update_payload['email'] = email
 
-        _admin_auth().update_user_by_id(user_id, attrs)
+        res = supabase.table('users').update(update_payload).eq('id', user_id).execute()
+        if not res.data:
+            return jsonify({'success': False, 'message': 'User not found.'}), 404
 
         log_activity('edit', 'user', f'{first_name} {last_name}')
         flash('Edited successfully', 'success')
@@ -1345,7 +1367,7 @@ def delete_user(user_id):
         if str(current_user_id) == str(user_id):
             return jsonify({'success': False, 'message': 'You cannot delete your own account.'}), 403
 
-        _admin_auth().delete_user(user_id)
+        supabase.table('users').delete().eq('id', user_id).execute()
 
         log_activity('delete', 'user', f'User ID {user_id}')
         flash('Deleted successfully', 'success')
@@ -1371,17 +1393,41 @@ def create_user():
         if role.lower() != 'admin' and not program:
             return jsonify({'success': False, 'message': 'Program is required for Scheduler and Viewer roles.'}), 400
 
-        _admin_auth().create_user({
+        user_id = None
+        try:
+            auth_res = supabase.auth.sign_up({
+                'email': email,
+                'password': password,
+                'options': {
+                    'data': {
+                        'first_name': first_name,
+                        'last_name': last_name,
+                        'username': email.split('@')[0],
+                        'program': program,
+                        'role': role,
+                    }
+                }
+            })
+            if auth_res and auth_res.user:
+                user_id = auth_res.user.id
+        except Exception as auth_err:
+            msg = str(auth_err).lower()
+            if 'already registered' in msg or 'already been registered' in msg or 'already exists' in msg or 'duplicate' in msg:
+                return jsonify({'success': False, 'message': 'Email already exists.'}), 400
+            logging.warning(f"Auth sign_up info during create_user: {auth_err}")
+
+        payload = {
             'email': email,
-            'password': password,
-            'email_confirm': True,
-            'user_metadata': {
-                'first_name': first_name,
-                'last_name': last_name,
-                'program': program,
-                'role': role,
-            },
-        })
+            'username': email.split('@')[0],
+            'first_name': first_name,
+            'last_name': last_name,
+            'program': program,
+            'role': role,
+        }
+        if user_id:
+            payload['id'] = str(user_id)
+
+        supabase.table('users').upsert(payload, on_conflict='email').execute()
 
         log_activity('create', 'user', f'{first_name} {last_name}')
         flash('Created successfully', 'success')
@@ -1428,17 +1474,37 @@ def create_test_accounts():
 
         for account in test_accounts:
             try:
-                _admin_auth().create_user({
+                user_id = None
+                try:
+                    auth_res = supabase.auth.sign_up({
+                        'email': account['email'],
+                        'password': account['password'],
+                        'options': {
+                            'data': {
+                                'first_name': account['first_name'],
+                                'last_name': account['last_name'],
+                                'username': account['email'].split('@')[0],
+                                'program': account['program'],
+                                'role': account['role'],
+                            },
+                        },
+                    })
+                    if auth_res and auth_res.user:
+                        user_id = auth_res.user.id
+                except Exception:
+                    pass
+
+                payload = {
                     'email': account['email'],
-                    'password': account['password'],
-                    'email_confirm': True,
-                    'user_metadata': {
-                        'first_name': account['first_name'],
-                        'last_name': account['last_name'],
-                        'program': account['program'],
-                        'role': account['role'],
-                    },
-                })
+                    'username': account['email'].split('@')[0],
+                    'first_name': account['first_name'],
+                    'last_name': account['last_name'],
+                    'program': account['program'],
+                    'role': account['role'],
+                }
+                if user_id:
+                    payload['id'] = str(user_id)
+                supabase.table('users').upsert(payload, on_conflict='email').execute()
                 created_accounts.append(account['email'])
             except Exception:
                 skipped_accounts.append(account['email'])
@@ -3516,8 +3582,8 @@ def mark_notifications_read():
 
 #-------------------------------------------------------Irregular Student Scheduling----------------------------------------------------------------------------------------------
 @app.route('/irregular_students', methods=['GET', 'POST'])
-@scheduler_required
 def irregular_students():
+    abort(404)
     user_role = session.get('role', 'Viewer')
     program = session.get('program', '')
 
@@ -3601,8 +3667,8 @@ def irregular_students():
 
 
 @app.route('/delete_irregular_student/<int:student_id>')
-@login_required
 def delete_irregular_student(student_id):
+    abort(404)
     handled, resp = _request_delete_if_scheduler('irregular_student', student_id, f'Irregular Student ID {student_id}')
     if handled:
         return resp or redirect(url_for('irregular_students'))
@@ -3620,8 +3686,8 @@ def delete_irregular_student(student_id):
 
 
 @app.route('/irregular_students/<int:student_id>/schedule')
-@scheduler_required
 def manage_irregular_student_schedule(student_id):
+    abort(404)
     semester_filter = request.args.get('semester', '1st Semester')
     year_filter = request.args.get('year', '')
 
@@ -3760,8 +3826,8 @@ def manage_irregular_student_schedule(student_id):
 
 
 @app.route('/irregular_students/<int:student_id>/view_schedule')
-@scheduler_required
 def view_irregular_student_schedule(student_id):
+    abort(404)
     student = _first((supabase.table('irregular_students').select('*').eq('student_id', student_id).execute().data) or [])
 
     if not student:
@@ -3808,8 +3874,8 @@ def view_irregular_student_schedule(student_id):
 
 
 @app.route('/irregular_students/<int:student_id>/assign_section', methods=['POST'])
-@scheduler_required
 def assign_irregular_section(student_id):
+    abort(404)
     data = request.get_json(silent=True) or request.form
     course_id = data.get('course_id')
     section = data.get('section')
@@ -3849,8 +3915,8 @@ def assign_irregular_section(student_id):
 
 
 @app.route('/irregular_students/<int:student_id>/unassign_section/<int:course_id>', methods=['POST'])
-@scheduler_required
 def unassign_irregular_section(student_id, course_id):
+    abort(404)
     try:
         supabase.table('irregular_student_schedule').delete().eq('student_id', student_id).eq('course_id', course_id).execute()
 

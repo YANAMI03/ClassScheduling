@@ -101,11 +101,6 @@
             {% endfor %}
             {% endif %}
 
-            <a href="/irregular_students" class="sidebar__link {% if active_page == 'irregular_students' %}sidebar__link--active{% endif %}" title="Irregular Students">
-                <i class="bx bx-user-pin sidebar__icon"></i>
-                <span class="sidebar__label">Irregular Students</span>
-            </a>
-            
             <!-- Schedules Dropdown -->
             <div class="sidebar__dropdown" id="schedules-dropdown">
                 <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
