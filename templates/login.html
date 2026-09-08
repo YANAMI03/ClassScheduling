@@ -82,6 +82,17 @@
             font-size: 0.938rem;
         }
 
+        .login-card .form-control.is-invalid {
+            border-color: #dc2626;
+        }
+
+        .login-helper-text {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            margin-top: -0.5rem;
+            margin-bottom: 0.875rem;
+        }
+
         .login-error {
             background: #fef2f2;
             border: 1px solid #fecaca;
@@ -161,6 +172,10 @@
 
             <!-- Sign Up Form -->
             <form method="post" action="{{ url_for('signup') }}" id="signupForm" class="hidden">
+                <div class="login-error hidden" id="signupError">
+                    <i class="bx bx-error-circle"></i>
+                    <span id="signupErrorText">Please provide an email, a username, or both.</span>
+                </div>
                 <div class="mb-3">
                     <label for="firstName" class="form-label">First Name</label>
                     <input type="text" id="firstName" name="first_name" class="form-control"
@@ -180,9 +195,15 @@
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="signupUsername" class="form-label">Username or Email</label>
-                    <input type="text" id="signupUsername" name="username" class="form-control" placeholder="Choose a username or email"
-                        required>
+                    <label for="signupEmail" class="form-label">Email</label>
+                    <input type="email" id="signupEmail" name="email" class="form-control" placeholder="Enter your email">
+                </div>
+                <div class="login-helper-text">
+                    Provide an email, a username, or both.
+                </div>
+                <div class="mb-3">
+                    <label for="signupUsername" class="form-label">Username</label>
+                    <input type="text" id="signupUsername" name="username" class="form-control" placeholder="Choose a username">
                 </div>
                 <div class="mb-3">
                     <label for="signupPassword" class="form-label">Password</label>
@@ -204,8 +225,51 @@
         </div>
     </div>
     <script>
+        var emailInput = document.getElementById('signupEmail');
+        var usernameInput = document.getElementById('signupUsername');
+        var signupError = document.getElementById('signupError');
+        var signupErrorText = document.getElementById('signupErrorText');
+
+        function showSignupError(msg) {
+            if (signupError && signupErrorText) {
+                signupErrorText.textContent = msg;
+                signupError.classList.remove('hidden');
+            } else {
+                alert(msg);
+            }
+        }
+
+        function clearIdentifierErrors() {
+            if (signupError) {
+                signupError.classList.add('hidden');
+            }
+            if (emailInput) {
+                emailInput.classList.remove('is-invalid');
+            }
+            if (usernameInput) {
+                usernameInput.classList.remove('is-invalid');
+            }
+        }
+
+        if (emailInput) {
+            emailInput.addEventListener('input', function () {
+                if (emailInput.value.trim() || (usernameInput && usernameInput.value.trim())) {
+                    clearIdentifierErrors();
+                }
+            });
+        }
+
+        if (usernameInput) {
+            usernameInput.addEventListener('input', function () {
+                if (usernameInput.value.trim() || (emailInput && emailInput.value.trim())) {
+                    clearIdentifierErrors();
+                }
+            });
+        }
+
         document.getElementById('showSignup').addEventListener('click', function (e) {
             e.preventDefault();
+            clearIdentifierErrors();
             document.getElementById('loginForm').classList.add('hidden');
             document.getElementById('signupForm').classList.remove('hidden');
             document.getElementById('formSubtitle').textContent = 'Create a new account';
@@ -213,18 +277,42 @@
 
         document.getElementById('showLogin').addEventListener('click', function (e) {
             e.preventDefault();
+            clearIdentifierErrors();
             document.getElementById('signupForm').classList.add('hidden');
             document.getElementById('loginForm').classList.remove('hidden');
             document.getElementById('formSubtitle').textContent = 'Sign in to manage class schedules';
         });
 
         document.getElementById('signupForm').addEventListener('submit', function (e) {
+            var email = emailInput ? emailInput.value.trim() : '';
+            var username = usernameInput ? usernameInput.value.trim() : '';
             var password = document.getElementById('signupPassword').value;
             var confirmPassword = document.getElementById('confirmPassword').value;
 
+            clearIdentifierErrors();
+
+            if (!email && !username) {
+                e.preventDefault();
+                showSignupError('Please provide an email, a username, or both.');
+                if (emailInput) emailInput.classList.add('is-invalid');
+                if (usernameInput) usernameInput.classList.add('is-invalid');
+                if (emailInput) emailInput.focus();
+                return false;
+            }
+
+            if (email && (!email.includes('@') || !email.split('@')[1] || !email.split('@')[1].includes('.'))) {
+                e.preventDefault();
+                showSignupError('Please enter a valid email address.');
+                if (emailInput) {
+                    emailInput.classList.add('is-invalid');
+                    emailInput.focus();
+                }
+                return false;
+            }
+
             if (password !== confirmPassword) {
                 e.preventDefault();
-                alert('Passwords do not match.');
+                showSignupError('Passwords do not match.');
                 return false;
             }
         });
