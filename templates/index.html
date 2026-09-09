@@ -354,6 +354,28 @@
         </div>
     </div>
 
+    {% if room_utilization %}
+    <div class="card mb-4 border-0 shadow-sm" style="border-radius: 12px;">
+        <div class="card-body py-3 px-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0 fw-bold d-flex align-items-center gap-2">
+                    <i class="bx bx-door-open text-primary fs-5"></i> Room Utilization
+                </h6>
+                <span class="badge bg-light text-secondary border">Equal Room Distribution</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2 pt-1">
+                {% for ru in room_utilization %}
+                <div class="d-inline-flex align-items-center bg-light border rounded px-3 py-1 small">
+                    <span class="fw-semibold text-dark">{{ ru.room_name }}</span>
+                    {% if ru.room_type %}<span class="text-muted ms-1 small">({{ ru.room_type }})</span>{% endif %}
+                    <span class="badge bg-primary rounded-pill ms-2">{{ ru.count }} class{% if ru.count != 1 %}es{% endif %}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if sections_with_entries %}
     {% if year_groups %}
         <div class="accordion-year-wrapper">
