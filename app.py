@@ -892,12 +892,57 @@ def _build_preview_context(preview_entries=None):
         rooms = []
         prof_course_assignments = {}
 
+    room_utilization = []
+    if preview:
+        usage_counts = {}
+        for entry in preview:
+            rid = entry.get('room_id')
+            rname = entry.get('room_name') or (f"Room {rid}" if rid else 'Unassigned (TBA)')
+            if rid is not None:
+                usage_counts[rid] = usage_counts.get(rid, {'name': rname, 'count': 0})
+                usage_counts[rid]['count'] += 1
+            elif entry.get('time_range') or entry.get('start'):
+                usage_counts['tba'] = usage_counts.get('tba', {'name': 'Unassigned (TBA)', 'count': 0})
+                usage_counts['tba']['count'] += 1
+
+        seen_rids = set()
+        for r in rooms:
+            rid = r.get('room_id')
+            if rid is not None:
+                seen_rids.add(rid)
+                info = usage_counts.get(rid)
+                count = info['count'] if info else 0
+                rname = r.get('room_name') or f"Room {rid}"
+                room_utilization.append({
+                    'room_id': rid,
+                    'room_name': rname,
+                    'room_type': r.get('room_type', ''),
+                    'count': count
+                })
+
+        for rid, info in usage_counts.items():
+            if rid != 'tba' and rid not in seen_rids:
+                room_utilization.append({
+                    'room_id': rid,
+                    'room_name': info['name'],
+                    'room_type': '',
+                    'count': info['count']
+                })
+        if 'tba' in usage_counts:
+            room_utilization.append({
+                'room_id': None,
+                'room_name': usage_counts['tba']['name'],
+                'room_type': '',
+                'count': usage_counts['tba']['count']
+            })
+
     return {
         'sections_with_entries': sections_with_entries,
         'year_groups': year_groups,
         'courses': courses,
         'rooms': rooms,
         'prof_course_assignments': prof_course_assignments,
+        'room_utilization': room_utilization,
     }
 
 
@@ -2487,6 +2532,57 @@ def _validate_schedule_room_types(entries, all_rooms_map=None):
             )
             errors.append(err_msg)
     return len(errors) == 0, errors
+
+
+def _select_least_used_room(candidate_rooms, day, start_time, end_time, room_bookings, room_usage, room_last_used=None, room_order=None):
+    """
+    Select the optimal room for a class session based on:
+    Priority 1 (Hard Constraints):
+      - Must be an eligible candidate room (e.g., lecture room for lecture, lab room for lab).
+      - Must NOT have a scheduling conflict for the given (day, start_time, end_time).
+    Priority 2 (Room Balancing):
+      - Select the valid room with the lowest current assignment count in room_usage.
+      - Fair tie-breaking:
+        1. Lowest room_usage count across the schedule batch.
+        2. Lowest room_last_used step (least recently used room).
+        3. Deterministic initial room ordering (room_order) or room ID.
+
+    Returns:
+      selected_room (dict) or None if no valid room is available.
+    """
+    if not candidate_rooms:
+        return None
+
+    valid_rooms = []
+    for rm in candidate_rooms:
+        rk = rm.get('room_id')
+        if rk is None:
+            continue
+        bookings = room_bookings.get(rk, [])
+        if not _has_conflict(day, start_time, end_time, bookings):
+            valid_rooms.append(rm)
+
+    if not valid_rooms:
+        return None
+
+    last_used_map = room_last_used if room_last_used is not None else {}
+    order_map = room_order if room_order is not None else {}
+
+    selected_room = min(
+        valid_rooms,
+        key=lambda rm: (
+            room_usage.get(rm['room_id'], 0),
+            last_used_map.get(rm['room_id'], 0),
+            order_map.get(rm['room_id'], 0)
+        )
+    )
+
+    logging.debug(
+        f"[ROOM_SELECTION] Selected Room '{selected_room.get('room_name')}' (ID: {selected_room.get('room_id')}) "
+        f"for {day} {start_time}-{end_time} | Current Usage: {room_usage.get(selected_room.get('room_id'), 0)} | "
+        f"Reason: Lowest valid room utilization (candidates evaluated: {len(valid_rooms)})"
+    )
+    return selected_room
 
 
 def _build_subject_session_queue(course):
@@ -4256,9 +4352,13 @@ def generate_schedule():
         for slot in candidate_slots:
             slot_groups.setdefault(slot['day'], []).append(slot)
 
-        # Global conflict tracking across all 4 years
+        # Global conflict tracking and room utilization tracking across all sections in batch
         section_bookings = {(sec['section'], sec.get('major')): [] for sec in all_sections}
         room_bookings = {}
+        room_usage = {r['room_id']: 0 for r in all_rooms if r.get('room_id') is not None}
+        room_last_used = {r['room_id']: 0 for r in all_rooms if r.get('room_id') is not None}
+        room_order = {r['room_id']: idx for idx, r in enumerate(all_rooms) if r.get('room_id') is not None}
+        assignment_step = 0
         professor_bookings = {}
         professor_hours = {}
         preview_entries = []
@@ -4293,7 +4393,7 @@ def generate_schedule():
 
         # Helper to schedule a single unpaired session (or half of a split paired session)
         def _schedule_single_session(session_type, duration, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
-            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count
+            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step
             if duration <= 0:
                 return True
 
@@ -4374,12 +4474,10 @@ def generate_schedule():
                         if not assigned_prof:
                             continue
 
-                        assigned_room = None
-                        for rm in cand_rooms:
-                            rk = rm['room_id']
-                            if not _has_conflict(day, block_start, block_end, room_bookings.get(rk, [])):
-                                assigned_room = rm
-                                break
+                        assigned_room = _select_least_used_room(
+                            cand_rooms, day, block_start, block_end,
+                            room_bookings, room_usage, room_last_used, room_order
+                        )
 
                         if not assigned_room:
                             continue
@@ -4413,6 +4511,9 @@ def generate_schedule():
 
                         section_bookings[sec_key].append((day, block_start, block_end))
                         room_bookings.setdefault(rk, []).append((day, block_start, block_end))
+                        assignment_step += 1
+                        room_usage[rk] = room_usage.get(rk, 0) + 1
+                        room_last_used[rk] = assignment_step
                         professor_bookings.setdefault(pk, []).append((day, block_start, block_end))
                         professor_hours[pk] = professor_hours.get(pk, 0) + duration
 
@@ -4445,12 +4546,10 @@ def generate_schedule():
                             assigned_prof = prof
                             break
 
-                    assigned_room = None
-                    for rm in cand_rooms:
-                        rk = rm['room_id']
-                        if not _has_conflict(day, block_start, block_end, room_bookings.get(rk, [])):
-                            assigned_room = rm
-                            break
+                    assigned_room = _select_least_used_room(
+                        cand_rooms, day, block_start, block_end,
+                        room_bookings, room_usage, room_last_used, room_order
+                    )
 
                     pk = assigned_prof['prof_id'] if assigned_prof else None
                     prof_name = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip() if assigned_prof else None
@@ -4484,6 +4583,9 @@ def generate_schedule():
                     section_bookings[sec_key].append((day, block_start, block_end))
                     if rk:
                         room_bookings.setdefault(rk, []).append((day, block_start, block_end))
+                        assignment_step += 1
+                        room_usage[rk] = room_usage.get(rk, 0) + 1
+                        room_last_used[rk] = assignment_step
                     if pk:
                         professor_bookings.setdefault(pk, []).append((day, block_start, block_end))
                         professor_hours[pk] = professor_hours.get(pk, 0) + duration
@@ -4497,7 +4599,7 @@ def generate_schedule():
 
         # Helper to schedule a paired block (Lecture + Lab)
         def _schedule_paired_block(lec_dur, lab_dur, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
-            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count
+            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step
             total_dur = lec_dur + lab_dur
             course_id = course['course_id']
             primary_profs = professors_by_course.get(course_id, [])
@@ -4574,23 +4676,19 @@ def generate_schedule():
                             continue
 
                         # STRICT Lecture room selection
-                        assigned_lec_room = None
-                        for lr in lecture_rooms:
-                            rk = lr['room_id']
-                            if not _has_conflict(day, lec_start, lec_end, room_bookings.get(rk, [])):
-                                assigned_lec_room = lr
-                                break
+                        assigned_lec_room = _select_least_used_room(
+                            lecture_rooms, day, lec_start, lec_end,
+                            room_bookings, room_usage, room_last_used, room_order
+                        )
 
                         if not assigned_lec_room:
                             continue
 
                         # STRICT Laboratory room selection
-                        assigned_lab_room = None
-                        for br in lab_rooms:
-                            rk = br['room_id']
-                            if not _has_conflict(day, lab_start, lab_end, room_bookings.get(rk, [])):
-                                assigned_lab_room = br
-                                break
+                        assigned_lab_room = _select_least_used_room(
+                            lab_rooms, day, lab_start, lab_end,
+                            room_bookings, room_usage, room_last_used, room_order
+                        )
 
                         if not assigned_lab_room:
                             continue
@@ -4619,6 +4717,9 @@ def generate_schedule():
                         })
                         section_bookings[sec_key].append((day, lec_start, lec_end))
                         room_bookings.setdefault(lec_rk, []).append((day, lec_start, lec_end))
+                        assignment_step += 1
+                        room_usage[lec_rk] = room_usage.get(lec_rk, 0) + 1
+                        room_last_used[lec_rk] = assignment_step
                         professor_bookings.setdefault(pk, []).append((day, lec_start, lec_end))
 
                         preview_entries.append({
@@ -4639,6 +4740,9 @@ def generate_schedule():
                         })
                         section_bookings[sec_key].append((day, lab_start, lab_end))
                         room_bookings.setdefault(lab_rk, []).append((day, lab_start, lab_end))
+                        assignment_step += 1
+                        room_usage[lab_rk] = room_usage.get(lab_rk, 0) + 1
+                        room_last_used[lab_rk] = assignment_step
                         professor_bookings.setdefault(pk, []).append((day, lab_start, lab_end))
 
                         professor_hours[pk] = professor_hours.get(pk, 0) + total_dur
@@ -4703,6 +4807,17 @@ def generate_schedule():
 
         # Strict validation of generated entries before storing preview
         all_rooms_map = {int(r['room_id']): r for r in all_rooms if r.get('room_id')}
+
+        # Batch room distribution metrics logging
+        if room_usage:
+            max_room_usage = max(room_usage.values())
+            min_room_usage = min(room_usage.values())
+            distribution_difference = max_room_usage - min_room_usage
+            room_usage_log = ", ".join(f"{all_rooms_map.get(rid, {}).get('room_name', f'Room {rid}')}: {count}" for rid, count in room_usage.items())
+            logging.info(
+                f"[ROOM DISTRIBUTION] Batch room utilization: {room_usage_log} | "
+                f"Max: {max_room_usage} | Min: {min_room_usage} | Difference: {distribution_difference}"
+            )
         is_valid, validation_errors = _validate_schedule_room_types(preview_entries, all_rooms_map)
         if not is_valid:
             for err in validation_errors:
