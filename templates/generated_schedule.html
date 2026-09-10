@@ -1,124 +1,245 @@
 {% extends "base.html" %}
-{% block title %}View Schedule - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Schedule Details</h5>{% endblock %}
+{% block title %}Section {{ section.section_name or section.section }} Schedule - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Section Schedule Details</h5>{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div>
-        <h1 class="page-title">Schedule Details</h1>
-        <p class="page-subtitle">Click any schedule entry row to inspect full details</p>
+        <h1 class="page-title">Section Schedule: {{ section.section_name or section.section }}</h1>
+        <p class="page-subtitle">Interactive weekly timetable grid, free periods, and class schedule details</p>
     </div>
-    <a href="/schedules" class="btn btn-outline-secondary">
-        <i class="bx bx-arrow-back"></i> Back to Schedules
-    </a>
+    <div class="d-flex gap-2 align-items-center">
+        <a href="/schedules" class="btn btn-outline-secondary">
+            <i class="bx bx-arrow-back"></i> Back to Section Schedule
+        </a>
+        {% if user_role != 'Viewer' and entries %}
+        <a href="{{ url_for('delete_section_schedule', section_name=section.section or section.section_name, semester=section.semester, major=section.major) }}"
+           class="btn btn-danger btn-sm stop-prop"
+           data-confirm="Are you sure you want to delete the entire schedule for Section {{ section.section_name or section.section }}?">
+            <i class="bx bx-trash"></i> Delete Section Schedule
+        </a>
+        {% endif %}
+    </div>
 </div>
 
-{% if sections_with_entries %}
-    {% for item in sections_with_entries %}
-    <div class="card-custom mb-4">
-        <div class="card-custom__header">
-            <div>
-                <h5 class="card-custom__title mb-1">
-                    Section {{ item.section.section_name }} - {{ item.section.semester or 'Semester not set' }}
-                </h5>
-                {% if item.section.major %}
-                <span class="badge-custom badge-primary">{{ item.section.major }}</span>
-                {% endif %}
-            </div>
-            {% if user_role != 'Viewer' %}
-            <a href="{{ url_for('delete_section_schedule', section_name=item.section.section, semester=item.section.semester, major=item.section.major) }}" class="btn btn-danger btn-sm stop-prop" data-confirm="Are you sure you want to delete the entire schedule for Section {{ item.section.section }}?">
-                <i class="bx bx-trash"></i> Delete All
-            </a>
-            {% endif %}
-        </div>
-        <div class="table-responsive">
-            <table class="table-custom">
-                <thead>
-                    <tr>
-                        <th>Course</th>
-                        <th>Professor</th>
-                        <th>Room</th>
-                        <th>Timeslot</th>
-                        <th>Type</th>
-                        {% if user_role != 'Viewer' %}
-                        <th class="text-end">Actions</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% if item.entries %}
-                        {% for entry in item.entries %}
-                        <tr class="schedule-row"
-                            tabindex="0"
-                            role="button"
-                            data-course="{{ entry.course_name or 'TBA' }}"
-                            data-professor="{{ entry.professor_name }}"
-                            data-room="{{ entry.room_name or 'TBA' }}"
-                            data-timeslot="{{ entry.time_range }}"
-                            data-session="{{ entry.session_type or 'TBA' }}"
-                            data-section="{{ item.section.section_name }}"
-                            data-semester="{{ item.section.semester or 'N/A' }}"
-                            data-major="{{ item.section.major or 'N/A' }}"
-                            title="Click to view full details">
-                            <td>
-                                <strong>{{ entry.course_name or 'TBA' }}</strong>
-                                <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
-                            </td>
-                            <td>{{ entry.professor_name }}</td>
-                            <td>{{ entry.room_name or 'TBA' }}</td>
-                            <td><span class="badge-custom badge-primary">{{ entry.time_range }}</span></td>
-                            <td>
-                                <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
-                                    {{ entry.session_type or 'TBA' }}
-                                </span>
-                            </td>
-                            {% if user_role != 'Viewer' %}
-                            <td class="text-end align-middle">
-                                <button type="button" class="btn btn-outline-secondary btn-sm stop-prop edit-entry-btn"
-                                        data-entry-id="{{ entry.schedule_id }}"
-                                        data-course="{{ entry.course_name or 'TBA' }}"
-                                        data-professor="{{ entry.professor_name or '' }}"
-                                        data-room="{{ entry.room_name or '' }}"
-                                        data-timeslot="{{ entry.time_range or '' }}"
-                                        data-session="{{ entry.session_type or '' }}"
-                                        title="Edit entry">
-                                    <i class="bx bx-edit"></i> Edit
-                                </button>
-                                <a href="/delete_schedule/{{ entry.schedule_id }}?section_name={{ item.section.section }}&semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-danger btn-sm stop-prop" data-confirm="Delete this schedule entry?" title="Delete entry">
-                                    <i class="bx bx-trash"></i> Delete
-                                </a>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr>
-                            <td colspan="6">
-                                <div class="empty-state">
-                                    <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
-                                    <div class="empty-state__text">No schedule entries found</div>
-                                </div>
-                            </td>
-                        </tr>
-                    {% endif %}
-                </tbody>
-            </table>
+{% if is_preview %}
+<div class="alert alert-warning d-flex align-items-center justify-content-between mb-4 border-start border-4 border-warning shadow-sm" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="bx bx-info-circle fs-3 me-3 text-warning"></i>
+        <div>
+            <strong class="d-block">Preview Mode Active</strong>
+            <small class="text-muted">Viewing schedule draft from active generation preview. Changes made update this view in real-time.</small>
         </div>
     </div>
-    {% endfor %}
-{% else %}
-<div class="card-custom">
-    <div class="empty-state">
-        <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
-        <div class="empty-state__text">No schedule entries found for this section</div>
-        <a href="/schedules" class="btn btn-primary mt-3">
-            <i class="bx bx-arrow-back"></i> Back to Schedules
-        </a>
+    <a href="/schedule/{{ section.section_name or section.section }}?semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-outline-dark">
+        <i class="bx bx-check-circle me-1"></i>View Confirmed Schedule
+    </a>
+</div>
+{% elif has_preview %}
+<div class="alert alert-info d-flex align-items-center justify-content-between mb-4 border-start border-4 border-info shadow-sm" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="bx bx-calendar-star fs-3 me-3 text-info"></i>
+        <div>
+            <strong class="d-block">Schedule Preview Available</strong>
+            <small class="text-muted">A newly generated schedule preview is active in this session.</small>
+        </div>
     </div>
+    <a href="/schedule/{{ section.section_name or section.section }}?mode=preview&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-info text-white">
+        <i class="bx bx-show me-1"></i>View in Preview Mode
+    </a>
 </div>
 {% endif %}
 
-<!-- Detail Modal -->
+<!-- Section Meta Banner -->
+<div class="card-custom mb-4 p-3">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <div class="stat-card__icon stat-card__icon--indigo" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px;">
+                <i class="bx bx-group fs-4"></i>
+            </div>
+            <div>
+                <h4 class="fw-bold mb-0 text-dark">Section {{ section.section_name or section.section }}</h4>
+                <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                    {% if section.year_level %}
+                    <span class="badge-custom badge-primary">Year {{ section.year_level }}</span>
+                    {% endif %}
+                    {% if section.semester %}
+                    <span class="badge-custom badge-success">{{ section.semester }}</span>
+                    {% endif %}
+                    {% if section.major %}
+                    <span class="badge-custom badge-warning">{{ section.major }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <div class="text-end">
+                <span class="text-muted small d-block">Weekly Scheduled Classes</span>
+                <strong class="text-dark fs-5">{{ entries | length }} classes</strong>
+            </div>
+            <div class="text-end ps-3 border-start">
+                <span class="text-muted small d-block">Weekly Occupied Time</span>
+                <strong class="text-primary fs-5">{{ availability.metrics.total_occupied_hours_display }} hrs</strong>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card-custom mb-4 p-3">
+    <!-- Top Info Bar & Legend Row -->
+    <div class="calendar-info-bar">
+        <div class="calendar-info-text">
+            <i class="bx bx-info-circle me-2 text-primary fs-5"></i>
+            <span>Click on any class card to inspect details or edit entry. Free periods are marked in green.</span>
+        </div>
+        <div class="calendar-legend-container">
+            <span class="calendar-legend-item">
+                <span class="calendar-legend-circle calendar-legend-circle--blue"></span>
+                Scheduled Class (Blue)
+            </span>
+            <span class="calendar-legend-item">
+                <span class="calendar-legend-circle calendar-legend-circle--green-dotted"></span>
+                Available Free (Green)
+            </span>
+            <span class="calendar-legend-item">
+                <span class="calendar-legend-circle calendar-legend-circle--grey-dotted"></span>
+                Lunch Break (Grey)
+            </span>
+        </div>
+    </div>
+
+    <!-- Weekly Timetable Grid (Default & Sole Primary View) -->
+    <div class="true-calendar-wrapper">
+        <div class="calendar-scroll-container">
+            <div class="calendar-grid-container" style="--hour-height: 68px; --total-hours: {{ availability.total_window_hours }}; --top-pad: 22px; --bottom-pad: 22px;">
+                <!-- Calendar Header Row -->
+                <div class="calendar-header-row">
+                    <div class="calendar-time-gutter-header">
+                        <i class="bx bx-time me-1"></i>Time
+                    </div>
+                    <div class="calendar-days-header-grid" style="grid-template-columns: repeat({{ availability.operating_days | length }}, minmax(140px, 1fr));">
+                        {% for day in availability.operating_days %}
+                        <div class="calendar-day-header text-center">
+                            <div class="fw-bold text-dark">{{ day }}</div>
+                            <span class="badge-custom {{ availability.day_status_map[day].badge_class }}" style="font-size: 0.68rem; padding: 2px 6px;">
+                                {{ availability.day_status_map[day].label }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Calendar Body Row -->
+                <div class="calendar-body-row">
+                    <!-- Left-hand Time Column with Single Hour Markers -->
+                    <div class="calendar-time-axis" style="height: calc(var(--top-pad) + var(--total-hours) * var(--hour-height) + var(--bottom-pad));">
+                        {% for marker in availability.time_markers %}
+                        <div class="calendar-hour-marker {% if marker.is_last %}calendar-hour-marker-last{% endif %}"
+                             style="top: calc(var(--top-pad) + {{ marker.offset_hours }} * var(--hour-height));">
+                            <span class="calendar-hour-label">{{ marker.label }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Days Grid with Horizontal Lines and Day Tracks -->
+                    <div class="calendar-days-grid" style="grid-template-columns: repeat({{ availability.operating_days | length }}, minmax(140px, 1fr)); height: calc(var(--top-pad) + var(--total-hours) * var(--hour-height) + var(--bottom-pad));">
+                        <!-- Background Horizontal Grid Lines -->
+                        <div class="calendar-horizontal-lines">
+                            {% for marker in availability.time_markers %}
+                            <div class="calendar-grid-line" style="top: calc(var(--top-pad) + {{ marker.offset_hours }} * var(--hour-height));"></div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Day Column Tracks with Contiguous Event Blocks -->
+                        {% for day in availability.operating_days %}
+                        <div class="calendar-day-track" data-day="{{ day }}" style="height: calc(var(--top-pad) + var(--total-hours) * var(--hour-height) + var(--bottom-pad));">
+                            {% for block in availability.day_calendar_blocks[day] %}
+                                {% if block.type == 'occupied' %}
+                                <!-- Single contiguous Subject/Class Card (Solid light-blue background, rounded corners, no solid accent borders) -->
+                                <div class="calendar-event-block calendar-block-occupied schedule-row cursor-pointer shadow-sm"
+                                     tabindex="0"
+                                     role="button"
+                                     style="top: calc(var(--top-pad) + {{ block.top_offset_minutes }} / 60 * var(--hour-height) + 2px); height: calc({{ block.duration_minutes }} / 60 * var(--hour-height) - 4px);"
+                                     data-entry-id="{{ block.id }}"
+                                     data-course="{{ block.course_name }}"
+                                     data-professor="{{ block.professor }}"
+                                     data-section="{{ block.section or section.section_name or section.section }}"
+                                     data-room="{{ block.room_name or 'TBA' }}"
+                                     data-room-id="{{ block.room_id or '' }}"
+                                     data-prof-course-id="{{ block.prof_course_id or '' }}"
+                                     data-timeslot="{{ day ~ ' | ' ~ block.time_range }}"
+                                     data-day="{{ day }}"
+                                     data-time="{{ block.time_range }}"
+                                     data-session="{{ block.session_type }}"
+                                     data-semester="{{ block.semester or section.semester or '' }}"
+                                     data-major="{{ block.major or section.major or '' }}"
+                                     data-year="Year {{ block.year_level or section.year_level or '' }}"
+                                     title="Click on class card to inspect details or edit entry">
+                                    <div class="calendar-card-body p-2 d-flex flex-column justify-content-between h-100">
+                                        <div>
+                                            <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+                                                <strong class="text-truncate d-block fw-bold text-dark" style="font-size: 0.8rem; max-width: 140px;" title="{{ block.course_name }}">{{ block.course_name }}</strong>
+                                                <span class="calendar-pill-badge calendar-pill-badge--type" style="font-size: 0.65rem; padding: 1px 6px; flex-shrink: 0;">
+                                                    {{ block.session_type }}
+                                                </span>
+                                            </div>
+                                            <div class="d-flex align-items-center justify-content-between text-muted small" style="font-size: 0.72rem;">
+                                                <span class="fw-semibold text-dark font-monospace">{{ block.time_range }}</span>
+                                                {% if block.room_name and block.room_name != 'Room' and block.room_name != 'TBA' %}
+                                                <span class="badge bg-light text-secondary border" style="font-size: 0.66rem;"><i class="bx bx-building me-1"></i>{{ block.room_name }}</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% if block.professor and block.professor != 'TBA' %}
+                                        <div class="text-muted small text-truncate mt-auto pt-1 d-flex align-items-center gap-1" style="font-size: 0.7rem;">
+                                            <i class="bx bx-user text-primary"></i><span class="text-truncate">{{ block.professor }}</span>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% elif block.type == 'lunch' %}
+                                <!-- Single contiguous Lunch Break block (Grey with dotted border) -->
+                                <div class="calendar-event-block calendar-block-lunch"
+                                     style="top: calc(var(--top-pad) + {{ block.top_offset_minutes }} / 60 * var(--hour-height) + 2px); height: calc({{ block.duration_minutes }} / 60 * var(--hour-height) - 4px);"
+                                     title="Lunch Break ({{ block.time_range }}) — Standardized Block">
+                                    <div class="calendar-card-body p-2 d-flex flex-column align-items-center justify-content-center text-center h-100">
+                                        <span class="calendar-pill-badge calendar-pill-badge--lunch mb-1">
+                                            <i class="bx bx-coffee me-1"></i>Lunch Break
+                                        </span>
+                                        <span class="text-muted font-monospace" style="font-size: 0.68rem;">
+                                            {{ block.time_range }}
+                                        </span>
+                                    </div>
+                                </div>
+                                {% elif block.type == 'available' %}
+                                <!-- Single contiguous Available Free Time block (Green with dotted border) -->
+                                <div class="calendar-event-block calendar-block-available"
+                                     style="top: calc(var(--top-pad) + {{ block.top_offset_minutes }} / 60 * var(--hour-height) + 2px); height: calc({{ block.duration_minutes }} / 60 * var(--hour-height) - 4px);"
+                                     title="Section is free during {{ block.time_range }} ({{ block.duration_text }})">
+                                    <div class="calendar-card-body p-2 d-flex flex-column align-items-center justify-content-center text-center h-100">
+                                        <span class="calendar-pill-badge calendar-pill-badge--available mb-1">
+                                            <i class="bx bx-check-circle me-1"></i>Available
+                                        </span>
+                                        <span class="text-success-emphasis font-monospace fw-semibold" style="font-size: 0.72rem;">
+                                            {{ block.duration_text }} free
+                                        </span>
+                                        <span class="text-muted font-monospace" style="font-size: 0.66rem;">
+                                            {{ block.time_range }}
+                                        </span>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Class Details Modal -->
 <div class="modal fade" id="scheduleDetailModal" tabindex="-1" aria-labelledby="scheduleDetailModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -152,10 +273,18 @@
                     </div>
 
                     <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--amber fs-4"><i class="bx bx-calendar"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Day</span>
+                            <strong class="text-dark fs-6" id="modalDay">Day</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
                         <div class="stat-card__icon stat-card__icon--amber fs-4"><i class="bx bx-time-five"></i></div>
                         <div>
-                            <span class="text-muted small d-block">Schedule / Timeslot</span>
-                            <strong class="text-dark fs-6" id="modalTimeslot">Timeslot</strong>
+                            <span class="text-muted small d-block">Time</span>
+                            <strong class="text-dark fs-6 font-monospace" id="modalTime">Time</strong>
                         </div>
                     </div>
 
@@ -168,12 +297,21 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            <div class="modal-footer d-flex justify-content-between">
+                {% if user_role != 'Viewer' %}
+                <button type="button" class="btn btn-primary btn-sm" id="modalEditBtn">
+                    <i class="bx bx-edit me-1"></i> Edit Entry
+                </button>
+                {% else %}
+                <div></div>
+                {% endif %}
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Edit Entry Modal (For Schedulers / Admin) -->
 <div class="modal fade" id="editEntryModal" tabindex="-1" aria-labelledby="editEntryModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -187,20 +325,26 @@
                 <form id="edit-entry-form">
                     <input type="hidden" id="edit-entry-id">
                     <div class="mb-3">
-                        <label class="form-label" for="edit-entry-course">Course</label>
-                        <input type="text" class="form-control" id="edit-entry-course">
+                        <label class="form-label" for="edit-entry-prof-course">Professor & Course</label>
+                        <select class="form-select" id="edit-entry-prof-course">
+                            <option value="">Select Professor - Course</option>
+                            {% for pc in all_prof_courses %}
+                            <option value="{{ pc.prof_course_id }}" data-prof-id="{{ pc.prof_id }}" data-course-id="{{ pc.course_id }}">{{ pc.label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="edit-entry-professor">Professor</label>
-                        <input type="text" class="form-control" id="edit-entry-professor">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="edit-entry-room">Room</label>
-                        <input type="text" class="form-control" id="edit-entry-room">
+                        <label class="form-label" for="edit-entry-room-select">Room</label>
+                        <select class="form-select" id="edit-entry-room-select">
+                            <option value="">TBA / No Room</option>
+                            {% for r in rooms %}
+                            <option value="{{ r.room_id }}">{{ r.room_name }} ({{ r.room_type or 'General' }})</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="edit-entry-timeslot">Timeslot</label>
-                        <input type="text" class="form-control" id="edit-entry-timeslot">
+                        <input type="text" class="form-control" id="edit-entry-timeslot" placeholder="e.g. Monday | 08:00 AM - 09:00 AM">
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="edit-entry-session">Session Type</label>
@@ -229,12 +373,12 @@ $(function(){
     var scheduleDetailModal = new bootstrap.Modal(document.getElementById('scheduleDetailModal'));
     var editEntryModal = new bootstrap.Modal(document.getElementById('editEntryModal'));
     var editEntryId = document.getElementById('edit-entry-id');
-    var editEntryCourse = document.getElementById('edit-entry-course');
-    var editEntryProfessor = document.getElementById('edit-entry-professor');
-    var editEntryRoom = document.getElementById('edit-entry-room');
+    var editEntryProfCourse = document.getElementById('edit-entry-prof-course');
+    var editEntryRoomSelect = document.getElementById('edit-entry-room-select');
     var editEntryTimeslot = document.getElementById('edit-entry-timeslot');
     var editEntrySession = document.getElementById('edit-entry-session');
     var saveEntryBtn = document.getElementById('save-entry-btn');
+    var currentEntryData = {};
 
     function showToast(message, type){
         if (typeof window.showToast === 'function') {
@@ -248,12 +392,22 @@ $(function(){
             return;
         }
         var $t = $(this);
-        $('#modalCourseName').text($t.data('course'));
-        $('#modalMeta').text('Section ' + $t.data('section') + ' | ' + $t.data('semester') + ($t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : ''));
-        $('#modalProfessor').text($t.data('professor'));
-        $('#modalRoom').text($t.data('room'));
-        $('#modalTimeslot').text($t.data('timeslot'));
-        $('#modalSession').text($t.data('session')).attr('class', 'badge-custom ' + ($t.data('session') === 'Laboratory' ? 'badge-warning' : 'badge-success'));
+        currentEntryData = {
+            id: $t.data('entry-id') || '',
+            profCourseId: $t.data('prof-course-id') || '',
+            roomId: $t.data('room-id') || '',
+            timeslot: $t.data('timeslot') || ($t.data('day') + ' | ' + $t.data('time')),
+            session: $t.data('session') || 'Lecture'
+        };
+
+        $('#modalCourseName').text($t.data('course') || 'TBA');
+        $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
+        $('#modalProfessor').text($t.data('professor') || 'TBA');
+        $('#modalRoom').text($t.data('room') || 'TBA');
+        $('#modalDay').text($t.data('day') || 'TBA');
+        $('#modalTime').text($t.data('time') || 'TBA');
+        var sess = $t.data('session') || 'Lecture';
+        $('#modalSession').text(sess).attr('class', 'badge-custom ' + (sess === 'Laboratory' ? 'badge-warning' : 'badge-success'));
         scheduleDetailModal.show();
     });
 
@@ -269,16 +423,16 @@ $(function(){
         e.stopPropagation();
     });
 
-    $('.edit-entry-btn').on('click', function(e){
-        e.stopPropagation();
-        e.preventDefault();
-        editEntryId.value = $(this).data('entry-id') || '';
-        editEntryCourse.value = $(this).data('course') || '';
-        editEntryProfessor.value = $(this).data('professor') || '';
-        editEntryRoom.value = $(this).data('room') || '';
-        editEntryTimeslot.value = $(this).data('timeslot') || '';
-        editEntrySession.value = $(this).data('session') || 'Lecture';
-        editEntryModal.show();
+    $('#modalEditBtn').on('click', function(){
+        scheduleDetailModal.hide();
+        editEntryId.value = currentEntryData.id || '';
+        editEntryProfCourse.value = currentEntryData.profCourseId ? String(currentEntryData.profCourseId) : '';
+        editEntryRoomSelect.value = currentEntryData.roomId ? String(currentEntryData.roomId) : '';
+        editEntryTimeslot.value = currentEntryData.timeslot || '';
+        editEntrySession.value = currentEntryData.session || 'Lecture';
+        setTimeout(function(){
+            editEntryModal.show();
+        }, 350);
     });
 
     if (saveEntryBtn) {
@@ -286,16 +440,17 @@ $(function(){
             saveEntryBtn.disabled = true;
             saveEntryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
+            var payload = {
+                prof_course_id: editEntryProfCourse.value ? parseInt(editEntryProfCourse.value, 10) : null,
+                room_id: editEntryRoomSelect.value ? parseInt(editEntryRoomSelect.value, 10) : null,
+                timeslot: editEntryTimeslot.value,
+                session_type: editEntrySession.value
+            };
+
             fetch('/edit_schedule_entry/' + encodeURIComponent(editEntryId.value), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    course_name: editEntryCourse.value,
-                    professor_name: editEntryProfessor.value,
-                    room_name: editEntryRoom.value,
-                    timeslot: editEntryTimeslot.value,
-                    session_type: editEntrySession.value
-                })
+                body: JSON.stringify(payload)
             })
             .then(function(response){
                 if (!response.ok) {

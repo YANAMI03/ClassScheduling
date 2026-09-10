@@ -433,29 +433,28 @@
                                                 data-course="{{ entry.course_name or 'TBA' }}"
                                                 data-section="{{ entry.section or '' }}"
                                                 data-professor="{{ entry.professor_name }}"
+                                                data-prof-id="{{ entry.prof_id or '' }}"
                                                 data-room="{{ entry.room_name or 'TBA' }}"
                                                 data-timeslot="{{ entry.time_range }}"
                                                 data-session="{{ entry.session_type or 'TBA' }}"
                                                 title="Click to view full details">
                                                 <td>
-                                                    <strong>{{ entry.course_name or 'TBA' }}</strong>
+                                                    <strong class="entry-course-name">{{ entry.course_name or 'TBA' }}</strong>
                                                     <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
                                                 </td>
-                                                <td>{{ entry.professor_name }}</td>
-                                                <td>{{ entry.room_name or 'TBA' }}</td>
-                                                <td><span class="badge-custom badge-primary">{{ entry.time_range }}</span></td>
+                                                <td class="entry-prof-name">{{ entry.professor_name }}</td>
+                                                <td class="entry-room-name">{{ entry.room_name or 'TBA' }}</td>
+                                                <td><span class="badge-custom badge-primary entry-time-range">{{ entry.time_range }}</span></td>
                                                 <td>
-                                                    <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
+                                                    <span class="badge-custom entry-session-type {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
                                                         {{ entry.session_type or 'TBA' }}
                                                     </span>
                                                 </td>
                                                 <td class="text-end align-middle">
                                                     <button type="button" class="btn btn-outline-secondary btn-sm edit-preview-entry-btn" 
                                                         data-entry-id="{{ entry.id }}"
-                                                        data-course-id="{{ entry.course_id or '' }}"
-                                                        data-course="{{ entry.course_name or 'TBA' }}"
+                                                        data-prof-course-id="{{ entry.prof_course_id or '' }}"
                                                         data-section="{{ entry.section or '' }}"
-                                                        data-prof-id="{{ entry.prof_id or '' }}"
                                                         data-room-id="{{ entry.room_id or '' }}"
                                                         data-day="{{ entry.day or '' }}"
                                                         data-start="{{ entry.start or '' }}"
@@ -552,6 +551,12 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="mt-3 pt-3 border-top" id="modalProfWorkloadSection" style="display: none;">
+                    <a id="modalProfScheduleLink" href="#" class="btn btn-sm btn-outline-primary w-100" target="_blank">
+                        <i class="bx bx-time-five me-1"></i>View Professor Weekly Workload
+                    </a>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
@@ -573,11 +578,11 @@
                 <form id="edit-preview-entry-form">
                     <input type="hidden" id="edit-preview-entry-id" name="id">
                     <div class="mb-3">
-                        <label class="form-label" for="edit-preview-course">Course</label>
-                        <select class="form-select" id="edit-preview-course" name="course_id">
-                            <option value="">Select Course</option>
-                            {% for course in courses %}
-                            <option value="{{ course.course_id }}">{{ course.course_name }}</option>
+                        <label class="form-label" for="edit-preview-prof-course">Professor & Course</label>
+                        <select class="form-select" id="edit-preview-prof-course" name="prof_course_id">
+                            <option value="">Select Professor - Course</option>
+                            {% for pc in all_prof_courses %}
+                            <option value="{{ pc.prof_course_id }}" data-prof-id="{{ pc.prof_id }}" data-course-id="{{ pc.course_id }}">{{ pc.label }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -585,12 +590,6 @@
                         <label class="form-label" for="edit-preview-section">Section</label>
                         <input type="text" class="form-control" id="edit-preview-section" name="section"
                             placeholder="e.g. 1A">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="edit-preview-professor">Professor</label>
-                        <select class="form-select" id="edit-preview-professor" name="prof_id">
-                            <option value="">TBA</option>
-                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="edit-preview-room">Room</label>
@@ -1094,6 +1093,15 @@
             $('#modalRoom').text($t.data('room'));
             $('#modalTimeslot').text($t.data('timeslot'));
             $('#modalSession').text($t.data('session'));
+
+            var profId = $t.data('prof-id');
+            if (profId && String(profId).trim() !== '' && $t.data('professor') !== 'TBA') {
+                $('#modalProfScheduleLink').attr('href', '/professor_schedule/' + encodeURIComponent(profId) + '?mode=preview');
+                $('#modalProfWorkloadSection').show();
+            } else {
+                $('#modalProfWorkloadSection').hide();
+            }
+
             scheduleDetailModal.show();
         });
 
@@ -1103,92 +1111,117 @@
 
         var editPreviewEntryModal = new bootstrap.Modal(document.getElementById('editPreviewEntryModal'));
         var editEntryId = document.getElementById('edit-preview-entry-id');
-        var editProfessor = document.getElementById('edit-preview-professor');
+        var editProfCourse = document.getElementById('edit-preview-prof-course');
+        var editSection = document.getElementById('edit-preview-section');
         var editRoom = document.getElementById('edit-preview-room');
         var editDay = document.getElementById('edit-preview-day');
         var editStart = document.getElementById('edit-preview-start');
         var editEnd = document.getElementById('edit-preview-end');
         var savePreviewEntryBtn = document.getElementById('save-preview-entry-btn');
 
-        var profCourseAssignments = {{ prof_course_assignments| tojson
-    }};
-    var editCourse = document.getElementById('edit-preview-course');
-    var editSection = document.getElementById('edit-preview-section');
-
-    function populateProfessorOptions(courseId, selectedProfId) {
-        var html = '<option value="">TBA</option>';
-        var selected = selectedProfId || '';
-        if (courseId && profCourseAssignments[courseId]) {
-            profCourseAssignments[courseId].forEach(function (prof) {
-                html += '<option value="' + prof.id + '">' + prof.name + '</option>';
+        function clearEditValidation() {
+            [editProfCourse, editSection, editRoom, editDay, editStart, editEnd].forEach(function (el) {
+                if (el) el.classList.remove('is-invalid');
             });
         }
-        editProfessor.innerHTML = html;
-        if (selected && editProfessor.querySelector('option[value="' + selected + '"]')) {
-            editProfessor.value = selected;
-        } else {
-            editProfessor.value = '';
-        }
-    }
 
-    function clearEditValidation() {
-        [editCourse, editSection, editProfessor, editRoom, editDay, editStart, editEnd].forEach(function (el) {
-            el.classList.remove('is-invalid');
+        $('.edit-preview-entry-btn').on('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var $btn = $(this);
+            editEntryId.value = $btn.data('entry-id') || $btn.attr('data-entry-id') || '';
+            var pcid = $btn.data('prof-course-id') || $btn.attr('data-prof-course-id') || '';
+            editProfCourse.value = pcid ? String(pcid) : '';
+            editSection.value = $btn.data('section') || $btn.attr('data-section') || '';
+            editRoom.value = $btn.data('room-id') || $btn.attr('data-room-id') || '';
+            editDay.value = $btn.data('day') || $btn.attr('data-day') || 'Monday';
+            editStart.value = $btn.data('start') || $btn.attr('data-start') || '';
+            editEnd.value = $btn.data('end') || $btn.attr('data-end') || '';
+            clearEditValidation();
+            editPreviewEntryModal.show();
         });
-    }
 
-    editCourse.addEventListener('change', function () {
-        populateProfessorOptions(editCourse.value, editProfessor.value);
-    });
+        savePreviewEntryBtn.addEventListener('click', function () {
+            if (!editProfCourse.value) {
+                editProfCourse.classList.add('is-invalid');
+                showToast('Please select a Professor & Course.', 'warning');
+                return;
+            }
 
-    $('.edit-preview-entry-btn').on('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var $btn = $(this);
-        editEntryId.value = $btn.data('entry-id');
-        editCourse.value = $btn.data('course-id') || '';
-        editSection.value = $btn.data('section') || '';
-        editRoom.value = $btn.data('room-id') || '';
-        editDay.value = $btn.data('day') || 'Monday';
-        editStart.value = $btn.data('start') || '';
-        editEnd.value = $btn.data('end') || '';
-        populateProfessorOptions(editCourse.value, $btn.data('prof-id') || '');
-        clearEditValidation();
-        editPreviewEntryModal.show();
-    });
+            savePreviewEntryBtn.disabled = true;
+            savePreviewEntryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
-    savePreviewEntryBtn.addEventListener('click', function () {
-        var payload = {
-            id: editEntryId.value,
-            course_id: editCourse.value,
-            section: editSection.value,
-            prof_id: editProfessor.value,
-            room_id: editRoom.value,
-            day: editDay.value,
-            start: editStart.value,
-            end: editEnd.value
-        };
+            var payload = {
+                id: editEntryId.value,
+                prof_course_id: parseInt(editProfCourse.value, 10),
+                section: (editSection.value || '').trim(),
+                room_id: editRoom.value ? parseInt(editRoom.value, 10) : null,
+                day: editDay.value,
+                start: editStart.value,
+                end: editEnd.value
+            };
 
-        fetch('/edit_preview_entry', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
+            fetch('/edit_preview_entry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
             .then(function (response) {
-                return response.json();
+                return response.json().then(function (data) {
+                    if (!response.ok) {
+                        throw new Error(data.error || data.message || 'Unable to save changes.');
+                    }
+                    return data;
+                });
             })
             .then(function (data) {
-                if (data.success) {
-                    location.reload();
+                if (data.success && data.entry) {
+                    var entry = data.entry;
+                    var $btn = $('.edit-preview-entry-btn[data-entry-id="' + entry.id + '"]');
+                    var $row = $btn.closest('tr.schedule-row');
+
+                    // Update button data attributes for future modal edits
+                    $btn.attr('data-prof-course-id', entry.prof_course_id || '').data('prof-course-id', entry.prof_course_id || '');
+                    $btn.attr('data-section', entry.section || '').data('section', entry.section || '');
+                    $btn.attr('data-room-id', entry.room_id || '').data('room-id', entry.room_id || '');
+                    $btn.attr('data-day', entry.day || '').data('day', entry.day || '');
+                    $btn.attr('data-start', entry.start || '').data('start', entry.start || '');
+                    $btn.attr('data-end', entry.end || '').data('end', entry.end || '');
+
+                    // Update row data attributes for the detail popup modal
+                    $row.attr('data-course', entry.course_name || 'TBA').data('course', entry.course_name || 'TBA');
+                    $row.attr('data-professor', entry.professor_name || 'TBA').data('professor', entry.professor_name || 'TBA');
+                    $row.attr('data-prof-id', entry.prof_id || '').data('prof-id', entry.prof_id || '');
+                    $row.attr('data-room', entry.room_name || 'TBA').data('room', entry.room_name || 'TBA');
+                    $row.attr('data-timeslot', entry.time_range).data('timeslot', entry.time_range);
+                    $row.attr('data-section', entry.section || '').data('section', entry.section || '');
+                    $row.attr('data-session', entry.session_type || 'Lecture').data('session', entry.session_type || 'Lecture');
+
+                    // Update displayed table row text
+                    $row.find('.entry-course-name').text(entry.course_name || 'TBA');
+                    $row.find('.entry-prof-name').text(entry.professor_name || 'TBA');
+                    $row.find('.entry-room-name').text(entry.room_name || 'TBA');
+                    $row.find('.entry-time-range').text(entry.time_range);
+                    var $sessionBadge = $row.find('.entry-session-type');
+                    $sessionBadge.text(entry.session_type || 'Lecture');
+                    $sessionBadge.removeClass('badge-warning badge-success')
+                                 .addClass(entry.session_type === 'Laboratory' ? 'badge-warning' : 'badge-success');
+
+                    editPreviewEntryModal.hide();
+                    showToast(data.message || 'Schedule entry updated successfully.', 'success');
                 } else {
                     showToast(data.error || 'Unable to save changes.', 'error');
                 }
             })
-            .catch(function () {
-                showToast('Unable to save changes.', 'error');
+            .catch(function (err) {
+                showToast(err.message || 'Unable to save changes.', 'error');
+            })
+            .finally(function () {
+                savePreviewEntryBtn.disabled = false;
+                savePreviewEntryBtn.innerHTML = 'Save';
             });
+        });
     });
-});
 </script>
 {% endif %}
 {% endblock %}

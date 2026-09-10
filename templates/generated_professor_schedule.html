@@ -1,113 +1,294 @@
 {% extends "base.html" %}
-{% block title %}Professor Schedule Details - Scheduler{% endblock %}
+{% block title %}Professor {{ professor_name }} Schedule - Scheduler{% endblock %}
 {% block header_title %}<h5 class="header__title">Professor Schedule Details</h5>{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div>
-        <h1 class="page-title">Professor Schedule Details</h1>
-        <p class="page-subtitle">Click any schedule entry row to inspect full details</p>
+        <h1 class="page-title">Professor Schedule: {{ professor_name }}</h1>
+        <p class="page-subtitle">Interactive weekly timetable grid, free periods, and assigned workload details</p>
     </div>
     <a href="/professor_schedule" class="btn btn-outline-secondary">
         <i class="bx bx-arrow-back"></i> Back to Professor Schedule
     </a>
 </div>
 
-{% if entries %}
-<div class="card-custom mb-4">
-    <div class="card-custom__header d-flex justify-content-between align-items-center flex-wrap gap-2">
+{% if is_preview %}
+<div class="alert alert-warning d-flex align-items-center justify-content-between mb-4 border-start border-4 border-warning shadow-sm" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="bx bx-info-circle fs-3 me-3 text-warning"></i>
         <div>
-            <h5 class="card-custom__title mb-1">
-                Professor: {{ professor_name }}
-                {% if professor.department %}
-                <span class="badge-custom badge-primary ms-2">{{ professor.department }}</span>
-                {% endif %}
-            </h5>
-            {% if semester_filter %}
-            <span class="badge-custom badge-success">{{ semester_filter }}</span>
-            {% endif %}
-            {% if year_filter %}
-            <span class="badge-custom badge-primary">Year {{ year_filter }}</span>
-            {% endif %}
-            {% if major_filter %}
-            <span class="badge-custom badge-warning">{{ major_filter }}</span>
-            {% endif %}
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <span class="text-muted small fw-semibold"><i class="bx bx-sort-alt-2 me-1"></i>Sort by Day:</span>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Sort by Day">
-                <button type="button" class="btn btn-sm {% if sort_day == 'desc' %}btn-outline-primary{% else %}btn-primary{% endif %}" id="btnSortAsc" title="Sort Monday to Saturday">
-                    <i class="bx bx-sort-a-z me-1"></i> Monday → Saturday
-                </button>
-                <button type="button" class="btn btn-sm {% if sort_day == 'desc' %}btn-primary{% else %}btn-outline-primary{% endif %}" id="btnSortDesc" title="Sort Saturday to Monday">
-                    <i class="bx bx-sort-z-a me-1"></i> Saturday → Monday
-                </button>
-            </div>
+            <strong class="d-block">Preview Mode Active</strong>
+            <small class="text-muted">Viewing schedule draft from active generation preview. Changes made in preview update these hours in real-time.</small>
         </div>
     </div>
-    <div class="table-responsive">
-        <table class="table-custom">
-            <thead>
-                <tr>
-                    <th>Course</th>
-                    <th>Section</th>
-                    <th>Room</th>
-                    <th>Day</th>
-                    <th>Time</th>
-                    <th>Semester</th>
-                    <th>Year Level</th>
-                    <th>Type</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for entry in entries %}
-                <tr class="schedule-row"
-                    tabindex="0"
-                    role="button"
-                    data-course="{{ entry.course_name or 'TBA' }}"
-                    data-section="{{ entry.section or 'TBA' }}"
-                    data-room="{{ entry.room or 'TBA' }}"
-                    data-day="{{ entry.day or 'TBA' }}"
-                    data-time="{{ entry.start_time ~ ' - ' ~ entry.end_time if entry.start_time and entry.end_time else 'TBA' }}"
-                    data-session="{{ entry.session_type or 'TBA' }}"
-                    data-semester="{{ entry.semester or 'N/A' }}"
-                    data-major="{{ entry.major or 'N/A' }}"
-                    data-year="{{ 'Year ' ~ entry.year_level if entry.year_level else 'N/A' }}"
-                    title="Click to view full details">
-                    <td>
-                        <strong>{{ entry.course_name or 'TBA' }}</strong>
-                        <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
-                    </td>
-                    <td>{{ entry.section or 'TBA' }}</td>
-                    <td>{{ entry.room or 'TBA' }}</td>
-                    <td><strong>{{ entry.day or 'TBA' }}</strong></td>
-                    <td><span class="badge-custom badge-primary">{{ entry.start_time }} - {{ entry.end_time }}</span></td>
-                    <td>{{ entry.semester or 'TBA' }}</td>
-                    <td>Year {{ entry.year_level or 'TBA' }}</td>
-                    <td>
-                        <span class="badge-custom {% if entry.session_type == 'Laboratory' %}badge-warning{% else %}badge-success{% endif %}">
-                            {{ entry.session_type or 'TBA' }}
-                        </span>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <a href="/professor_schedule/{{ professor.prof_id }}?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-outline-dark">
+        <i class="bx bx-check-circle me-1"></i>View Confirmed Schedule
+    </a>
 </div>
-{% else %}
-<div class="card-custom">
-    <div class="empty-state">
-        <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
-        <div class="empty-state__text">No schedule entries found for this professor</div>
-        <a href="/professor_schedule" class="btn btn-primary mt-3">
-            <i class="bx bx-arrow-back"></i> Back to Professor Schedule
-        </a>
+{% elif has_preview %}
+<div class="alert alert-info d-flex align-items-center justify-content-between mb-4 border-start border-4 border-info shadow-sm" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="bx bx-calendar-star fs-3 me-3 text-info"></i>
+        <div>
+            <strong class="d-block">Schedule Preview Available</strong>
+            <small class="text-muted">A newly generated schedule preview is active in this session.</small>
+        </div>
     </div>
+    <a href="/professor_schedule/{{ professor.prof_id }}?mode=preview&year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-info text-white">
+        <i class="bx bx-show me-1"></i>View in Preview Mode
+    </a>
 </div>
 {% endif %}
 
-<!-- Detail Modal -->
+<!-- Weekly Workload Dashboard -->
+<div class="row g-3 mb-4">
+    <!-- Card 1: Total Scheduled Hours -->
+    <div class="col-md-4">
+        <div class="card-custom h-100 p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Scheduled Workload</span>
+                <div class="stat-card__icon stat-card__icon--indigo" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                    <i class="bx bx-time-five fs-5"></i>
+                </div>
+            </div>
+            <h3 class="fw-bold mb-1 text-dark" id="profTotalHours">
+                {{ workload.total_scheduled_hours_display }} <span class="fs-6 text-muted fw-normal">hrs</span>
+            </h3>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+                <span class="badge-custom badge-primary" id="profAssignedText">
+                    <i class="bx bx-calendar-check me-1"></i>{{ workload.assigned_hours_text }}
+                </span>
+                <small class="text-muted">{{ workload.valid_classes_count }} class{{ 'es' if workload.valid_classes_count != 1 else '' }}</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Remaining Available Hours -->
+    <div class="col-md-4">
+        <div class="card-custom h-100 p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Remaining Availability</span>
+                <div class="stat-card__icon {% if workload.is_overloaded %}stat-card__icon--amber bg-danger text-white{% else %}stat-card__icon--emerald{% endif %}" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                    <i class="bx {% if workload.is_overloaded %}bx-error-circle{% else %}bx-hourglass{% endif %} fs-5"></i>
+                </div>
+            </div>
+            <h3 class="fw-bold mb-1 {% if workload.is_overloaded %}text-danger{% elif workload.remaining_hours == 0 %}text-warning{% else %}text-success{% endif %}" id="profRemainingHours">
+                {{ workload.remaining_hours_display }} <span class="fs-6 text-muted fw-normal">hrs</span>
+            </h3>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+                {% if workload.is_overloaded %}
+                <span class="badge-custom badge-danger" id="profRemainingText">
+                    <i class="bx bx-error me-1"></i>Overloaded by {{ workload.overload_hours_display }} hrs
+                </span>
+                {% elif workload.remaining_hours == 0 %}
+                <span class="badge-custom badge-warning" id="profRemainingText">
+                    <i class="bx bx-check-double me-1"></i>At Max Capacity
+                </span>
+                {% else %}
+                <span class="badge-custom badge-success" id="profRemainingText">
+                    <i class="bx bx-check me-1"></i>{{ workload.remaining_hours_text }}
+                </span>
+                {% endif %}
+                <small class="text-muted">Available capacity</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Weekly Max Workload Cap -->
+    <div class="col-md-4">
+        <div class="card-custom h-100 p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Weekly Workload Cap</span>
+                <div class="stat-card__icon stat-card__icon--amber" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                    <i class="bx bx-briefcase-alt-2 fs-5"></i>
+                </div>
+            </div>
+            <h3 class="fw-bold mb-1 text-dark" id="profMaxHours">
+                {{ workload.max_hours_display }} <span class="fs-6 text-muted fw-normal">hrs / week</span>
+            </h3>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+                <span class="badge-custom {% if workload.is_overloaded %}badge-danger{% elif workload.workload_percentage >= 80 %}badge-warning{% else %}badge-primary{% endif %}">
+                    {{ workload.workload_percentage }}% utilized
+                </span>
+                <small class="text-muted">Configured limit</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Utilization Progress Bar -->
+<div class="card-custom mb-4 p-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-semibold small text-muted">
+            <i class="bx bx-chart me-1"></i>Weekly Workload Capacity
+        </span>
+        <span class="fw-bold small {% if workload.is_overloaded %}text-danger{% elif workload.workload_percentage >= 80 %}text-warning{% else %}text-success{% endif %}">
+            {{ workload.total_scheduled_hours_display }} of {{ workload.max_hours_display }} hrs assigned ({{ workload.workload_percentage }}%)
+        </span>
+    </div>
+    <div class="progress" style="height: 10px; border-radius: 6px; background-color: #e9ecef; overflow: hidden;">
+        <div class="progress-bar {% if workload.is_overloaded %}bg-danger{% elif workload.workload_percentage >= 80 %}bg-warning{% else %}bg-success{% endif %}"
+             role="progressbar"
+             style="width: {{ [workload.workload_percentage, 100]|min }}%; transition: width 0.6s ease;"
+             aria-valuenow="{{ workload.workload_percentage }}" aria-valuemin="0" aria-valuemax="100">
+        </div>
+    </div>
+</div>
+
+<div class="card-custom mb-4 p-3">
+    <!-- Top Info Bar & Legend Row -->
+    <div class="calendar-info-bar">
+        <div class="calendar-info-text">
+            <i class="bx bx-info-circle me-2 text-primary fs-5"></i>
+            <span>Click on any class card to inspect details or edit entry. Free periods are marked in green.</span>
+        </div>
+        <div class="calendar-legend-container">
+            <span class="calendar-legend-item">
+                <span class="calendar-legend-circle calendar-legend-circle--blue"></span>
+                Scheduled Class (Blue)
+            </span>
+            <span class="calendar-legend-item">
+                <span class="calendar-legend-circle calendar-legend-circle--green-dotted"></span>
+                Available Free (Green)
+            </span>
+            <span class="calendar-legend-item">
+                <span class="calendar-legend-circle calendar-legend-circle--grey-dotted"></span>
+                Lunch Break (Grey)
+            </span>
+        </div>
+    </div>
+
+    <!-- Weekly Timetable Grid (Default & Sole Primary View) -->
+    <div class="true-calendar-wrapper">
+        <div class="calendar-scroll-container">
+            <div class="calendar-grid-container" style="--hour-height: 68px; --total-hours: {{ availability.total_window_hours }}; --top-pad: 22px; --bottom-pad: 22px;">
+                <!-- Calendar Header Row -->
+                <div class="calendar-header-row">
+                    <div class="calendar-time-gutter-header">
+                        <i class="bx bx-time me-1"></i>Time
+                    </div>
+                    <div class="calendar-days-header-grid" style="grid-template-columns: repeat({{ availability.operating_days | length }}, minmax(140px, 1fr));">
+                        {% for day in availability.operating_days %}
+                        <div class="calendar-day-header text-center">
+                            <div class="fw-bold text-dark">{{ day }}</div>
+                            <span class="badge-custom {{ availability.day_status_map[day].badge_class }}" style="font-size: 0.68rem; padding: 2px 6px;">
+                                {{ availability.day_status_map[day].label }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Calendar Body Row -->
+                <div class="calendar-body-row">
+                    <!-- Left-hand Time Column with Single Hour Markers -->
+                    <div class="calendar-time-axis" style="height: calc(var(--top-pad) + var(--total-hours) * var(--hour-height) + var(--bottom-pad));">
+                        {% for marker in availability.time_markers %}
+                        <div class="calendar-hour-marker {% if marker.is_last %}calendar-hour-marker-last{% endif %}"
+                             style="top: calc(var(--top-pad) + {{ marker.offset_hours }} * var(--hour-height));">
+                            <span class="calendar-hour-label">{{ marker.label }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Days Grid with Horizontal Lines and Day Tracks -->
+                    <div class="calendar-days-grid" style="grid-template-columns: repeat({{ availability.operating_days | length }}, minmax(140px, 1fr)); height: calc(var(--top-pad) + var(--total-hours) * var(--hour-height) + var(--bottom-pad));">
+                        <!-- Background Horizontal Grid Lines -->
+                        <div class="calendar-horizontal-lines">
+                            {% for marker in availability.time_markers %}
+                            <div class="calendar-grid-line" style="top: calc(var(--top-pad) + {{ marker.offset_hours }} * var(--hour-height));"></div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Day Column Tracks with Contiguous Event Blocks -->
+                        {% for day in availability.operating_days %}
+                        <div class="calendar-day-track" data-day="{{ day }}" style="height: calc(var(--top-pad) + var(--total-hours) * var(--hour-height) + var(--bottom-pad));">
+                            {% for block in availability.day_calendar_blocks[day] %}
+                                {% if block.type == 'occupied' %}
+                                <!-- Single contiguous Subject/Class Card (Solid light-blue background, rounded corners, no solid accent borders) -->
+                                <div class="calendar-event-block calendar-block-occupied schedule-row cursor-pointer shadow-sm"
+                                     tabindex="0"
+                                     role="button"
+                                     style="top: calc(var(--top-pad) + {{ block.top_offset_minutes }} / 60 * var(--hour-height) + 2px); height: calc({{ block.duration_minutes }} / 60 * var(--hour-height) - 4px);"
+                                     data-course="{{ block.course_name }}"
+                                     data-professor="{{ professor_name }}"
+                                     data-section="{{ block.section }}"
+                                     data-room="{{ block.room_name or block.room or 'TBA' }}"
+                                     data-day="{{ day }}"
+                                     data-time="{{ block.time_range }}"
+                                     data-duration="{{ block.duration_text }}"
+                                     data-session="{{ block.session_type }}"
+                                     data-semester="{{ block.semester or semester_filter or '' }}"
+                                     data-major="{{ block.major or major_filter or '' }}"
+                                     data-year="Year {{ block.year_level or '' }}"
+                                     title="Click for full class details">
+                                    <div class="calendar-card-body p-2 d-flex flex-column justify-content-between h-100">
+                                        <div>
+                                            <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+                                                <strong class="text-truncate d-block fw-bold text-dark" style="font-size: 0.8rem; max-width: 140px;" title="{{ block.course_name }}">{{ block.course_name }}</strong>
+                                                <span class="calendar-pill-badge calendar-pill-badge--type" style="font-size: 0.65rem; padding: 1px 6px; flex-shrink: 0;">
+                                                    {{ block.session_type }}
+                                                </span>
+                                            </div>
+                                            <div class="d-flex align-items-center justify-content-between text-muted small" style="font-size: 0.72rem;">
+                                                <span class="fw-semibold text-dark font-monospace">{{ block.time_range }}</span>
+                                            </div>
+                                        </div>
+                                        <!-- Data Mapping for Professor Schedule: Display Subject Code, Class Type, Time Range, and Section Name/Room -->
+                                        <div class="d-flex align-items-center justify-content-between text-muted small text-truncate mt-auto pt-1 gap-1" style="font-size: 0.7rem;">
+                                            {% if block.section %}
+                                            <span class="text-truncate"><i class="bx bx-group me-1 text-primary"></i>{{ block.section }}</span>
+                                            {% endif %}
+                                            {% if block.room_name and block.room_name != 'Room' and block.room_name != 'TBA' %}
+                                            <span class="badge bg-light text-secondary border font-monospace" style="font-size: 0.66rem;"><i class="bx bx-building me-1"></i>{{ block.room_name }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif block.type == 'lunch' %}
+                                <!-- Single contiguous Lunch Break block (Grey with dotted border) -->
+                                <div class="calendar-event-block calendar-block-lunch"
+                                     style="top: calc(var(--top-pad) + {{ block.top_offset_minutes }} / 60 * var(--hour-height) + 2px); height: calc({{ block.duration_minutes }} / 60 * var(--hour-height) - 4px);"
+                                     title="Lunch Break ({{ block.time_range }}) — Standardized Block">
+                                    <div class="calendar-card-body p-2 d-flex flex-column align-items-center justify-content-center text-center h-100">
+                                        <span class="calendar-pill-badge calendar-pill-badge--lunch mb-1">
+                                            <i class="bx bx-coffee me-1"></i>Lunch Break
+                                        </span>
+                                        <span class="text-muted font-monospace" style="font-size: 0.68rem;">
+                                            {{ block.time_range }}
+                                        </span>
+                                    </div>
+                                </div>
+                                {% elif block.type == 'available' %}
+                                <!-- Single contiguous Available Free Time block (Green with dotted border) -->
+                                <div class="calendar-event-block calendar-block-available"
+                                     style="top: calc(var(--top-pad) + {{ block.top_offset_minutes }} / 60 * var(--hour-height) + 2px); height: calc({{ block.duration_minutes }} / 60 * var(--hour-height) - 4px);"
+                                     title="Professor is free during {{ block.time_range }} ({{ block.duration_text }})">
+                                    <div class="calendar-card-body p-2 d-flex flex-column align-items-center justify-content-center text-center h-100">
+                                        <span class="calendar-pill-badge calendar-pill-badge--available mb-1">
+                                            <i class="bx bx-check-circle me-1"></i>Available
+                                        </span>
+                                        <span class="text-success-emphasis font-monospace fw-semibold" style="font-size: 0.72rem;">
+                                            {{ block.duration_text }} free
+                                        </span>
+                                        <span class="text-muted font-monospace" style="font-size: 0.66rem;">
+                                            {{ block.time_range }}
+                                        </span>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Class Details Modal -->
 <div class="modal fade" id="scheduleDetailModal" tabindex="-1" aria-labelledby="scheduleDetailModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -152,7 +333,15 @@
                         <div class="stat-card__icon stat-card__icon--amber fs-4"><i class="bx bx-time-five"></i></div>
                         <div>
                             <span class="text-muted small d-block">Time</span>
-                            <strong class="text-dark fs-6" id="modalTime">Time</strong>
+                            <strong class="text-dark fs-6 font-monospace" id="modalTime">Time</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="stat-card__icon stat-card__icon--emerald fs-4"><i class="bx bx-hourglass"></i></div>
+                        <div>
+                            <span class="text-muted small d-block">Duration</span>
+                            <strong class="text-dark fs-6" id="modalDuration">Duration</strong>
                         </div>
                     </div>
 
@@ -180,24 +369,20 @@ $(function(){
 
     var scheduleDetailModal = new bootstrap.Modal(document.getElementById('scheduleDetailModal'));
 
-    function showToast(message, type){
-        if (typeof window.showToast === 'function') {
-            window.showToast(message, type);
-        }
-    }
-
     $('.schedule-row').on('click', function(e){
         if ($(e.target).closest('.stop-prop, button, a, input').length) {
             e.stopPropagation();
             return;
         }
         var $t = $(this);
-        $('#modalCourseName').text($t.data('course'));
-        $('#modalMeta').text('Section ' + $t.data('section') + ' | ' + $t.data('semester') + ($t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + $t.data('year'));
-        $('#modalRoom').text($t.data('room'));
-        $('#modalDay').text($t.data('day'));
-        $('#modalTime').text($t.data('time'));
-        $('#modalSession').text($t.data('session')).attr('class', 'badge-custom ' + ($t.data('session') === 'Laboratory' ? 'badge-warning' : 'badge-success'));
+        $('#modalCourseName').text($t.data('course') || 'TBA');
+        $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
+        $('#modalRoom').text($t.data('room') || 'TBA');
+        $('#modalDay').text($t.data('day') || 'TBA');
+        $('#modalTime').text($t.data('time') || 'TBA');
+        $('#modalDuration').text($t.data('duration') || 'N/A');
+        var sess = $t.data('session') || 'Lecture';
+        $('#modalSession').text(sess).attr('class', 'badge-custom ' + (sess === 'Laboratory' ? 'badge-warning' : 'badge-success'));
         scheduleDetailModal.show();
     });
 
@@ -211,51 +396,6 @@ $(function(){
 
     $(document).on('click', '.stop-prop', function(e){
         e.stopPropagation();
-    });
-
-    // --- Day Sorting Logic ---
-    const dayRankAsc = { 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7 };
-    const dayRankDesc = { 'Saturday': 1, 'Friday': 2, 'Thursday': 3, 'Wednesday': 4, 'Tuesday': 5, 'Monday': 6, 'Sunday': 7 };
-
-    function sortTableByDay(order) {
-        var tbody = $('table.table-custom tbody');
-        var rows = tbody.find('tr.schedule-row').get();
-        var rankMap = (order === 'desc') ? dayRankDesc : dayRankAsc;
-
-        rows.sort(function(a, b) {
-            var dayA = $(a).data('day') || '';
-            var dayB = $(b).data('day') || '';
-            var rankA = rankMap[dayA] || 99;
-            var rankB = rankMap[dayB] || 99;
-
-            if (rankA !== rankB) {
-                return rankA - rankB;
-            }
-
-            var timeA = $(a).data('time') || '';
-            var timeB = $(b).data('time') || '';
-            return timeA.localeCompare(timeB);
-        });
-
-        $.each(rows, function(index, row) {
-            tbody.append(row);
-        });
-
-        if (order === 'desc') {
-            $('#btnSortDesc').removeClass('btn-outline-primary').addClass('btn-primary');
-            $('#btnSortAsc').removeClass('btn-primary').addClass('btn-outline-primary');
-        } else {
-            $('#btnSortAsc').removeClass('btn-outline-primary').addClass('btn-primary');
-            $('#btnSortDesc').removeClass('btn-primary').addClass('btn-outline-primary');
-        }
-    }
-
-    $('#btnSortAsc').on('click', function() {
-        sortTableByDay('asc');
-    });
-
-    $('#btnSortDesc').on('click', function() {
-        sortTableByDay('desc');
     });
 });
 </script>
