@@ -106,8 +106,8 @@
                                     <small class="text-muted">Year {{ item.section.year_level }}</small>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
-                                    <a href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Full Schedule Details">
-                                        <i class="bx bx-show"></i> View Details
+                                    <a href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Section Timetable Schedule">
+                                        <i class="bx bx-calendar"></i> View Schedule
                                     </a>
                                     {% if user_role != 'Viewer' %}
                                     <button type="button" class="btn btn-outline-secondary btn-sm stop-prop edit-schedule-btn"
@@ -400,6 +400,7 @@ $(function(){
     if (saveScheduleBtn) {
         saveScheduleBtn.addEventListener('click', function(){
             var payload = {
+                section: (editSectionInput.value || '').trim(),
                 year_level: editYearInput.value,
                 semester: editSemesterInput.value,
                 major: editMajorInput.value

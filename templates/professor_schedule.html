@@ -72,8 +72,16 @@
                 <span class="badge-custom badge-primary ms-2">{{ professor.department }}</span>
                 {% endif %}
             </h5>
-            <div class="section-card__meta">
-                {{ professor.class_count }} class{{ 'es' if professor.class_count != 1 else '' }} assigned
+            <div class="section-card__meta d-flex align-items-center gap-3 flex-wrap">
+                <span><i class="bx bx-book-open me-1"></i>{{ professor.class_count }} class{{ 'es' if professor.class_count != 1 else '' }} assigned</span>
+                {% if professor.total_hours is defined and professor.max_hours is defined %}
+                <span><i class="bx bx-time-five me-1"></i><strong>{{ professor.total_hours }} hrs</strong> / {{ professor.max_hours }} hrs assigned</span>
+                {% if professor.is_overloaded %}
+                <span class="badge-custom badge-danger"><i class="bx bx-error-circle me-1"></i>Overloaded</span>
+                {% else %}
+                <span class="badge-custom badge-success"><i class="bx bx-check-circle me-1"></i>{{ professor.remaining_hours }} hrs remaining</span>
+                {% endif %}
+                {% endif %}
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
