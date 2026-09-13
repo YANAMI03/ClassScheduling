@@ -1190,7 +1190,7 @@
 
                     // Update row data attributes for the detail popup modal
                     $row.attr('data-course', entry.course_name || 'TBA').data('course', entry.course_name || 'TBA');
-                    $row.attr('data-professor', entry.professor_name || 'TBA').data('professor', entry.professor_name || 'TBA');
+                    $row.attr('data-professor', entry.professor_name || 'Professor A').data('professor', entry.professor_name || 'Professor A');
                     $row.attr('data-prof-id', entry.prof_id || '').data('prof-id', entry.prof_id || '');
                     $row.attr('data-room', entry.room_name || 'TBA').data('room', entry.room_name || 'TBA');
                     $row.attr('data-timeslot', entry.time_range).data('timeslot', entry.time_range);
@@ -1199,7 +1199,7 @@
 
                     // Update displayed table row text
                     $row.find('.entry-course-name').text(entry.course_name || 'TBA');
-                    $row.find('.entry-prof-name').text(entry.professor_name || 'TBA');
+                    $row.find('.entry-prof-name').text(entry.professor_name || 'Professor A');
                     $row.find('.entry-room-name').text(entry.room_name || 'TBA');
                     $row.find('.entry-time-range').text(entry.time_range);
                     var $sessionBadge = $row.find('.entry-session-type');

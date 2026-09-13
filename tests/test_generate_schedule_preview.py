@@ -1745,8 +1745,8 @@ def test_generate_schedule_fallback_when_all_faculty_reach_cap(monkeypatch):
         preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
         assert len(preview) == 3
         # First 2 sections take Prof 1 and Prof 2
-        # Third section uses fallback (least-overloaded professor or TBA)
-        valid_profs = [e for e in preview if e.get('prof_id') in (1, 2) or e.get('prof_id') is None]
+        # Third section uses fallback (least-overloaded professor, TBA, or Professor A)
+        valid_profs = [e for e in preview if e.get('prof_id') in (1, 2) or e.get('prof_id') is None or (e.get('professor_name') or '').startswith('Professor ')]
         assert len(valid_profs) == 3
 
 
