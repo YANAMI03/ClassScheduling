@@ -124,13 +124,22 @@
                 </div>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <label class="form-label">Program</label>
                 <input type="text" class="form-control" value="{{ session['program'] or 'Global / All Programs' }}"
                     readonly>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-4">
+                <label class="form-label" for="school-year-select">School Year</label>
+                <select class="form-select" name="school_year" id="school-year-select">
+                    {% for sy in school_years or ['2024-2025', '2025-2026', '2026-2027', '2027-2028'] %}
+                    <option value="{{ sy }}" {% if sy == selected_school_year or (not selected_school_year and sy == '2025-2026') %}selected{% endif %}>{{ sy }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-4">
                 <label class="form-label" for="semester-select">Semester</label>
                 <select class="form-select" name="semester" id="semester-select" required>
                     <option value="" selected>Select Semester</option>
@@ -302,25 +311,29 @@
     <div class="card-custom__header d-flex justify-content-between align-items-center">
         <h5 class="card-custom__title text-warning-emphasis d-flex align-items-center mb-0" style="color: #b45309;">
             <i class="bx bx-info-circle text-warning fs-4 me-2"></i>
-            <span>Schedule Already Exists</span>
+            <span>Active Schedule Already Exists</span>
         </h5>
         <span class="badge bg-warning-subtle text-warning-emphasis px-3 py-1 rounded-pill"
-            style="background-color: #fef3c7; color: #92400e;">Already Generated</span>
+            style="background-color: #fef3c7; color: #92400e;">Active Schedule</span>
     </div>
     <div class="card-body p-4">
         <p class="text-secondary mb-3" id="existing-schedule-msg">
-            A schedule for <strong id="existing-schedule-label">1st Semester</strong> already exists across year levels.
+            An active schedule already exists for this semester (<strong id="existing-schedule-label">1st Semester</strong>).
         </p>
         <div class="row g-3 mb-4 p-3 bg-light rounded border">
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <span class="text-muted small d-block">School Year</span>
+                <strong id="existing-schedule-sy" class="text-dark">2025-2026</strong>
+            </div>
+            <div class="col-md-3">
                 <span class="text-muted small d-block">Semester</span>
                 <strong id="existing-schedule-sem" class="text-dark">1st Semester</strong>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <span class="text-muted small d-block">Program</span>
                 <strong id="existing-schedule-prog" class="text-dark">BSIT</strong>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <span class="text-muted small d-block">Total Entries / Sections</span>
                 <strong id="existing-schedule-stats" class="text-dark">0 entries</strong>
             </div>
@@ -971,7 +984,7 @@
                 }
                 if (isExistingSchedulePresent) {
                     e.preventDefault();
-                    showToast('A schedule for this semester already exists.', 'warning');
+                    showToast('An active schedule already exists for this semester.', 'warning');
                     return;
                 }
 
@@ -1007,12 +1020,15 @@
         var existingCard = document.getElementById('existing-schedule-card');
         var existingLabel = document.getElementById('existing-schedule-label');
         var existingSem = document.getElementById('existing-schedule-sem');
+        var existingSy = document.getElementById('existing-schedule-sy');
         var existingProg = document.getElementById('existing-schedule-prog');
         var existingStats = document.getElementById('existing-schedule-stats');
         var existingViewBtn = document.getElementById('existing-schedule-view-btn');
+        var schoolYearSelect = document.getElementById('school-year-select');
 
         function checkExistingSchedule() {
             var sem = semesterSelect ? semesterSelect.value : '';
+            var sy = schoolYearSelect ? schoolYearSelect.value.trim() : '';
 
             if (!sem) {
                 isExistingSchedulePresent = false;
@@ -1021,7 +1037,7 @@
                 return;
             }
 
-            var url = '/check_schedule_exists?semester=' + encodeURIComponent(sem);
+            var url = '/check_schedule_exists?semester=' + encodeURIComponent(sem) + (sy ? '&school_year=' + encodeURIComponent(sy) : '');
 
             fetch(url)
                 .then(function (res) { return res.json(); })
@@ -1030,9 +1046,10 @@
                         isExistingSchedulePresent = true;
                         if (existingCard) existingCard.style.display = 'block';
 
-                        var desc = sem + ' (All Year Levels)';
+                        var desc = sem + (sy ? ' (' + sy + ')' : '');
                         if (existingLabel) existingLabel.textContent = desc;
                         if (existingSem) existingSem.textContent = sem;
+                        if (existingSy) existingSy.textContent = data.school_year || sy || 'N/A';
                         if (existingProg) existingProg.textContent = data.program || 'All Programs';
 
                         if (existingStats) {
@@ -1045,7 +1062,7 @@
 
                         if (submitBtn) {
                             submitBtn.disabled = true;
-                            submitBtn.title = 'A schedule for ' + desc + ' already exists.';
+                            submitBtn.title = 'An active schedule already exists for this semester.';
                         }
                     } else {
                         isExistingSchedulePresent = false;
@@ -1061,6 +1078,12 @@
                     if (existingCard) existingCard.style.display = 'none';
                     setSubmitState(true);
                 });
+        }
+
+        if (schoolYearSelect) {
+            schoolYearSelect.addEventListener('change', function () {
+                checkExistingSchedule();
+            });
         }
 
         if (semesterSelect && semesterSelect.value) {

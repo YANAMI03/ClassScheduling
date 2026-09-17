@@ -23,13 +23,15 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
-MIGRATION_FILE = ROOT_DIR / "migrations" / "20260910_replace_schedule_prof_course_fk.sql"
+DEFAULT_MIGRATION_FILE = ROOT_DIR / "migrations" / "20260916_remove_schedule_archive_add_status.sql"
+LEGACY_MIGRATION_FILE = ROOT_DIR / "migrations" / "20260910_replace_schedule_prof_course_fk.sql"
 PROJECT_REF = "maaeqnmziwhocziwgjpo"
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Apply SQL migration to Supabase PostgreSQL.")
     parser.add_argument("--db-password", "-p", help="PostgreSQL database password for user 'postgres'")
     parser.add_argument("--conn-str", "-c", help="Full PostgreSQL connection URI")
+    parser.add_argument("--file", "-f", help="Path to migration SQL file to apply", default=str(DEFAULT_MIGRATION_FILE))
     parser.add_argument("--check-only", action="store_true", help="Check database schema without applying")
     return parser.parse_args()
 
@@ -55,6 +57,7 @@ def get_connection_candidates(password=None, conn_str=None):
 
 def check_schema_via_postgrest():
     """Checks the live schema using Supabase PostgREST API."""
+    results = {}
     try:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL")
@@ -62,45 +65,64 @@ def check_schema_via_postgrest():
         if not url or not key:
             return None
         client = create_client(url, key)
-        res = client.table("schedule").select("prof_course_id").limit(1).execute()
-        return True
-    except Exception as e:
-        err_msg = str(e)
-        if "prof_course_id does not exist" in err_msg or "42703" in err_msg:
-            return False
-        # If permission or other error, return None
+
+        # Check schedule_archive table
+        try:
+            client.table("schedule_archive").select("archive_id").limit(1).execute()
+            results["schedule_archive_exists"] = True
+        except Exception as e:
+            if "relation \"public.schedule_archive\" does not exist" in str(e) or "42P01" in str(e):
+                results["schedule_archive_exists"] = False
+            else:
+                results["schedule_archive_exists"] = None
+
+        # Check schedule.archive column
+        try:
+            client.table("schedule").select("archive").limit(1).execute()
+            results["schedule_archive_column_exists"] = True
+        except Exception as e:
+            if "archive does not exist" in str(e) or "42703" in str(e):
+                results["schedule_archive_column_exists"] = False
+            else:
+                results["schedule_archive_column_exists"] = None
+
+        return results
+    except Exception:
         return None
 
 def main():
     args = parse_args()
+    migration_file = Path(args.file)
 
     print("=" * 70)
-    print(" Supabase Migration: Replace prof_id / course_id with prof_course_id")
+    print(" Supabase Migration: Remove schedule_archive & Add schedule.archive")
     print("=" * 70)
 
     # 1. Check current PostgREST status
-    print("\n[1/3] Checking current Supabase schedule table schema...")
-    has_column = check_schema_via_postgrest()
-    if has_column is True:
-        print("  -> Column 'schedule.prof_course_id' ALREADY EXISTS on Supabase!")
-        print("  -> Migration is already active on the live database.")
-        return 0
-    elif has_column is False:
-        print("  -> Verified: 'schedule.prof_course_id' does NOT yet exist on Supabase.")
-        print("  -> Schema change is needed.")
+    print("\n[1/3] Checking current Supabase schema...")
+    schema_status = check_schema_via_postgrest()
+    if schema_status:
+        arch_exists = schema_status.get("schedule_archive_exists")
+        archive_col_exists = schema_status.get("schedule_archive_column_exists")
+        print(f"  -> schedule_archive table exists: {arch_exists}")
+        print(f"  -> schedule.archive column exists: {archive_col_exists}")
+        if arch_exists is False and archive_col_exists is True:
+            print("  -> Migration is already active and schedule.archive is live!")
+            if args.check_only:
+                return 0
     else:
-        print("  -> Note: PostgREST check returned indeterminate status or table is empty.")
+        print("  -> Note: PostgREST check returned indeterminate status.")
 
     if args.check_only:
         return 0
 
     # 2. Check for migration SQL file
-    if not MIGRATION_FILE.exists():
-        print(f"\n[ERROR] Migration file not found: {MIGRATION_FILE}")
+    if not migration_file.exists():
+        print(f"\n[ERROR] Migration file not found: {migration_file}")
         return 1
 
-    sql_content = MIGRATION_FILE.read_text(encoding="utf-8")
-    print(f"\n[2/3] Migration script loaded: {MIGRATION_FILE.name} ({len(sql_content)} bytes)")
+    sql_content = migration_file.read_text(encoding="utf-8")
+    print(f"\n[2/3] Migration script loaded: {migration_file.name} ({len(sql_content)} bytes)")
 
     # 3. Connect and execute via psycopg2
     try:
@@ -117,8 +139,8 @@ def main():
         print("No database password or connection string was found.")
         print("You have two simple options to execute the migration:\n")
         print("OPTION 1: Supabase Dashboard SQL Editor (Recommended - 30 seconds)")
-        print("  1. Open: https://supabase.com/dashboard/project/maaeqnmziwhocziwgjpo/sql/new")
-        print(f"  2. Paste the contents of:\n     {MIGRATION_FILE}")
+        print(f"  1. Open: https://supabase.com/dashboard/project/{PROJECT_REF}/sql/new")
+        print(f"  2. Paste the contents of:\n     {migration_file}")
         print("  3. Click 'Run'.\n")
         print("OPTION 2: Run via CLI with your Supabase DB Password")
         print("  Run this command:")
@@ -175,9 +197,11 @@ def main():
 
     # Final check via PostgREST
     print("\n[VERIFICATION] Verifying schema via Supabase API...")
-    if check_schema_via_postgrest():
-        print("  -> SUCCESS: 'schedule.prof_course_id' is live and recognized by Supabase API!")
+    final_status = check_schema_via_postgrest()
+    if final_status and final_status.get("schedule_archive_exists") is False and final_status.get("schedule_archive_column_exists") is True:
+        print("  -> SUCCESS: schedule_archive table was removed and schedule.archive is active!")
     else:
+        print(f"  -> API Schema Status: {final_status}")
         print("  -> Note: PostgREST schema cache may take a few seconds to reload.")
 
     return 0

@@ -546,6 +546,22 @@ def _ensure_course_semester_column():
     return
 
 
+_SCHEDULE_HAS_SCHOOL_YEAR = None
+
+def _has_schedule_school_year_column():
+    """Detect whether 'school_year' column exists on public.schedule in Supabase."""
+    global _SCHEDULE_HAS_SCHOOL_YEAR
+    if _SCHEDULE_HAS_SCHOOL_YEAR is True:
+        return True
+    try:
+        supabase.table('schedule').select('school_year').limit(1).execute()
+        _SCHEDULE_HAS_SCHOOL_YEAR = True
+        return True
+    except Exception:
+        return False
+
+
+
 _SERVER_PREVIEW_STORE = {}
 
 def _get_preview_for_user(user_id=None, preview_id=None):
@@ -3461,7 +3477,7 @@ def professor_schedule():
 
     try:
         sched_cols = 'prof_course_id, section, semester, major, program, day, class_start, class_end, prof_course(prof_id)'
-        query = supabase.table('schedule').select(sched_cols)
+        query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -3650,7 +3666,7 @@ def view_professor_schedule(professor_id):
             'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, semester, major, session_type, '
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name)), '
             'room(room_name)'
-        )
+        ).eq('archive', False)
         if prof_pc_ids:
             query = query.in_('prof_course_id', list(prof_pc_ids))
         else:
@@ -3765,7 +3781,7 @@ def api_professor_availability(professor_id):
         query = supabase.table('schedule').select(
             'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, session_type, '
             'prof_course(prof_course_id, prof_id, course(course_name)), room(room_name)'
-        )
+        ).eq('archive', False)
         if prof_pc_ids:
             query = query.in_('prof_course_id', list(prof_pc_ids))
         else:
@@ -3831,7 +3847,7 @@ def api_professor_workload(professor_id):
             if (p_cid and p_cid in prof_pc_ids) or (p_pid and str(p_pid) == str(professor_id)):
                 entries.append(p_entry)
     else:
-        query = supabase.table('schedule').select('class_start, class_end, day, prof_course_id')
+        query = supabase.table('schedule').select('class_start, class_end, day, prof_course_id').eq('archive', False)
         if prof_pc_ids:
             query = query.in_('prof_course_id', list(prof_pc_ids))
         else:
@@ -3862,7 +3878,7 @@ def room_schedule():
 
     try:
         sched_cols = 'prof_course_id, room_id, section, semester, major, program, prof_course(prof_id)'
-        query = supabase.table('schedule').select(sched_cols)
+        query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -4017,7 +4033,7 @@ def view_room_schedule(room_id):
             'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, semester, major, session_type, '
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
             'room(room_name)'
-        ).eq('room_id', room_id)
+        ).eq('room_id', room_id).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -4116,7 +4132,7 @@ def api_room_availability(room_id):
             rows = (supabase.table('schedule').select(
                 'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, session_type, '
                 'prof_course(course(course_name), professor(first_name, last_name))'
-            ).eq('room_id', room_id).execute().data) or []
+            ).eq('room_id', room_id).eq('archive', False).execute().data) or []
 
             for row in rows:
                 pc = _rel(row, 'prof_course') or {}
@@ -4175,7 +4191,7 @@ def schedules():
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
             'room(room_name)'
         )
-        query = supabase.table('schedule').select(sched_cols)
+        query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -4402,7 +4418,7 @@ def view_schedule(section_name):
             'schedule_id, day, class_start, class_end, session_type, semester, major, prof_course_id, room_id, '
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
             'room(room_name)'
-        ).eq('section', section_name)
+        ).eq('section', section_name).eq('archive', False)
 
         if user_role == 'Viewer' and program:
             query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
@@ -4566,7 +4582,7 @@ def api_section_availability(section_name):
     else:
         rows = (supabase.table('schedule').select(
             'schedule_id, day, class_start, class_end, session_type, prof_course(course(course_name), professor(first_name, last_name)), room(room_name)'
-        ).eq('section', section_name).execute().data) or []
+        ).eq('section', section_name).eq('archive', False).execute().data) or []
         for row in rows:
             pc = _rel(row, 'prof_course') or {}
             c = _rel(pc, 'course') or {}
@@ -4725,7 +4741,7 @@ def edit_schedule(section_name):
             'section': new_section_name,
             'semester': semester,
             'major': major,
-        }).eq('section', section_name)
+        }).eq('section', section_name).eq('archive', False)
         if program and session.get('role') == 'Viewer':
             query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
         query.execute()
@@ -5287,7 +5303,7 @@ def manage_irregular_student_schedule(student_id):
         'schedule_id, section, day, class_start, class_end, room_id, prof_course_id, session_type, '
         'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
         'course(course_name), room(room_name), professor(first_name, last_name)'
-    ).eq('program', student['program'])
+    ).eq('program', student['program']).eq('archive', False)
     if semester_filter:
         sched_query = sched_query.eq('semester', semester_filter)
     sched_rows = sched_query.execute().data or []
@@ -5456,7 +5472,7 @@ def assign_irregular_section(student_id):
     pc_res = supabase.table('prof_course').select('prof_course_id').eq('course_id', course_id).execute()
     c_pc_ids = [item['prof_course_id'] for item in (pc_res.data or []) if item.get('prof_course_id')]
     if c_pc_ids:
-        res = supabase.table('schedule').select('*, prof_course(course_id, course(course_name))').in_('prof_course_id', c_pc_ids).eq('section', section).execute()
+        res = supabase.table('schedule').select('*, prof_course(course_id, course(course_name))').in_('prof_course_id', c_pc_ids).eq('section', section).eq('archive', False).execute()
     else:
         res = None
     new_entries = []
@@ -5513,6 +5529,7 @@ def timeslot():
 def check_schedule_exists():
     year_level = (request.args.get('year_level') or '').strip()
     semester = (request.args.get('semester') or '').strip()
+    school_year = (request.args.get('school_year') or '').strip()
     major = (request.args.get('major') or '').strip()
     program = session.get('program', '')
     user_role = session.get('role', 'Viewer')
@@ -5520,24 +5537,48 @@ def check_schedule_exists():
     if not semester:
         return jsonify({'exists': False})
 
+    # Normalize semester aliases
+    if semester in ('1st Semester', '1st', '1'):
+        sem_aliases = ['1st Semester', '1st', '1']
+    elif semester in ('2nd Semester', '2nd', '2'):
+        sem_aliases = ['2nd Semester', '2nd', '2']
+    else:
+        sem_aliases = [semester]
+
     try:
-        query = supabase.table('schedule').select('section, program, major').eq('semester', semester)
+        select_cols = 'section, program, major'
+        has_sy = _has_schedule_school_year_column()
+        if has_sy:
+            select_cols += ', school_year'
+
+        # STRICT: Only check active schedules (archive = False)
+        # Archived schedules (archive = True) MUST NOT prevent generating a new schedule
+        query = supabase.table('schedule').select(select_cols).in_('semester', sem_aliases).eq('archive', False)
 
         if user_role == 'Viewer':
             query = query.eq('program', program)
-        elif program:
+        elif program and str(program).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
             query = query.or_(f'program.eq.{program},program.is.null')
 
-        rows = query.execute().data or []
+        if school_year and has_sy:
+            query = query.eq('school_year', school_year)
+
+        raw_rows = query.execute().data or []
+        # Additional python-level guard to guarantee archive=False and semester/school_year match
+        rows = [
+            r for r in raw_rows
+            if (not r.get('semester') or str(r.get('semester')).strip().lower() in [s.lower() for s in sem_aliases])
+            and r.get('archive', False) is False
+            and (not school_year or not r.get('school_year') or str(r.get('school_year')).strip() == school_year)
+        ]
         matching = []
         for r in rows:
             sec = r.get('section') or ''
             if year_level and not sec.startswith(str(year_level)):
                 continue
             rmaj = r.get('major')
-            if major:
-                if rmaj != major:
-                    continue
+            if major and rmaj != major:
+                continue
             matching.append(sec)
 
         total_entries = len(matching)
@@ -5545,9 +5586,12 @@ def check_schedule_exists():
         exists = total_entries > 0
 
         view_url = url_for('schedules', semester=semester)
+        message = "An active schedule already exists for this semester." if exists else ""
 
         return jsonify({
             'exists': exists,
+            'message': message,
+            'school_year': school_year,
             'year_level': year_level or 'All',
             'semester': semester,
             'program': program,
@@ -5557,6 +5601,7 @@ def check_schedule_exists():
             'view_url': view_url
         })
     except Exception as err:
+        logging.exception(f"Error in check_schedule_exists: {err}")
         return jsonify({'exists': False, 'error': str(err)})
 
 #------------------------------------------------------------Generate Schedule------------------------------------------------------------------------------------------
@@ -5564,6 +5609,10 @@ def check_schedule_exists():
 @login_required
 def generate_schedule():
     semesters = ['1st Semester', '2nd Semester']
+    current_year = datetime.now().year
+    school_years = [f"{y}-{y+1}" for y in range(current_year - 1, current_year + 3)]
+    default_school_year = f"{current_year}-{current_year+1}"
+    selected_school_year = session.get('selected_school_year') or default_school_year
 
     if request.method == 'GET':
         preview_context = _build_preview_context()
@@ -5571,6 +5620,8 @@ def generate_schedule():
             'index.html',
             active_page='home',
             semesters=semesters,
+            school_years=school_years,
+            selected_school_year=selected_school_year,
             show_preview=bool(session.get('schedule_preview', [])),
             **preview_context
         )
@@ -5585,6 +5636,7 @@ def generate_schedule():
 
     try:
         semester = (request.form.get('semester') or '').strip()
+        school_year = (request.form.get('school_year') or '').strip()
         if not semester:
             return "Error: Semester is required to generate a schedule."
 
@@ -5598,6 +5650,37 @@ def generate_schedule():
         else:
             sem_aliases = [semester]
             standard_semester = semester
+
+        if school_year:
+            session['selected_school_year'] = school_year
+
+        # Pre-validation: Only block if an ACTIVE schedule exists (archive = False)
+        # Archived schedules (archive = True) MUST NOT prevent generating a new schedule
+        try:
+            has_sy = _has_schedule_school_year_column()
+            chk_cols = 'schedule_id, semester, archive' + (', school_year' if has_sy else '')
+            active_chk_q = supabase.table('schedule').select(chk_cols).in_('semester', sem_aliases).eq('archive', False)
+            if is_viewer:
+                active_chk_q = active_chk_q.eq('program', program)
+            elif not is_admin and program and str(program).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
+                active_chk_q = active_chk_q.or_(f'program.eq.{program},program.is.null')
+
+            if school_year and has_sy:
+                active_chk_q = active_chk_q.eq('school_year', school_year)
+
+            raw_existing = (active_chk_q.limit(10).execute().data) or []
+            # Additional python-level guard to guarantee archive=False and semester/school_year match
+            active_existing = [
+                r for r in raw_existing
+                if (not r.get('semester') or str(r.get('semester')).strip().lower() in [s.lower() for s in sem_aliases])
+                and r.get('archive', False) is False
+                and (not school_year or not r.get('school_year') or str(r.get('school_year')).strip() == school_year)
+            ]
+            if active_existing:
+                flash("An active schedule already exists for this semester.", 'warning')
+                return redirect(url_for('generate_schedule'))
+        except Exception as chk_err:
+            logging.warning(f"Active schedule check warning: {chk_err}")
 
         _ensure_course_semester_column()
 
@@ -5855,7 +5938,7 @@ def generate_schedule():
         preview_entries = []
 
         # Load existing bookings from DB to avoid collision across different programs in the SAME semester
-        existing_rows = (supabase.table('schedule').select('section, room_id, day, class_start, class_end, prof_course_id, prof_course(prof_id), semester, program, major').execute().data) or []
+        existing_rows = (supabase.table('schedule').select('section, room_id, day, class_start, class_end, prof_course_id, prof_course(prof_id), semester, program, major').eq('archive', False).execute().data) or []
         for existing in existing_rows:
             # ONLY consider rows for the EXACT same semester that belong to a DIFFERENT program
             # (different semesters do not run simultaneously, so they must NOT block rooms or professors)
@@ -6392,6 +6475,8 @@ def generate_schedule():
 
         for idx, entry in enumerate(preview_entries, start=1):
             entry['id'] = idx
+            if school_year:
+                entry['school_year'] = school_year
             if not isinstance(entry.get('start'), str):
                 entry['start'] = _format_time(entry['start'])
             if not isinstance(entry.get('end'), str):
@@ -6406,6 +6491,8 @@ def generate_schedule():
             'index.html',
             active_page='home',
             semesters=semesters,
+            school_years=school_years,
+            selected_school_year=school_year or selected_school_year,
             show_preview=bool(preview_entries),
             **preview_context
         )
@@ -6657,7 +6744,9 @@ def confirm_preview():
         # Determine the semester, program, and sections from preview
         sem_val = (preview[0].get('semester') or '').strip()
         prog_val = (preview[0].get('program') or session.get('program') or '').strip()
+        sy_val = (preview[0].get('school_year') or session.get('selected_school_year') or '').strip()
         sections_in_preview = list({e.get('section') for e in preview if e.get('section')})
+        has_sy = _has_schedule_school_year_column()
 
         # Prepare payload rows
         rows = []
@@ -6675,7 +6764,7 @@ def confirm_preview():
                 if pc_chk_row:
                     prof_course_id = pc_chk_row.get('prof_course_id')
 
-            rows.append({
+            row_dict = {
                 'prof_course_id': int(prof_course_id) if prof_course_id not in (None, '', 0, '0') else None,
                 'room_id': int(room_id) if room_id not in (None, '', 0, '0') else None,
                 'day': entry.get('day') or 'Monday',
@@ -6686,7 +6775,11 @@ def confirm_preview():
                 'semester': entry_sem,
                 'major': entry.get('major'),
                 'program': entry_prog,
-            })
+                'archive': False,
+            }
+            if sy_val and has_sy:
+                row_dict['school_year'] = sy_val
+            rows.append(row_dict)
 
         if not rows:
             logging.error(f"[confirm_preview] Constructed rows payload is empty from preview of length {len(preview)}.")
@@ -6697,20 +6790,34 @@ def confirm_preview():
         if session.get('last_name'):
             archived_by = f"{session.get('first_name', '')} {session.get('last_name', '')}".strip()
 
-        logging.info(f"[confirm_preview] Confirming {len(rows)} entries for semester='{sem_val}', program='{prog_val}', user='{archived_by}'")
+        sem_clean = sem_val.strip()
+        if sem_clean in ('1st Semester', '1st', '1'):
+            sem_aliases = ['1st Semester', '1st', '1']
+            standard_sem = '1st Semester'
+        elif sem_clean in ('2nd Semester', '2nd', '2'):
+            sem_aliases = ['2nd Semester', '2nd', '2']
+            standard_sem = '2nd Semester'
+        else:
+            sem_aliases = [sem_clean]
+            standard_sem = sem_clean
 
-        # Atomic PostgreSQL Transaction via confirm_schedule_transaction RPC (Archive -> Delete -> Insert)
+        logging.info(f"[confirm_preview] Confirming {len(rows)} entries for semester='{standard_sem}', school_year='{sy_val}', program='{prog_val}', user='{archived_by}'")
+
+        # Atomic PostgreSQL Transaction via confirm_schedule_transaction RPC (Soft Archive -> Insert)
         rpc_success = False
         rpc_details = {}
         if hasattr(supabase, 'rpc'):
             try:
-                rpc_res = supabase.rpc('confirm_schedule_transaction', {
-                    'p_semester': sem_val,
+                rpc_payload = {
+                    'p_semester': standard_sem,
                     'p_program': prog_val,
                     'p_rows': rows,
                     'p_clear_scope': True,
                     'p_archived_by': archived_by
-                }).execute()
+                }
+                if sy_val:
+                    rpc_payload['p_school_year'] = sy_val
+                rpc_res = supabase.rpc('confirm_schedule_transaction', rpc_payload).execute()
                 if rpc_res and getattr(rpc_res, 'data', None):
                     data = rpc_res.data
                     if isinstance(data, dict) and data.get('success'):
@@ -6726,42 +6833,16 @@ def confirm_preview():
                 rpc_success = False
 
         if not rpc_success:
-            # Fallback: Archive existing active records for this program, delete them, and insert new records
+            # Fallback: Soft-archive ONLY active records matching this exact semester & program (& school_year)
             try:
-                old_query = supabase.table('schedule').select('*')
+                old_update = supabase.table('schedule').update({'archive': True}).eq('archive', False).in_('semester', sem_aliases)
+                if sy_val and has_sy:
+                    old_update = old_update.eq('school_year', sy_val)
                 if prog_val and str(prog_val).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                    old_query = old_query.or_(f'program.eq.{prog_val},program.is.null,program.eq.')
-                old_rows = old_query.execute().data or []
-                if old_rows:
-                    batch_id = str(uuid.uuid4())
-                    archive_payload = []
-                    for r in old_rows:
-                        archive_payload.append({
-                            'batch_id': batch_id,
-                            'original_schedule_id': r.get('schedule_id'),
-                            'prof_course_id': r.get('prof_course_id'),
-                            'room_id': r.get('room_id'),
-                            'day': r.get('day'),
-                            'class_start': _to_time_string(r.get('class_start')),
-                            'class_end': _to_time_string(r.get('class_end')),
-                            'session_type': r.get('session_type') or 'Lecture',
-                            'section': r.get('section'),
-                            'semester': r.get('semester'),
-                            'major': r.get('major'),
-                            'program': r.get('program'),
-                            'archived_by': archived_by,
-                            'archive_reason': f'Replaced on schedule confirmation of {sem_val}'
-                        })
-                    supabase.table('schedule_archive').insert(archive_payload).execute()
+                    old_update = old_update.or_(f'program.eq.{prog_val},program.is.null,program.eq.')
+                old_update.execute()
             except Exception as arc_err:
-                logging.warning(f"[confirm_preview] Fallback archive insert warning: {arc_err}")
-
-            del_query = supabase.table('schedule').delete()
-            if prog_val and str(prog_val).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                del_query = del_query.or_(f'program.eq.{prog_val},program.is.null,program.eq.')
-            else:
-                del_query = del_query.neq('schedule_id', -1)
-            del_query.execute()
+                logging.warning(f"[confirm_preview] Fallback soft-archive warning: {arc_err}")
 
             # Batch insert into schedule table (in chunks to avoid payload limits)
             chunk_size = 50
@@ -6810,7 +6891,7 @@ def discard_preview():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# SCHEDULE ARCHIVE & RESTORATION
+# SCHEDULE ARCHIVE & RESTORATION (Based on schedule.status = False)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.route('/schedule_archive')
@@ -6825,7 +6906,7 @@ def schedule_archive():
 
     batches_list = []
     try:
-        # 1. Primary: Database RPC aggregation (unlimited batches, grouped by batch_id directly in Postgres)
+        # 1. Primary: Database RPC aggregation if function is installed
         rpc_success = False
         if hasattr(supabase, 'rpc'):
             try:
@@ -6862,21 +6943,21 @@ def schedule_archive():
                             'sections_preview': ', '.join(secs[:6]) + ('...' if len(secs) > 6 else ''),
                         })
             except Exception as rpc_err:
-                logging.warning(f"get_schedule_archive_batches RPC failed ({rpc_err}), using paginated table query.")
+                logging.debug(f"get_schedule_archive_batches RPC skipped ({rpc_err}), using schedule table status=False query.")
                 rpc_success = False
 
         if not rpc_success:
-            # 2. Fallback: Paginated table query across all chunks to guarantee unlimited batches without 1000-row clipping
+            # 2. Query schedule table for soft-archived entries (is_archived = True)
             all_rows = []
             page_size = 1000
             start = 0
             while True:
-                query = supabase.table('schedule_archive').select('batch_id, semester, program, section, major, archived_at, archived_by, archive_reason')
+                query = supabase.table('schedule').select('schedule_id, semester, program, section, major, archive').eq('archive', True)
                 if effective_program:
                     query = query.eq('program', effective_program)
                 if semester_filter:
                     query = query.eq('semester', semester_filter)
-                chunk_res = query.order('archived_at', desc=True).range(start, start + page_size - 1).execute()
+                chunk_res = query.range(start, start + page_size - 1).execute()
                 chunk_data = chunk_res.data or []
                 all_rows.extend(chunk_data)
                 if len(chunk_data) < page_size:
@@ -6885,27 +6966,18 @@ def schedule_archive():
 
             batches_map = {}
             for r in all_rows:
-                bid = str(r.get('batch_id') or '')
-                if not bid:
-                    continue
+                sem = r.get('semester') or '1st Semester'
+                prog = r.get('program') or ''
+                bid = str(r.get('batch_id') or f"{sem.replace(' ', '_')}__{prog or 'all'}")
                 if bid not in batches_map:
-                    arch_at_raw = r.get('archived_at')
-                    arch_at_fmt = str(arch_at_raw)
-                    if arch_at_raw:
-                        try:
-                            dt = datetime.fromisoformat(str(arch_at_raw).replace('Z', '+00:00'))
-                            arch_at_fmt = dt.strftime('%b %d, %Y - %I:%M %p')
-                        except Exception:
-                            arch_at_fmt = str(arch_at_raw)
-
                     batches_map[bid] = {
                         'batch_id': bid,
-                        'semester': r.get('semester') or '1st Semester',
-                        'program': r.get('program') or '',
-                        'archived_at_raw': arch_at_raw,
-                        'archived_at_fmt': arch_at_fmt,
-                        'archived_by': r.get('archived_by') or 'Scheduler',
-                        'archive_reason': r.get('archive_reason') or 'Replaced on confirmation',
+                        'semester': sem,
+                        'program': prog,
+                        'archived_at_raw': None,
+                        'archived_at_fmt': 'Archived Schedule',
+                        'archived_by': 'Scheduler',
+                        'archive_reason': 'Replaced on confirmation (status = false)',
                         'entry_count': 0,
                         'sections_set': set(),
                     }
@@ -6919,7 +6991,7 @@ def schedule_archive():
                 b['sections_preview'] = ', '.join(sorted_secs[:6]) + ('...' if len(sorted_secs) > 6 else '')
                 batches_list.append(b)
 
-            batches_list.sort(key=lambda x: str(x.get('archived_at_raw') or ''), reverse=True)
+            batches_list.sort(key=lambda x: (x.get('semester', ''), x.get('program', '')), reverse=True)
 
         semester_options = ['1st Semester', '2nd Semester']
         program_options = ['BSIT']
@@ -6947,7 +7019,20 @@ def schedule_archive():
 @login_required
 def view_schedule_archive_batch(batch_id):
     try:
-        res = supabase.table('schedule_archive').select('*, course(course_name), professor(first_name, last_name), room(room_name)').eq('batch_id', batch_id).execute()
+        query = supabase.table('schedule').select(
+            '*, prof_course(course_id, prof_id, course(course_name), professor(first_name, last_name)), course(course_name), professor(first_name, last_name), room(room_name)'
+        ).eq('archive', True)
+
+        if '__' in batch_id:
+            sem_part, prog_part = batch_id.split('__', 1)
+            sem_name = sem_part.replace('_', ' ')
+            query = query.eq('semester', sem_name)
+            if prog_part and prog_part != 'all':
+                query = query.eq('program', prog_part)
+        else:
+            query = query.or_(f"batch_id.eq.{batch_id},semester.eq.{batch_id}")
+
+        res = query.execute()
         rows = res.data or []
         if not rows:
             flash('Archived schedule version not found.', 'warning')
@@ -6955,7 +7040,7 @@ def view_schedule_archive_batch(batch_id):
 
         first_row = rows[0]
         arch_at_raw = first_row.get('archived_at')
-        arch_at_fmt = str(arch_at_raw)
+        arch_at_fmt = 'Archived Schedule'
         if arch_at_raw:
             try:
                 dt = datetime.fromisoformat(str(arch_at_raw).replace('Z', '+00:00'))
@@ -6969,7 +7054,7 @@ def view_schedule_archive_batch(batch_id):
             'program': first_row.get('program') or '',
             'archived_at_fmt': arch_at_fmt,
             'archived_by': first_row.get('archived_by') or 'Scheduler',
-            'archive_reason': first_row.get('archive_reason') or '',
+            'archive_reason': first_row.get('archive_reason') or 'Replaced on confirmation (status = false)',
         }
 
         sections_by_key = {}
@@ -7076,83 +7161,51 @@ def restore_schedule_archive(batch_id):
                     res_data = rpc_res.data
                     rpc_success = True
             except Exception as rpc_err:
-                logging.warning(f"restore_archived_schedule_batch RPC fallback: {rpc_err}")
+                logging.debug(f"restore_archived_schedule_batch RPC fallback: {rpc_err}")
                 rpc_success = False
 
         if not rpc_success:
-            # Fallback restore logic:
-            arch_rows = (supabase.table('schedule_archive').select('*').eq('batch_id', batch_id).execute().data) or []
-            if not arch_rows:
-                flash('Archived batch not found.', 'warning')
-                return redirect(url_for('schedule_archive'))
+            # Fallback restore logic: update archive flag in schedule table
+            target_sem = '1st Semester'
+            target_prog = ''
+            if '__' in batch_id:
+                sem_part, prog_part = batch_id.split('__', 1)
+                target_sem = sem_part.replace('_', ' ')
+                target_prog = '' if prog_part == 'all' else prog_part
+            else:
+                sample_q = supabase.table('schedule').select('semester, program').eq('archive', True)
+                sample_rows = sample_q.execute().data or []
+                if sample_rows:
+                    target_sem = sample_rows[0].get('semester') or '1st Semester'
+                    target_prog = sample_rows[0].get('program') or ''
 
-            target_sem = arch_rows[0].get('semester') or '1st Semester'
-            target_prog = arch_rows[0].get('program') or ''
+            sem_part_clean = target_sem.strip()
+            if sem_part_clean in ('1st Semester', '1st', '1'):
+                t_sem_aliases = ['1st Semester', '1st', '1']
+            elif sem_part_clean in ('2nd Semester', '2nd', '2'):
+                t_sem_aliases = ['2nd Semester', '2nd', '2']
+            else:
+                t_sem_aliases = [sem_part_clean]
 
-            curr_query = supabase.table('schedule').select('*').eq('semester', target_sem)
+            # 1. Soft-archive currently active schedules for target semester ONLY (set archive = True)
+            archive_curr_q = supabase.table('schedule').update({'archive': True}).in_('semester', t_sem_aliases).eq('archive', False)
             if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                curr_query = curr_query.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
-            curr_rows = curr_query.execute().data or []
+                archive_curr_q = archive_curr_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
+            archive_curr_q.execute()
 
-            if curr_rows:
-                new_batch_id = str(uuid.uuid4())
-                archive_current = []
-                for cr in curr_rows:
-                    archive_current.append({
-                        'batch_id': new_batch_id,
-                        'original_schedule_id': cr.get('schedule_id'),
-                        'prof_course_id': cr.get('prof_course_id'),
-                        'room_id': cr.get('room_id'),
-                        'day': cr.get('day'),
-                        'class_start': _to_time_string(cr.get('class_start')),
-                        'class_end': _to_time_string(cr.get('class_end')),
-                        'session_type': cr.get('session_type') or 'Lecture',
-                        'section': cr.get('section'),
-                        'semester': cr.get('semester'),
-                        'major': cr.get('major'),
-                        'program': cr.get('program'),
-                        'archived_by': restored_by,
-                        'archive_reason': f'Archived prior to restoring batch {batch_id}'
-                    })
-                supabase.table('schedule_archive').insert(archive_current).execute()
-
-            del_q = supabase.table('schedule').delete().eq('semester', target_sem)
+            # 2. Reactivate archived schedules for target semester ONLY (set archive = False)
+            restore_q = supabase.table('schedule').update({'archive': False}).in_('semester', t_sem_aliases).eq('archive', True)
             if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                del_q = del_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
-            del_q.execute()
+                restore_q = restore_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
+            restore_res = restore_q.execute()
+            restored_count = len(restore_res.data or []) if restore_res and restore_res.data else 'all'
 
-            restore_payload = []
-            for ar in arch_rows:
-                pcid = ar.get('prof_course_id')
-                if not pcid and ar.get('prof_id') and ar.get('course_id'):
-                    chk = supabase.table('prof_course').select('prof_course_id').eq('prof_id', ar.get('prof_id')).eq('course_id', ar.get('course_id')).execute()
-                    row_chk = _first(chk.data or [])
-                    if row_chk:
-                        pcid = row_chk.get('prof_course_id')
-
-                restore_payload.append({
-                    'prof_course_id': pcid,
-                    'room_id': ar.get('room_id'),
-                    'day': ar.get('day'),
-                    'class_start': _to_time_string(ar.get('class_start')),
-                    'class_end': _to_time_string(ar.get('class_end')),
-                    'session_type': ar.get('session_type') or 'Lecture',
-                    'section': ar.get('section'),
-                    'semester': ar.get('semester') or target_sem,
-                    'major': ar.get('major'),
-                    'program': ar.get('program') or target_prog,
-                })
-
-            chunk_size = 50
-            for i in range(0, len(restore_payload), chunk_size):
-                chunk = restore_payload[i:i + chunk_size]
-                supabase.table('schedule').insert(chunk).execute()
-
-            res_data = {'semester': target_sem, 'restored_count': len(restore_payload)}
+            res_data = {'semester': target_sem, 'restored_count': restored_count}
 
         target_semester = (res_data or {}).get('semester') or '1st Semester'
         count = (res_data or {}).get('restored_count') or 'all'
 
+        session['active_semester'] = target_semester
         log_activity('restore', 'schedule', f'Restored schedule batch {batch_id} ({target_semester})')
         flash(f'Archived schedule version restored successfully! ({count} classes reactivated)', 'success')
         return redirect(url_for('schedules', semester=target_semester))
@@ -7172,8 +7225,21 @@ def delete_schedule_archive(batch_id):
         return redirect(url_for('schedule_archive'))
 
     try:
-        supabase.table('schedule_archive').delete().eq('batch_id', batch_id).execute()
-        log_activity('delete', 'schedule_archive', f'Deleted archived schedule batch {batch_id}')
+        target_sem = ''
+        target_prog = ''
+        if '__' in batch_id:
+            sem_part, prog_part = batch_id.split('__', 1)
+            target_sem = sem_part.replace('_', ' ')
+            target_prog = '' if prog_part == 'all' else prog_part
+
+        del_q = supabase.table('schedule').delete().eq('archive', True)
+        if target_sem:
+            del_q = del_q.eq('semester', target_sem)
+        if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
+            del_q = del_q.eq('program', target_prog)
+        del_q.execute()
+
+        log_activity('delete', 'schedule', f'Deleted archived schedule batch {batch_id}')
         flash('Archived schedule version deleted successfully.', 'success')
     except Exception as err:
         logging.exception(f"Error deleting archived schedule batch {batch_id}: {err}")
@@ -7195,7 +7261,6 @@ BACKUP_TABLES_INSERT_ORDER = [
     'course',
     'prof_course',
     'schedule',
-    'schedule_archive',
     'irregular_students',
     'irregular_student_schedule',
     'delete_requests',
@@ -7214,7 +7279,6 @@ BACKUP_PKS = {
     'course': 'course_id',
     'prof_course': 'prof_course_id',
     'schedule': 'schedule_id',
-    'schedule_archive': 'archive_id',
     'irregular_students': 'student_id',
     'irregular_student_schedule': 'id',
     'delete_requests': 'id',
