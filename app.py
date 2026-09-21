@@ -11,12 +11,21 @@ import time
 import math
 import random
 import uuid
+import re
 
 from dotenv import load_dotenv
 load_dotenv()
 
 from supabase import create_client, Client
 from postgrest.exceptions import APIError
+from pdf_export import generate_timetable_pdf
+from excel_export import (
+    generate_timetable_excel,
+    EXCEL_THEMES,
+    get_section_theme,
+    set_section_theme,
+    get_all_section_themes
+)
 
 SUPABASE_URL: str = os.environ.get("SUPABASE_URL")
 # Anon / public key only. `SUPABASE_PUBLISHABLE_KEY` is the newer name for the
@@ -946,6 +955,8 @@ def _build_preview_context(preview_entries=None):
                     'section_name': section_name,
                     'semester': semester,
                     'major': major_key,
+                    'year_level': _year_of_section(section_name),
+                    'theme': get_section_theme(section_name),
                 },
                 'entries': []
             }
@@ -3824,7 +3835,181 @@ def view_professor_schedule(professor_id):
                           workload=workload, availability=availability,
                           is_preview=is_preview, has_preview=has_preview,
                           year_filter=year_filter, semester_filter=semester_filter,
-                          major_filter=major_filter, program=program, sort_day=sort_day)
+                          major_filter=major_filter, program=program, sort_day=sort_day,
+                          current_theme=request.args.get('theme', 'Blue'),
+                          theme_options=list(EXCEL_THEMES.keys()))
+
+
+@app.route('/professor_schedule/<professor_id>/export')
+@app.route('/export/professor_schedule/<professor_id>')
+@login_required
+def export_professor_schedule(professor_id):
+    year_filter = request.args.get('year', '')
+    semester_filter = request.args.get('semester', '')
+    major_filter = request.args.get('major', '')
+    program_filter = request.args.get('program', '').strip()
+    theme_arg = request.args.get('theme', 'Blue').strip()
+    mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
+
+    program = session.get('program', '')
+    user_role = session.get('role', 'Viewer')
+
+    prof_res = supabase.table('professor').select('prof_id, first_name, last_name, department, max_hours').eq('prof_id', professor_id).execute()
+    professor = _first(prof_res.data or [])
+
+    if not professor:
+        flash("Professor not found", "error")
+        return redirect(url_for('professor_schedule'))
+
+    professor_name = f"{professor.get('first_name', '')} {professor.get('last_name', '')}".strip() or 'Professor'
+
+    pc_res = supabase.table('prof_course').select('prof_course_id, course_id, course(course_name)').eq('prof_id', professor_id).execute()
+    pc_data = pc_res.data or []
+    prof_pc_ids = {item['prof_course_id'] for item in pc_data if item.get('prof_course_id')}
+    pc_course_names = {}
+    for item in pc_data:
+        pcid = item.get('prof_course_id')
+        c = _rel(item, 'course') or {}
+        if pcid and c.get('course_name'):
+            pc_course_names[pcid] = c.get('course_name')
+
+    preview_pool = _get_preview_for_user()
+    has_preview = bool(preview_pool)
+    is_preview = (mode == 'preview') and has_preview
+
+    entries = []
+    if is_preview:
+        for p_entry in preview_pool:
+            p_cid = p_entry.get('prof_course_id')
+            p_pid = p_entry.get('prof_id')
+            matches_prof = False
+            if p_cid and p_cid in prof_pc_ids:
+                matches_prof = True
+            elif p_pid and str(p_pid) == str(professor_id):
+                matches_prof = True
+
+            if not matches_prof:
+                continue
+
+            sec = str(p_entry.get('section') or '')
+            sem = str(p_entry.get('semester') or '')
+            maj = str(p_entry.get('major') or '')
+            prog = str(p_entry.get('program') or '')
+
+            if user_role == 'admin':
+                if program_filter and program_filter.lower() != 'all' and prog != program_filter:
+                    continue
+            else:
+                if program and prog and prog != program:
+                    continue
+
+            if year_filter and not sec.startswith(str(year_filter)):
+                continue
+            if semester_filter and sem != semester_filter:
+                continue
+            if major_filter and maj != major_filter:
+                continue
+
+            st = p_entry.get('start')
+            et = p_entry.get('end')
+            st_fmt = _format_time(st) or str(st or '')
+            et_fmt = _format_time(et) or str(et or '')
+            course_name = p_entry.get('course_name') or pc_course_names.get(p_cid) or 'TBA'
+
+            entries.append({
+                'schedule_id': p_entry.get('id'),
+                'course_name': course_name,
+                'room': p_entry.get('room_name') or 'TBA',
+                'day': p_entry.get('day'),
+                'start_time': st_fmt,
+                'end_time': et_fmt,
+                'start_time_raw': st,
+                'end_time_raw': et,
+                'section': sec,
+                'semester': sem,
+                'major': maj,
+                'session_type': p_entry.get('session_type') or 'Lecture',
+                'year_level': _year_of_section(sec),
+            })
+    else:
+        query = supabase.table('schedule').select(
+            'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, semester, major, session_type, '
+            'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name)), '
+            'room(room_name)'
+        ).eq('archive', False)
+
+        if user_role == 'admin':
+            if program_filter and program_filter.lower() != 'all':
+                query = query.eq('program', program_filter)
+        else:
+            if program:
+                query = query.eq('program', program)
+
+        if year_filter:
+            query = query.like('section', f'{year_filter}%')
+        if semester_filter:
+            query = query.eq('semester', semester_filter)
+        if major_filter:
+            query = query.eq('major', major_filter)
+
+        rows = query.execute().data or []
+        for row in rows:
+            pc_id = row.get('prof_course_id')
+            if pc_id not in prof_pc_ids:
+                continue
+            pc = _rel(row, 'prof_course') or {}
+            c = _rel(pc, 'course') or _rel(row, 'course') or {}
+            r = _rel(row, 'room') or {}
+            st_raw = row.get('class_start')
+            et_raw = row.get('class_end')
+            st_fmt = _format_time(st_raw) or str(st_raw or '')
+            et_fmt = _format_time(et_raw) or str(et_raw or '')
+            entries.append({
+                'schedule_id': row.get('schedule_id'),
+                'course_name': c.get('course_name') or 'TBA',
+                'room': r.get('room_name') or 'TBA',
+                'day': row.get('day'),
+                'start_time': st_fmt,
+                'end_time': et_fmt,
+                'start_time_raw': st_raw,
+                'end_time_raw': et_raw,
+                'section': row.get('section'),
+                'semester': row.get('semester'),
+                'major': row.get('major'),
+                'session_type': row.get('session_type') or 'Lecture',
+                'year_level': _year_of_section(row.get('section')),
+            })
+
+    try:
+        timeslots = (supabase.table('timeslot').select('*').execute().data) or []
+    except Exception:
+        timeslots = []
+
+    clean_prof = re.sub(r'[^a-zA-Z0-9_-]', '_', professor_name)
+    filename = f"Teacher_Schedule_{clean_prof}.xlsx"
+
+    excel_buffer = generate_timetable_excel(
+        schedule_type='professor',
+        entity_info=professor,
+        entries=entries,
+        timeslots=timeslots,
+        filter_metadata={
+            'semester': semester_filter,
+            'year': year_filter,
+            'major': major_filter,
+            'program': program_filter or program,
+        },
+        theme=theme_arg
+    )
+
+    return send_file(
+        excel_buffer,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
 
 
 @app.route('/api/professor_availability/<int:professor_id>', methods=['GET'])
@@ -4185,7 +4370,159 @@ def view_room_schedule(room_id):
                           is_preview=is_preview,
                           has_preview=has_preview,
                           year_filter=year_filter, semester_filter=semester_filter,
-                          major_filter=major_filter, program=program, sort_day=sort_day)
+                          major_filter=major_filter, program=program, sort_day=sort_day,
+                          current_theme=request.args.get('theme', 'Blue'),
+                          theme_options=list(EXCEL_THEMES.keys()))
+
+
+@app.route('/room_schedule/<room_id>/export')
+@app.route('/export/room_schedule/<room_id>')
+@login_required
+def export_room_schedule(room_id):
+    year_filter = request.args.get('year', '')
+    semester_filter = request.args.get('semester', '')
+    major_filter = request.args.get('major', '')
+    program_filter = request.args.get('program', '').strip()
+    theme_arg = request.args.get('theme', 'Blue').strip()
+    mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
+
+    program = session.get('program', '')
+    user_role = session.get('role', 'Viewer')
+
+    room_res = supabase.table('room').select('room_id, room_name, room_type').eq('room_id', room_id).execute()
+    room = _first(room_res.data or [])
+
+    if not room:
+        flash("Room not found", "error")
+        return redirect(url_for('room_schedule'))
+
+    preview_pool = _get_preview_for_user()
+    has_preview = bool(preview_pool)
+    is_preview = (mode == 'preview') and has_preview
+
+    entries = []
+    if is_preview:
+        for p_entry in preview_pool:
+            p_rid = p_entry.get('room_id')
+            if p_rid is None or str(p_rid) != str(room_id):
+                continue
+
+            sec = str(p_entry.get('section') or '')
+            sem = str(p_entry.get('semester') or '')
+            maj = str(p_entry.get('major') or '')
+            prog = str(p_entry.get('program') or '')
+
+            if user_role == 'admin':
+                if program_filter and program_filter.lower() != 'all' and prog != program_filter:
+                    continue
+            else:
+                if program and prog and prog != program:
+                    continue
+
+            if year_filter and not sec.startswith(str(year_filter)):
+                continue
+            if semester_filter and sem != semester_filter:
+                continue
+            if major_filter and maj != major_filter:
+                continue
+
+            st = p_entry.get('start')
+            et = p_entry.get('end')
+            st_fmt = _format_time(st) or str(st or '')
+            et_fmt = _format_time(et) or str(et or '')
+            entries.append({
+                'schedule_id': p_entry.get('id'),
+                'course_name': p_entry.get('course_name') or 'TBA',
+                'professor': p_entry.get('professor_name') or 'Professor A',
+                'day': p_entry.get('day'),
+                'start_time': st_fmt,
+                'end_time': et_fmt,
+                'start_time_raw': st,
+                'end_time_raw': et,
+                'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else 'TBA',
+                'section': p_entry.get('section'),
+                'semester': sem,
+                'major': maj,
+                'session_type': p_entry.get('session_type') or 'Lecture',
+                'year_level': _year_of_section(p_entry.get('section')),
+            })
+    else:
+        query = supabase.table('schedule').select(
+            'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, semester, major, session_type, '
+            'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
+            'room(room_name)'
+        ).eq('room_id', room_id).eq('archive', False)
+
+        if user_role == 'admin':
+            if program_filter and program_filter.lower() != 'all':
+                query = query.eq('program', program_filter)
+        else:
+            if program:
+                query = query.eq('program', program)
+
+        if year_filter:
+            query = query.like('section', f'{year_filter}%')
+        if semester_filter:
+            query = query.eq('semester', semester_filter)
+        if major_filter:
+            query = query.eq('major', major_filter)
+
+        rows = query.execute().data or []
+        for row in rows:
+            pc = _rel(row, 'prof_course') or {}
+            c = _rel(pc, 'course') or _rel(row, 'course') or {}
+            p = _rel(pc, 'professor') or _rel(row, 'professor') or {}
+            st_raw = row.get('class_start')
+            et_raw = row.get('class_end')
+            st_fmt = _format_time(st_raw) or str(st_raw or '')
+            et_fmt = _format_time(et_raw) or str(et_raw or '')
+            entries.append({
+                'schedule_id': row.get('schedule_id'),
+                'course_name': c.get('course_name') or 'TBA',
+                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                'day': row.get('day'),
+                'start_time': st_fmt,
+                'end_time': et_fmt,
+                'start_time_raw': st_raw,
+                'end_time_raw': et_raw,
+                'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else 'TBA',
+                'section': row.get('section'),
+                'semester': row.get('semester'),
+                'major': row.get('major'),
+                'session_type': row.get('session_type') or 'Lecture',
+                'year_level': _year_of_section(row.get('section')),
+            })
+
+    try:
+        timeslots = (supabase.table('timeslot').select('*').execute().data) or []
+    except Exception:
+        timeslots = []
+
+    clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', str(room.get('room_name') or 'Room'))
+    filename = f"Room_Schedule_{clean_name}.xlsx"
+
+    excel_buffer = generate_timetable_excel(
+        schedule_type='room',
+        entity_info=room,
+        entries=entries,
+        timeslots=timeslots,
+        filter_metadata={
+            'semester': semester_filter,
+            'year': year_filter,
+            'major': major_filter,
+            'program': program_filter or program,
+        },
+        theme=theme_arg
+    )
+
+    return send_file(
+        excel_buffer,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
 
 
 @app.route('/api/room_availability/<room_id>', methods=['GET'])
@@ -4338,7 +4675,8 @@ def schedules():
                     year_filter=year_filter,
                     semester_filter=semester_filter,
                     major_filter=major_filter,
-                    no_professor_match=True
+                    no_professor_match=True,
+                    theme_options=list(EXCEL_THEMES.keys())
                 )
 
             prof_id = professor['prof_id']
@@ -4371,6 +4709,7 @@ def schedules():
                     'semester': semester,
                     'major': major_key,
                     'year_level': _year_of_section(sec),
+                    'theme': get_section_theme(sec),
                 })
 
             if key not in sections_by_key:
@@ -4381,6 +4720,7 @@ def schedules():
                         'semester': semester,
                         'major': major_key,
                         'year_level': _year_of_section(sec),
+                        'theme': get_section_theme(sec),
                     },
                     'entries': []
                 }
@@ -4440,7 +4780,8 @@ def schedules():
         year_filter=year_filter,
         semester_filter=semester_filter,
         major_filter=major_filter,
-        no_professor_match=False
+        no_professor_match=False,
+        theme_options=list(EXCEL_THEMES.keys())
     )
 
 
@@ -4625,6 +4966,9 @@ def view_schedule(section_name):
         })
     all_prof_courses.sort(key=lambda x: x['label'])
 
+    current_theme = get_section_theme(section_name)
+    theme_options = list(EXCEL_THEMES.keys())
+
     return render_template(
         'generated_schedule.html',
         active_page='schedules',
@@ -4639,8 +4983,181 @@ def view_schedule(section_name):
         major_filter=major_filter,
         sort_day=sort_day,
         rooms=rooms,
-        all_prof_courses=all_prof_courses
+        all_prof_courses=all_prof_courses,
+        current_theme=current_theme,
+        theme_options=theme_options
     )
+
+
+@app.route('/schedule/<section_name>/export')
+@app.route('/export/section_schedule/<section_name>')
+@login_required
+def export_section_schedule(section_name):
+    semester_filter = request.args.get('semester', '')
+    major_filter = request.args.get('major', '')
+    theme_arg = request.args.get('theme', '').strip()
+    mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
+    program = session.get('program', '')
+    user_role = session.get('role', 'Viewer')
+
+    if theme_arg:
+        selected_theme = set_section_theme(section_name, theme_arg)
+    else:
+        selected_theme = get_section_theme(section_name)
+
+    preview_pool = _get_preview_for_user()
+    has_preview = bool(preview_pool)
+    is_preview = (mode == 'preview') and has_preview
+
+    entries = []
+    if is_preview:
+        for p_entry in preview_pool:
+            if str(p_entry.get('section') or '').strip() != str(section_name).strip():
+                continue
+            sem = str(p_entry.get('semester') or '')
+            maj = str(p_entry.get('major') or '')
+            prog = str(p_entry.get('program') or '')
+
+            if user_role == 'Viewer' and program and prog and prog != program:
+                continue
+
+            if semester_filter and sem != semester_filter:
+                continue
+            if major_filter and maj != major_filter:
+                continue
+
+            st = p_entry.get('start')
+            et = p_entry.get('end')
+            st_fmt = _format_time(st) or str(st or '')
+            et_fmt = _format_time(et) or str(et or '')
+            prof_name = p_entry.get('professor_name') or 'Professor A'
+
+            entries.append({
+                'schedule_id': p_entry.get('id'),
+                'day': p_entry.get('day'),
+                'start_time': st_fmt,
+                'end_time': et_fmt,
+                'start_time_raw': st,
+                'end_time_raw': et,
+                'session_type': p_entry.get('session_type') or 'Lecture',
+                'semester': sem,
+                'major': maj,
+                'course_name': p_entry.get('course_name') or 'TBA',
+                'room': p_entry.get('room_name') or 'TBA',
+                'room_name': p_entry.get('room_name') or 'TBA',
+                'professor': prof_name,
+                'professor_name': prof_name,
+                'section': section_name,
+                'year_level': _year_of_section(section_name),
+            })
+    else:
+        query = supabase.table('schedule').select(
+            'schedule_id, day, class_start, class_end, session_type, semester, major, prof_course_id, room_id, '
+            'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
+            'room(room_name)'
+        ).eq('section', section_name).eq('archive', False)
+
+        if user_role == 'Viewer' and program:
+            query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
+
+        if semester_filter:
+            query = query.eq('semester', semester_filter)
+        if major_filter:
+            query = query.eq('major', major_filter)
+
+        rows = query.execute().data or []
+        for row in rows:
+            pc = _rel(row, 'prof_course') or {}
+            c = _rel(pc, 'course') or _rel(row, 'course') or {}
+            p = _rel(pc, 'professor') or _rel(row, 'professor') or {}
+            r = _rel(row, 'room') or {}
+            st_raw = row.get('class_start')
+            et_raw = row.get('class_end')
+            st_fmt = _format_time(st_raw) or str(st_raw or '')
+            et_fmt = _format_time(et_raw) or str(et_raw or '')
+            entries.append({
+                'schedule_id': row.get('schedule_id'),
+                'day': row.get('day'),
+                'start_time': st_fmt,
+                'end_time': et_fmt,
+                'start_time_raw': st_raw,
+                'end_time_raw': et_raw,
+                'session_type': row.get('session_type') or 'Lecture',
+                'semester': row.get('semester'),
+                'major': row.get('major'),
+                'course_name': c.get('course_name') or 'TBA',
+                'room': r.get('room_name') or 'TBA',
+                'room_name': r.get('room_name') or 'TBA',
+                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                'section': section_name,
+                'year_level': _year_of_section(section_name),
+            })
+
+    try:
+        timeslots = (supabase.table('timeslot').select('*').execute().data) or []
+    except Exception:
+        timeslots = []
+
+    clean_sec = re.sub(r'[^a-zA-Z0-9_-]', '_', str(section_name))
+    filename = f"Section_Schedule_{clean_sec}.xlsx"
+
+    section_info = {
+        'section_name': section_name,
+        'year_level': _year_of_section(section_name),
+        'semester': semester_filter or (entries[0].get('semester', '') if entries else ''),
+        'major': major_filter or (entries[0].get('major', '') if entries else ''),
+    }
+
+    excel_buffer = generate_timetable_excel(
+        schedule_type='section',
+        entity_info=section_info,
+        entries=entries,
+        timeslots=timeslots,
+        filter_metadata={
+            'semester': section_info['semester'],
+            'year': section_info['year_level'],
+            'major': section_info['major'],
+            'program': program,
+        },
+        theme=selected_theme
+    )
+
+    return send_file(
+        excel_buffer,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/api/section_theme', methods=['GET', 'POST'])
+@login_required
+def api_section_theme():
+    """Get or update section export theme assignment."""
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or request.form.to_dict() or {}
+        section = (data.get('section') or data.get('section_name') or '').strip()
+        theme = (data.get('theme') or '').strip()
+        if not section:
+            return jsonify({'success': False, 'error': 'Section name is required'}), 400
+        # Validate against 7 allowed themes (case-insensitive)
+        matched = None
+        for t_name in EXCEL_THEMES:
+            if t_name.lower() == theme.lower():
+                matched = t_name
+                break
+        if not matched:
+            return jsonify({'success': False, 'error': f'Invalid theme. Allowed: {list(EXCEL_THEMES.keys())}'}), 400
+
+        saved_theme = set_section_theme(section, matched)
+        return jsonify({'success': True, 'section': section, 'theme': saved_theme})
+
+    section = request.args.get('section', '').strip()
+    if section:
+        return jsonify({'section': section, 'theme': get_section_theme(section)})
+    return jsonify({'themes': get_all_section_themes(), 'allowed_themes': list(EXCEL_THEMES.keys())})
+
+
 
 
 @app.route('/api/section_availability/<section_name>', methods=['GET'])

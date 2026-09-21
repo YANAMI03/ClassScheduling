@@ -8,9 +8,14 @@
         <h1 class="page-title">Professor Schedule: {{ professor_name }}</h1>
         <p class="page-subtitle">Interactive weekly timetable grid, free periods, and assigned workload details</p>
     </div>
-    <a href="/professor_schedule" class="btn btn-outline-secondary">
-        <i class="bx bx-arrow-back"></i> Back to Professor Schedule
-    </a>
+    <div class="d-flex align-items-center gap-2">
+        <a href="/professor_schedule/{{ professor.prof_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success" title="Export Professor Schedule to Excel">
+            <i class="bx bx-file me-1"></i> Export to Excel
+        </a>
+        <a href="/professor_schedule" class="btn btn-outline-secondary">
+            <i class="bx bx-arrow-back"></i> Back to Professor Schedule
+        </a>
+    </div>
 </div>
 
 {% if is_preview %}
