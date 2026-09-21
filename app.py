@@ -1,5 +1,5 @@
 from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from werkzeug.utils import secure_filename
 from functools import wraps
 import os
@@ -331,6 +331,27 @@ def _ensure_irregular_student_tables():
 
 _ensure_irregular_student_tables()
 
+def _set_delete_request_status(match_dict, status='approved'):
+    """Helper to update delete_requests status, is_read, and updated_at."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        q = supabase.table('delete_requests').update({
+            'status': status,
+            'is_read': False,
+            'updated_at': now_iso
+        })
+        for k, v in match_dict.items():
+            q = q.eq(k, v)
+        q.execute()
+    except Exception:
+        try:
+            q = supabase.table('delete_requests').update({'status': status})
+            for k, v in match_dict.items():
+                q = q.eq(k, v)
+            q.execute()
+        except Exception as err:
+            logging.debug(f"Failed to update delete_requests status: {err}")
+
 def _time_to_minutes(time_val):
     if not time_val:
         return 0
@@ -424,13 +445,36 @@ def inject_pending_requests():
             ).eq('status', 'pending').order('created_at', desc=True).execute()
             context['pending_delete_requests'] = _normalize_created_at(pending.data or [])
 
-        n_res = supabase.table('scheduler_notifications').select('*', count='exact').eq('user_id', user_id).eq('is_read', False).execute()
-        context['unread_notifications_count'] = n_res.count if n_res.count is not None else 0
+        # Derive notifications directly from delete_requests (Zero-Table)
+        try:
+            n_res = supabase.table('delete_requests').select('*', count='exact').eq('user_id', str(user_id)).in_('status', ['approved', 'rejected']).eq('is_read', False).execute()
+            context['unread_notifications_count'] = n_res.count if n_res.count is not None else 0
 
-        notifs = supabase.table('scheduler_notifications').select(
-            'id, user_id, request_id, message, status, is_read, created_at'
-        ).eq('user_id', user_id).order('created_at', desc=True).limit(50).execute()
-        context['scheduler_notifications'] = _normalize_created_at(notifs.data or [])
+            notifs = supabase.table('delete_requests').select(
+                'id, user_id, item_details, status, is_read, created_at, updated_at'
+            ).eq('user_id', str(user_id)).in_('status', ['approved', 'rejected']).order('updated_at', desc=True).limit(50).execute()
+            rows = notifs.data or []
+        except Exception:
+            # Fallback if updated_at / is_read columns are pending migration
+            notifs = supabase.table('delete_requests').select(
+                'id, user_id, item_details, status, created_at'
+            ).eq('user_id', str(user_id)).in_('status', ['approved', 'rejected']).order('created_at', desc=True).limit(50).execute()
+            rows = notifs.data or []
+            context['unread_notifications_count'] = len(rows)
+
+        derived_notifs = []
+        for r in rows:
+            st = r.get('status') or 'processed'
+            details = r.get('item_details') or 'item'
+            derived_notifs.append({
+                'id': r.get('id'),
+                'request_id': r.get('id'),
+                'message': f"Admin {st} the deletion of {details}.",
+                'status': st,
+                'is_read': r.get('is_read', False),
+                'created_at': r.get('updated_at') or r.get('created_at'),
+            })
+        context['scheduler_notifications'] = _normalize_created_at(derived_notifs)
     except Exception:
         pass
 
@@ -1871,7 +1915,7 @@ def delete_course(course_id):
         return resp or redirect(url_for('show_courses'))
     try:
         supabase.table('course').delete().eq('course_id', course_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'course').eq('item_id', str(course_id)).eq('status', 'pending').execute()
+        _set_delete_request_status({'item_type': 'course', 'item_id': str(course_id), 'status': 'pending'}, 'approved')
         log_activity('delete', 'course', f'Course ID {course_id}')
         flash('Deleted successfully', 'success')
         return redirect(url_for('show_courses'))
@@ -2003,7 +2047,7 @@ def delete_professor(professor_id):
         return resp or redirect(url_for('professors'))
     try:
         supabase.table('professor').delete().eq('prof_id', professor_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'professor').eq('item_id', str(professor_id)).eq('status', 'pending').execute()
+        _set_delete_request_status({'item_type': 'professor', 'item_id': str(professor_id), 'status': 'pending'}, 'approved')
 
         log_activity('delete', 'professor', f'Professor ID {professor_id}')
         flash('Deleted successfully', 'success')
@@ -2139,7 +2183,7 @@ def delete_room(room_id):
         return resp or redirect(url_for('rooms'))
     try:
         supabase.table('room').delete().eq('room_id', room_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'room').eq('item_id', str(room_id)).eq('status', 'pending').execute()
+        _set_delete_request_status({'item_type': 'room', 'item_id': str(room_id), 'status': 'pending'}, 'approved')
 
         log_activity('delete', 'room', f'Room ID {room_id}')
         flash('Deleted successfully', 'success')
@@ -2289,7 +2333,7 @@ def delete_prof_course_all(prof_id):
         return resp or redirect(url_for('prof_course'))
     try:
         supabase.table('prof_course').delete().eq('prof_id', prof_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'prof_course_all').eq('item_id', str(prof_id)).eq('status', 'pending').execute()
+        _set_delete_request_status({'item_type': 'prof_course_all', 'item_id': str(prof_id), 'status': 'pending'}, 'approved')
         log_activity('delete', 'prof_course', f'All assignments for Prof ID {prof_id}')
         flash('Deleted successfully', 'success')
         return redirect(url_for('prof_course'))
@@ -2304,7 +2348,7 @@ def delete_prof_course(prof_course_id):
         return resp or redirect(url_for('prof_course'))
     try:
         supabase.table('prof_course').delete().eq('prof_course_id', prof_course_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'prof_course').eq('item_id', str(prof_course_id)).eq('status', 'pending').execute()
+        _set_delete_request_status({'item_type': 'prof_course', 'item_id': str(prof_course_id), 'status': 'pending'}, 'approved')
         log_activity('delete', 'prof_course', f'Prof-Course ID {prof_course_id}')
         flash('Deleted successfully', 'success')
         return redirect(url_for('prof_course'))
@@ -3526,7 +3570,7 @@ def professor_schedule():
 
     try:
         sched_cols = 'prof_course_id, section, semester, major, program, day, class_start, class_end, prof_course(prof_id)'
-        query = supabase.table('schedule').select(sched_cols)
+        query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -3715,7 +3759,7 @@ def view_professor_schedule(professor_id):
             'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, semester, major, session_type, '
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name)), '
             'room(room_name)'
-        )
+        ).eq('archive', False)
         if prof_pc_ids:
             query = query.in_('prof_course_id', list(prof_pc_ids))
         else:
@@ -3830,7 +3874,7 @@ def api_professor_availability(professor_id):
         query = supabase.table('schedule').select(
             'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, session_type, '
             'prof_course(prof_course_id, prof_id, course(course_name)), room(room_name)'
-        )
+        ).eq('archive', False)
         if prof_pc_ids:
             query = query.in_('prof_course_id', list(prof_pc_ids))
         else:
@@ -3896,7 +3940,7 @@ def api_professor_workload(professor_id):
             if (p_cid and p_cid in prof_pc_ids) or (p_pid and str(p_pid) == str(professor_id)):
                 entries.append(p_entry)
     else:
-        query = supabase.table('schedule').select('class_start, class_end, day, prof_course_id')
+        query = supabase.table('schedule').select('class_start, class_end, day, prof_course_id').eq('archive', False)
         if prof_pc_ids:
             query = query.in_('prof_course_id', list(prof_pc_ids))
         else:
@@ -3927,7 +3971,7 @@ def room_schedule():
 
     try:
         sched_cols = 'prof_course_id, room_id, section, semester, major, program, prof_course(prof_id)'
-        query = supabase.table('schedule').select(sched_cols)
+        query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -4082,7 +4126,7 @@ def view_room_schedule(room_id):
             'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, semester, major, session_type, '
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
             'room(room_name)'
-        ).eq('room_id', room_id)
+        ).eq('room_id', room_id).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -4181,7 +4225,7 @@ def api_room_availability(room_id):
             rows = (supabase.table('schedule').select(
                 'schedule_id, prof_course_id, room_id, day, class_start, class_end, section, session_type, '
                 'prof_course(course(course_name), professor(first_name, last_name))'
-            ).eq('room_id', room_id).execute().data) or []
+            ).eq('room_id', room_id).eq('archive', False).execute().data) or []
 
             for row in rows:
                 pc = _rel(row, 'prof_course') or {}
@@ -4240,7 +4284,7 @@ def schedules():
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
             'room(room_name)'
         )
-        query = supabase.table('schedule').select(sched_cols)
+        query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
         if user_role == 'admin':
             if program_filter and program_filter.lower() != 'all':
@@ -4467,7 +4511,7 @@ def view_schedule(section_name):
             'schedule_id, day, class_start, class_end, session_type, semester, major, prof_course_id, room_id, '
             'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
             'room(room_name)'
-        ).eq('section', section_name)
+        ).eq('section', section_name).eq('archive', False)
 
         if user_role == 'Viewer' and program:
             query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
@@ -4631,7 +4675,7 @@ def api_section_availability(section_name):
     else:
         rows = (supabase.table('schedule').select(
             'schedule_id, day, class_start, class_end, session_type, prof_course(course(course_name), professor(first_name, last_name)), room(room_name)'
-        ).eq('section', section_name).execute().data) or []
+        ).eq('section', section_name).eq('archive', False).execute().data) or []
         for row in rows:
             pc = _rel(row, 'prof_course') or {}
             c = _rel(pc, 'course') or {}
@@ -4679,10 +4723,10 @@ def delete_schedule(schedule_id):
             return redirect(url_for('view_schedule', section_name=section_name, semester=semester, major=major))
         return redirect(url_for('schedules'))
     try:
-        supabase.table('schedule').delete().eq('schedule_id', schedule_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'schedule').eq('item_id', str(schedule_id)).eq('status', 'pending').execute()
-        log_activity('delete', 'schedule', f'Schedule ID {schedule_id} in {section_name}')
-        flash('Deleted successfully', 'success')
+        supabase.table('schedule').update({'archive': True}).eq('schedule_id', schedule_id).execute()
+        _set_delete_request_status({'item_type': 'schedule', 'item_id': str(schedule_id), 'status': 'pending'}, 'approved')
+        log_activity('archive', 'schedule', f'Schedule ID {schedule_id} in {section_name}')
+        flash('Schedule moved to archive successfully', 'success')
     except Exception as err:
         return f"Error: {err}"
 
@@ -4704,7 +4748,7 @@ def delete_section_schedule(section_name):
         return resp or redirect(url_for('schedules'))
 
     try:
-        query = supabase.table('schedule').delete().eq('section', section_name)
+        query = supabase.table('schedule').update({'archive': True}).eq('section', section_name)
 
         if user_role == 'Viewer':
             query = query.eq('program', program)
@@ -4715,9 +4759,9 @@ def delete_section_schedule(section_name):
             query = query.eq('major', major)
 
         query.execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'section_schedule').eq('item_id', str(section_name)).eq('status', 'pending').execute()
-        log_activity('delete', 'schedule', f'All entries for section {section_name}')
-        flash('Deleted successfully', 'success')
+        _set_delete_request_status({'item_type': 'section_schedule', 'item_id': str(section_name), 'status': 'pending'}, 'approved')
+        log_activity('archive', 'schedule', f'All entries for section {section_name}')
+        flash('Section schedule moved to archive successfully', 'success')
     except Exception as err:
         if request.method == 'POST':
             return jsonify({'success': False, 'message': 'Something went wrong. Please try again.'}), 500
@@ -4727,7 +4771,7 @@ def delete_section_schedule(section_name):
     session['generated_sections'] = [s for s in sections if str(s.get('section')) != str(section_name)]
 
     if request.method == 'POST':
-        return jsonify({'success': True, 'message': 'Deleted successfully.'})
+        return jsonify({'success': True, 'message': 'Section schedule moved to archive successfully.'})
     return redirect(url_for('schedules'))
 
 
@@ -4756,18 +4800,18 @@ def delete_all_schedules():
         if not check.session:
             return jsonify({'success': False, 'message': 'Incorrect password.'}), 401
 
-        # Admin and Scheduler can delete all schedules, Viewer can only delete their program's schedules
+        # Admin and Scheduler can archive all schedules, Viewer can only archive their program's schedules
         if user_role == 'Viewer' and program:
-            supabase.table('schedule').delete().eq('program', program).execute()
+            supabase.table('schedule').update({'archive': True}).eq('program', program).execute()
         else:
-            supabase.table('schedule').delete().neq('schedule_id', 0).execute()
+            supabase.table('schedule').update({'archive': True}).neq('schedule_id', 0).execute()
     except Exception:
         return jsonify({'success': False, 'message': 'Something went wrong. Please try again.'}), 500
 
     session['generated_sections'] = []
-    log_activity('delete', 'schedule', 'Deleted all schedules')
-    flash('Deleted successfully', 'success')
-    return jsonify({'success': True, 'message': 'All schedules were deleted successfully.'})
+    log_activity('archive', 'schedule', 'Archived all schedules')
+    flash('All schedules moved to archive successfully', 'success')
+    return jsonify({'success': True, 'message': 'All schedules were moved to archive successfully.'})
 
 
 @app.route('/edit_schedule/<section_name>', methods=['POST'])
@@ -4790,7 +4834,7 @@ def edit_schedule(section_name):
             'section': new_section_name,
             'semester': semester,
             'major': major,
-        }).eq('section', section_name)
+        }).eq('section', section_name).eq('archive', False)
         if program and session.get('role') == 'Viewer':
             query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
         query.execute()
@@ -4845,7 +4889,7 @@ def edit_schedule_entry(schedule_id):
         query = supabase.table('schedule').select(
             'schedule_id, prof_course_id, room_id, day, class_start, class_end, session_type, section, semester, major, program, '
             'prof_course(prof_course_id, prof_id, course_id, course(course_name), professor(first_name, last_name))'
-        ).eq('schedule_id', schedule_id)
+        ).eq('schedule_id', schedule_id).eq('archive', False)
         if user_role == 'Viewer' and program:
             query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
 
@@ -5047,7 +5091,7 @@ def delete_timeslot(timeslot_id):
         return resp or redirect(url_for('timeslot'))
     try:
         supabase.table('timeslot').delete().eq('timeslot_id', timeslot_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'timeslot').eq('item_id', str(timeslot_id)).eq('status', 'pending').execute()
+        _set_delete_request_status({'item_type': 'timeslot', 'item_id': str(timeslot_id), 'status': 'pending'}, 'approved')
         log_activity('delete', 'timeslot', f'Timeslot ID {timeslot_id}')
         flash('Deleted successfully', 'success')
         return redirect(url_for('timeslot'))
@@ -5109,26 +5153,18 @@ def approve_delete_request(req_id):
         elif item_type == 'prof_course_all':
             supabase.table('prof_course').delete().eq('prof_id', item_id).execute()
         elif item_type == 'schedule':
-            supabase.table('schedule').delete().eq('schedule_id', item_id).execute()
+            supabase.table('schedule').update({'archive': True}).eq('schedule_id', item_id).execute()
         elif item_type == 'section_schedule':
-            supabase.table('schedule').delete().eq('section', item_id).execute()
+            supabase.table('schedule').update({'archive': True}).eq('section', item_id).execute()
         elif item_type == 'all_schedules':
             program = session.get('program', '')
             user_role = session.get('role', '')
             if user_role == 'Viewer' and program:
-                supabase.table('schedule').delete().eq('program', program).execute()
+                supabase.table('schedule').update({'archive': True}).eq('program', program).execute()
             else:
-                supabase.table('schedule').delete().neq('schedule_id', 0).execute()
+                supabase.table('schedule').update({'archive': True}).neq('schedule_id', 0).execute()
 
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('id', req_id).execute()
-
-        notif_msg = f"Admin approved the deletion of {item_details}."
-        supabase.table('scheduler_notifications').insert({
-            'user_id': str(req['user_id']) if req.get('user_id') else None,
-            'request_id': req_id,
-            'message': notif_msg,
-            'status': 'approved',
-        }).execute()
+        _set_delete_request_status({'id': req_id}, 'approved')
 
         cnt_res = supabase.table('delete_requests').select('*', count='exact').eq('status', 'pending').execute()
         rem_cnt = cnt_res.count if cnt_res.count is not None else 0
@@ -5161,15 +5197,7 @@ def reject_delete_request(req_id):
             flash(msg, 'error')
             return redirect(request.referrer or url_for('schedules'))
 
-        supabase.table('delete_requests').update({'status': 'rejected'}).eq('id', req_id).execute()
-
-        notif_msg = f"Admin rejected the deletion of {req['item_details']}."
-        supabase.table('scheduler_notifications').insert({
-            'user_id': str(req['user_id']) if req.get('user_id') else None,
-            'request_id': req_id,
-            'message': notif_msg,
-            'status': 'rejected',
-        }).execute()
+        _set_delete_request_status({'id': req_id}, 'rejected')
 
         cnt_res = supabase.table('delete_requests').select('*', count='exact').eq('status', 'pending').execute()
         rem_cnt = cnt_res.count if cnt_res.count is not None else 0
@@ -5195,7 +5223,7 @@ def mark_notifications_read():
     if not user_id:
         return jsonify({'success': False, 'message': 'User not logged in.'}), 401
     try:
-        supabase.table('scheduler_notifications').update({'is_read': True}).eq('user_id', user_id).execute()
+        supabase.table('delete_requests').update({'is_read': True}).eq('user_id', str(user_id)).in_('status', ['approved', 'rejected']).eq('is_read', False).execute()
         return jsonify({'success': True})
     except Exception as err:
         return jsonify({'success': False, 'message': str(err)}), 500
@@ -5296,7 +5324,7 @@ def delete_irregular_student(student_id):
 
     try:
         supabase.table('irregular_students').delete().eq('student_id', student_id).execute()
-        supabase.table('delete_requests').update({'status': 'approved'}).eq('item_type', 'irregular_student').eq('item_id', str(student_id)).eq('status', 'pending').execute()
+        _set_delete_request_status({'item_type': 'irregular_student', 'item_id': str(student_id), 'status': 'pending'}, 'approved')
 
         log_activity('delete', 'irregular_student', f'Irregular Student ID {student_id}')
         flash('Deleted successfully', 'success')
@@ -5358,7 +5386,7 @@ def manage_irregular_student_schedule(student_id):
         'schedule_id, section, day, class_start, class_end, room_id, prof_course_id, session_type, '
         'prof_course(prof_course_id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
         'course(course_name), room(room_name), professor(first_name, last_name)'
-    ).eq('program', student['program'])
+    ).eq('program', student['program']).eq('archive', False)
     if semester_filter:
         sched_query = sched_query.eq('semester', semester_filter)
     sched_rows = sched_query.execute().data or []
@@ -5527,7 +5555,7 @@ def assign_irregular_section(student_id):
     pc_res = supabase.table('prof_course').select('prof_course_id').eq('course_id', course_id).execute()
     c_pc_ids = [item['prof_course_id'] for item in (pc_res.data or []) if item.get('prof_course_id')]
     if c_pc_ids:
-        res = supabase.table('schedule').select('*, prof_course(course_id, course(course_name))').in_('prof_course_id', c_pc_ids).eq('section', section).execute()
+        res = supabase.table('schedule').select('*, prof_course(course_id, course(course_name))').in_('prof_course_id', c_pc_ids).eq('section', section).eq('archive', False).execute()
     else:
         res = None
     new_entries = []
@@ -5592,7 +5620,7 @@ def check_schedule_exists():
         return jsonify({'exists': False})
 
     try:
-        query = supabase.table('schedule').select('section, program, major').eq('semester', semester)
+        query = supabase.table('schedule').select('section, program, major').eq('semester', semester).eq('archive', False)
 
         if user_role == 'Viewer':
             query = query.eq('program', program)
@@ -6006,7 +6034,7 @@ def generate_schedule():
         preview_entries = []
 
         # Load existing bookings from DB to avoid collision across different programs in the SAME semester
-        existing_rows = (supabase.table('schedule').select('section, room_id, day, class_start, class_end, prof_course_id, prof_course(prof_id), semester, program, major').execute().data) or []
+        existing_rows = (supabase.table('schedule').select('section, room_id, day, class_start, class_end, prof_course_id, prof_course(prof_id), semester, program, major').eq('archive', False).execute().data) or []
         for existing in existing_rows:
             # ONLY consider rows for the EXACT same semester that belong to a DIFFERENT program
             # (different semesters do not run simultaneously, so they must NOT block rooms or professors)
@@ -6945,6 +6973,7 @@ def confirm_preview():
                 'semester': entry_sem,
                 'major': entry.get('major'),
                 'program': entry_prog,
+                'archive': False,
             })
 
         if not rows:
@@ -6985,42 +7014,16 @@ def confirm_preview():
                 rpc_success = False
 
         if not rpc_success:
-            # Fallback: Archive existing active records for this program, delete them, and insert new records
+            # Fallback: Soft-archive existing active records for this program by setting archive = True
             try:
-                old_query = supabase.table('schedule').select('*')
+                old_update = supabase.table('schedule').update({'archive': True}).eq('archive', False)
+                if sem_val:
+                    old_update = old_update.eq('semester', sem_val)
                 if prog_val and str(prog_val).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                    old_query = old_query.or_(f'program.eq.{prog_val},program.is.null,program.eq.')
-                old_rows = old_query.execute().data or []
-                if old_rows:
-                    batch_id = str(uuid.uuid4())
-                    archive_payload = []
-                    for r in old_rows:
-                        archive_payload.append({
-                            'batch_id': batch_id,
-                            'original_schedule_id': r.get('schedule_id'),
-                            'prof_course_id': r.get('prof_course_id'),
-                            'room_id': r.get('room_id'),
-                            'day': r.get('day'),
-                            'class_start': _to_time_string(r.get('class_start')),
-                            'class_end': _to_time_string(r.get('class_end')),
-                            'session_type': r.get('session_type') or 'Lecture',
-                            'section': r.get('section'),
-                            'semester': r.get('semester'),
-                            'major': r.get('major'),
-                            'program': r.get('program'),
-                            'archived_by': archived_by,
-                            'archive_reason': f'Replaced on schedule confirmation of {sem_val}'
-                        })
-                    supabase.table('schedule_archive').insert(archive_payload).execute()
+                    old_update = old_update.or_(f'program.eq.{prog_val},program.is.null,program.eq.')
+                old_update.execute()
             except Exception as arc_err:
-                logging.warning(f"[confirm_preview] Fallback archive insert warning: {arc_err}")
-
-            del_query = supabase.table('schedule').delete()
-            if prog_val and str(prog_val).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                del_query = del_query.or_(f'program.eq.{prog_val},program.is.null,program.eq.')
-            else:
-                del_query = del_query.neq('schedule_id', -1)
-            del_query.execute()
+                logging.warning(f"[confirm_preview] Fallback soft-archive warning: {arc_err}")
 
             # Batch insert into schedule table (in chunks to avoid payload limits)
             chunk_size = 50
@@ -7069,7 +7072,7 @@ def discard_preview():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# SCHEDULE ARCHIVE & RESTORATION
+# SCHEDULE ARCHIVE & RESTORATION (Based on schedule.archive = True)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.route('/schedule_archive')
@@ -7084,7 +7087,7 @@ def schedule_archive():
 
     batches_list = []
     try:
-        # 1. Primary: Database RPC aggregation (unlimited batches, grouped by batch_id directly in Postgres)
+        # 1. Primary: Database RPC aggregation if function is installed
         rpc_success = False
         if hasattr(supabase, 'rpc'):
             try:
@@ -7115,27 +7118,27 @@ def schedule_archive():
                             'archived_at_raw': arch_at_raw,
                             'archived_at_fmt': arch_at_fmt,
                             'archived_by': r.get('archived_by') or 'Scheduler',
-                            'archive_reason': r.get('archive_reason') or 'Replaced on confirmation',
+                            'archive_reason': r.get('archive_reason') or 'Soft-archived schedule',
                             'entry_count': int(r.get('entry_count') or 0),
                             'section_count': int(r.get('section_count') or len(secs)),
                             'sections_preview': ', '.join(secs[:6]) + ('...' if len(secs) > 6 else ''),
                         })
             except Exception as rpc_err:
-                logging.warning(f"get_schedule_archive_batches RPC failed ({rpc_err}), using paginated table query.")
+                logging.debug(f"get_schedule_archive_batches RPC skipped ({rpc_err}), using schedule table archive=True query.")
                 rpc_success = False
 
         if not rpc_success:
-            # 2. Fallback: Paginated table query across all chunks to guarantee unlimited batches without 1000-row clipping
+            # 2. Query schedule table for soft-archived entries (archive = True)
             all_rows = []
             page_size = 1000
             start = 0
             while True:
-                query = supabase.table('schedule_archive').select('batch_id, semester, program, section, major, archived_at, archived_by, archive_reason')
+                query = supabase.table('schedule').select('schedule_id, semester, program, section, major, archive').eq('archive', True)
                 if effective_program:
                     query = query.eq('program', effective_program)
                 if semester_filter:
                     query = query.eq('semester', semester_filter)
-                chunk_res = query.order('archived_at', desc=True).range(start, start + page_size - 1).execute()
+                chunk_res = query.range(start, start + page_size - 1).execute()
                 chunk_data = chunk_res.data or []
                 all_rows.extend(chunk_data)
                 if len(chunk_data) < page_size:
@@ -7144,27 +7147,18 @@ def schedule_archive():
 
             batches_map = {}
             for r in all_rows:
-                bid = str(r.get('batch_id') or '')
-                if not bid:
-                    continue
+                sem = r.get('semester') or '1st Semester'
+                prog = r.get('program') or ''
+                bid = str(r.get('batch_id') or f"{sem.replace(' ', '_')}__{prog or 'all'}")
                 if bid not in batches_map:
-                    arch_at_raw = r.get('archived_at')
-                    arch_at_fmt = str(arch_at_raw)
-                    if arch_at_raw:
-                        try:
-                            dt = datetime.fromisoformat(str(arch_at_raw).replace('Z', '+00:00'))
-                            arch_at_fmt = dt.strftime('%b %d, %Y - %I:%M %p')
-                        except Exception:
-                            arch_at_fmt = str(arch_at_raw)
-
                     batches_map[bid] = {
                         'batch_id': bid,
-                        'semester': r.get('semester') or '1st Semester',
-                        'program': r.get('program') or '',
-                        'archived_at_raw': arch_at_raw,
-                        'archived_at_fmt': arch_at_fmt,
-                        'archived_by': r.get('archived_by') or 'Scheduler',
-                        'archive_reason': r.get('archive_reason') or 'Replaced on confirmation',
+                        'semester': sem,
+                        'program': prog,
+                        'archived_at_raw': None,
+                        'archived_at_fmt': 'Archived Schedule',
+                        'archived_by': 'Scheduler',
+                        'archive_reason': 'Archived schedule',
                         'entry_count': 0,
                         'sections_set': set(),
                     }
@@ -7178,7 +7172,7 @@ def schedule_archive():
                 b['sections_preview'] = ', '.join(sorted_secs[:6]) + ('...' if len(sorted_secs) > 6 else '')
                 batches_list.append(b)
 
-            batches_list.sort(key=lambda x: str(x.get('archived_at_raw') or ''), reverse=True)
+            batches_list.sort(key=lambda x: (x.get('semester', ''), x.get('program', '')), reverse=True)
 
         semester_options = ['1st Semester', '2nd Semester']
         program_options = ['BSIT']
@@ -7206,7 +7200,20 @@ def schedule_archive():
 @login_required
 def view_schedule_archive_batch(batch_id):
     try:
-        res = supabase.table('schedule_archive').select('*, course(course_name), professor(first_name, last_name), room(room_name)').eq('batch_id', batch_id).execute()
+        query = supabase.table('schedule').select(
+            '*, prof_course(course_id, prof_id, course(course_name), professor(first_name, last_name)), course(course_name), professor(first_name, last_name), room(room_name)'
+        ).eq('archive', True)
+
+        if '__' in batch_id:
+            sem_part, prog_part = batch_id.split('__', 1)
+            sem_name = sem_part.replace('_', ' ')
+            query = query.eq('semester', sem_name)
+            if prog_part and prog_part != 'all':
+                query = query.eq('program', prog_part)
+        else:
+            query = query.or_(f"batch_id.eq.{batch_id},semester.eq.{batch_id}")
+
+        res = query.execute()
         rows = res.data or []
         if not rows:
             flash('Archived schedule version not found.', 'warning')
@@ -7214,7 +7221,7 @@ def view_schedule_archive_batch(batch_id):
 
         first_row = rows[0]
         arch_at_raw = first_row.get('archived_at')
-        arch_at_fmt = str(arch_at_raw)
+        arch_at_fmt = 'Archived Schedule'
         if arch_at_raw:
             try:
                 dt = datetime.fromisoformat(str(arch_at_raw).replace('Z', '+00:00'))
@@ -7228,7 +7235,7 @@ def view_schedule_archive_batch(batch_id):
             'program': first_row.get('program') or '',
             'archived_at_fmt': arch_at_fmt,
             'archived_by': first_row.get('archived_by') or 'Scheduler',
-            'archive_reason': first_row.get('archive_reason') or '',
+            'archive_reason': first_row.get('archive_reason') or 'Archived schedule',
         }
 
         sections_by_key = {}
@@ -7339,79 +7346,47 @@ def restore_schedule_archive(batch_id):
                 rpc_success = False
 
         if not rpc_success:
-            # Fallback restore logic:
-            arch_rows = (supabase.table('schedule_archive').select('*').eq('batch_id', batch_id).execute().data) or []
-            if not arch_rows:
-                flash('Archived batch not found.', 'warning')
-                return redirect(url_for('schedule_archive'))
+            # Fallback restore logic: update archive flag in schedule table
+            target_sem = '1st Semester'
+            target_prog = ''
+            if '__' in batch_id:
+                sem_part, prog_part = batch_id.split('__', 1)
+                target_sem = sem_part.replace('_', ' ')
+                target_prog = '' if prog_part == 'all' else prog_part
+            else:
+                sample_q = supabase.table('schedule').select('semester, program').eq('archive', True)
+                sample_rows = sample_q.execute().data or []
+                if sample_rows:
+                    target_sem = sample_rows[0].get('semester') or '1st Semester'
+                    target_prog = sample_rows[0].get('program') or ''
 
-            target_sem = arch_rows[0].get('semester') or '1st Semester'
-            target_prog = arch_rows[0].get('program') or ''
+            sem_part_clean = target_sem.strip()
+            if sem_part_clean in ('1st Semester', '1st', '1'):
+                t_sem_aliases = ['1st Semester', '1st', '1']
+            elif sem_part_clean in ('2nd Semester', '2nd', '2'):
+                t_sem_aliases = ['2nd Semester', '2nd', '2']
+            else:
+                t_sem_aliases = [sem_part_clean]
 
-            curr_query = supabase.table('schedule').select('*').eq('semester', target_sem)
+            # 1. Soft-archive currently active schedules for target semester ONLY (set archive = True)
+            archive_curr_q = supabase.table('schedule').update({'archive': True}).in_('semester', t_sem_aliases).eq('archive', False)
             if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                curr_query = curr_query.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
-            curr_rows = curr_query.execute().data or []
+                archive_curr_q = archive_curr_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
+            archive_curr_q.execute()
 
-            if curr_rows:
-                new_batch_id = str(uuid.uuid4())
-                archive_current = []
-                for cr in curr_rows:
-                    archive_current.append({
-                        'batch_id': new_batch_id,
-                        'original_schedule_id': cr.get('schedule_id'),
-                        'prof_course_id': cr.get('prof_course_id'),
-                        'room_id': cr.get('room_id'),
-                        'day': cr.get('day'),
-                        'class_start': _to_time_string(cr.get('class_start')),
-                        'class_end': _to_time_string(cr.get('class_end')),
-                        'session_type': cr.get('session_type') or 'Lecture',
-                        'section': cr.get('section'),
-                        'semester': cr.get('semester'),
-                        'major': cr.get('major'),
-                        'program': cr.get('program'),
-                        'archived_by': restored_by,
-                        'archive_reason': f'Archived prior to restoring batch {batch_id}'
-                    })
-                supabase.table('schedule_archive').insert(archive_current).execute()
-
-            del_q = supabase.table('schedule').delete().eq('semester', target_sem)
+            # 2. Reactivate archived schedules for target semester ONLY (set archive = False)
+            restore_q = supabase.table('schedule').update({'archive': False}).in_('semester', t_sem_aliases).eq('archive', True)
             if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                del_q = del_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
-            del_q.execute()
+                restore_q = restore_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
+            restore_res = restore_q.execute()
+            restored_count = len(restore_res.data or []) if restore_res and restore_res.data else 'all'
 
-            restore_payload = []
-            for ar in arch_rows:
-                pcid = ar.get('prof_course_id')
-                if not pcid and ar.get('prof_id') and ar.get('course_id'):
-                    chk = supabase.table('prof_course').select('prof_course_id').eq('prof_id', ar.get('prof_id')).eq('course_id', ar.get('course_id')).execute()
-                    row_chk = _first(chk.data or [])
-                    if row_chk:
-                        pcid = row_chk.get('prof_course_id')
-
-                restore_payload.append({
-                    'prof_course_id': pcid,
-                    'room_id': ar.get('room_id'),
-                    'day': ar.get('day'),
-                    'class_start': _to_time_string(ar.get('class_start')),
-                    'class_end': _to_time_string(ar.get('class_end')),
-                    'session_type': ar.get('session_type') or 'Lecture',
-                    'section': ar.get('section'),
-                    'semester': ar.get('semester') or target_sem,
-                    'major': ar.get('major'),
-                    'program': ar.get('program') or target_prog,
-                })
-
-            chunk_size = 50
-            for i in range(0, len(restore_payload), chunk_size):
-                chunk = restore_payload[i:i + chunk_size]
-                supabase.table('schedule').insert(chunk).execute()
-
-            res_data = {'semester': target_sem, 'restored_count': len(restore_payload)}
+            res_data = {'semester': target_sem, 'restored_count': restored_count}
 
         target_semester = (res_data or {}).get('semester') or '1st Semester'
         count = (res_data or {}).get('restored_count') or 'all'
 
+        session['active_semester'] = target_semester
         log_activity('restore', 'schedule', f'Restored schedule batch {batch_id} ({target_semester})')
         flash(f'Archived schedule version restored successfully! ({count} classes reactivated)', 'success')
         return redirect(url_for('schedules', semester=target_semester))
@@ -7431,8 +7406,21 @@ def delete_schedule_archive(batch_id):
         return redirect(url_for('schedule_archive'))
 
     try:
-        supabase.table('schedule_archive').delete().eq('batch_id', batch_id).execute()
-        log_activity('delete', 'schedule_archive', f'Deleted archived schedule batch {batch_id}')
+        target_sem = ''
+        target_prog = ''
+        if '__' in batch_id:
+            sem_part, prog_part = batch_id.split('__', 1)
+            target_sem = sem_part.replace('_', ' ')
+            target_prog = '' if prog_part == 'all' else prog_part
+
+        del_q = supabase.table('schedule').delete().eq('archive', True)
+        if target_sem:
+            del_q = del_q.eq('semester', target_sem)
+        if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
+            del_q = del_q.eq('program', target_prog)
+        del_q.execute()
+
+        log_activity('delete', 'schedule', f'Deleted archived schedule batch {batch_id}')
         flash('Archived schedule version deleted successfully.', 'success')
     except Exception as err:
         logging.exception(f"Error deleting archived schedule batch {batch_id}: {err}")
@@ -7454,11 +7442,9 @@ BACKUP_TABLES_INSERT_ORDER = [
     'course',
     'prof_course',
     'schedule',
-    'schedule_archive',
     'irregular_students',
     'irregular_student_schedule',
     'delete_requests',
-    'scheduler_notifications',
     'activity_log',
 ]
 
@@ -7473,11 +7459,9 @@ BACKUP_PKS = {
     'course': 'course_id',
     'prof_course': 'prof_course_id',
     'schedule': 'schedule_id',
-    'schedule_archive': 'archive_id',
     'irregular_students': 'student_id',
     'irregular_student_schedule': 'id',
     'delete_requests': 'id',
-    'scheduler_notifications': 'id',
     'activity_log': 'id',
 }
 
@@ -7490,12 +7474,16 @@ def _fetch_all_table_data(table_name, page_size=1000):
     all_rows = []
     start = 0
     while True:
-        res = supabase.table(table_name).select('*').range(start, start + page_size - 1).execute()
-        rows = res.data or []
-        all_rows.extend(rows)
-        if len(rows) < page_size:
+        try:
+            res = supabase.table(table_name).select('*').range(start, start + page_size - 1).execute()
+            rows = res.data or []
+            all_rows.extend(rows)
+            if len(rows) < page_size:
+                break
+            start += page_size
+        except Exception as e:
+            logging.warning(f"Could not fetch data for table {table_name}: {e}")
             break
-        start += page_size
     return all_rows
 
 

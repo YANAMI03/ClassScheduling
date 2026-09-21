@@ -34,50 +34,57 @@ class FakeArchiveQuery:
     def delete(self, *args, **kwargs):
         return self
 
+    def update(self, *args, **kwargs):
+        return self
+
     def insert(self, *args, **kwargs):
         return self
 
     def execute(self):
-        if self.table_name == 'schedule_archive':
-            if self._filters.get('batch_id') == 'batch-1':
+        if self.table_name in ('schedule_archive', 'schedule'):
+            if self._filters.get('archive') is True or self._filters.get('batch_id') == 'batch-1' or self.table_name == 'schedule_archive':
+                if self._filters.get('batch_id') == 'batch-1' or self._filters.get('archive') is True:
+                    return FakeResponse([
+                        {
+                            'schedule_id': 1,
+                            'archive_id': 1,
+                            'batch_id': 'batch-1',
+                            'course_id': 101,
+                            'prof_id': 1,
+                            'room_id': 1,
+                            'day': 'Monday',
+                            'class_start': '08:00:00',
+                            'class_end': '09:00:00',
+                            'session_type': 'Lecture',
+                            'section': '1A',
+                            'semester': '1st Semester',
+                            'major': None,
+                            'program': 'BSIT',
+                            'archive': True,
+                            'archived_at': '2026-09-01T12:00:00Z',
+                            'archived_by': 'Scheduler',
+                            'archive_reason': 'Replaced on confirmation',
+                            'course': {'course_name': 'IT101 - Intro to Computing'},
+                            'professor': {'first_name': 'Alan', 'last_name': 'Turing'},
+                            'room': {'room_name': 'Room 101'},
+                        }
+                    ])
                 return FakeResponse([
                     {
+                        'schedule_id': 1,
                         'archive_id': 1,
                         'batch_id': 'batch-1',
                         'course_id': 101,
-                        'prof_id': 1,
-                        'room_id': 1,
-                        'day': 'Monday',
-                        'class_start': '08:00:00',
-                        'class_end': '09:00:00',
-                        'session_type': 'Lecture',
                         'section': '1A',
                         'semester': '1st Semester',
                         'major': None,
                         'program': 'BSIT',
+                        'archive': True,
                         'archived_at': '2026-09-01T12:00:00Z',
                         'archived_by': 'Scheduler',
                         'archive_reason': 'Replaced on confirmation',
-                        'course': {'course_name': 'IT101 - Intro to Computing'},
-                        'professor': {'first_name': 'Alan', 'last_name': 'Turing'},
-                        'room': {'room_name': 'Room 101'},
                     }
                 ])
-            return FakeResponse([
-                {
-                    'archive_id': 1,
-                    'batch_id': 'batch-1',
-                    'course_id': 101,
-                    'section': '1A',
-                    'semester': '1st Semester',
-                    'major': None,
-                    'program': 'BSIT',
-                    'archived_at': '2026-09-01T12:00:00Z',
-                    'archived_by': 'Scheduler',
-                    'archive_reason': 'Replaced on confirmation',
-                }
-            ])
-        elif self.table_name == 'schedule':
             return FakeResponse([])
         elif self.table_name == 'program_department':
             return FakeResponse({'department_name': 'CICT'})
