@@ -1,0 +1,1408 @@
+{
+  "professors": [
+    {
+      "prof_id": 49,
+      "first_name": "Tristan",
+      "department": "CICT",
+      "last_name": "Alvarez",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 55,
+      "first_name": "Professor",
+      "department": "CICT",
+      "last_name": "A",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 5,
+      "first_name": "Gean",
+      "department": "CICT",
+      "last_name": "Grvic",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 1,
+      "first_name": "Henry",
+      "department": "CICT",
+      "last_name": "Roque",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 2,
+      "first_name": "Pwet",
+      "department": "CICT",
+      "last_name": "Vien",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 54,
+      "first_name": "Bea",
+      "department": "CICT",
+      "last_name": "Morales",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 3,
+      "first_name": "Burst",
+      "department": "CICT",
+      "last_name": "Fade",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 4,
+      "first_name": "Jerome",
+      "department": "CICT",
+      "last_name": "Paulo",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 16,
+      "first_name": "Maria",
+      "department": "CICT",
+      "last_name": "Santos",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 17,
+      "first_name": "Jose",
+      "department": "CICT",
+      "last_name": "Reyes",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 18,
+      "first_name": "Kevin",
+      "department": "CICT",
+      "last_name": "Cruz",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 19,
+      "first_name": "Laura",
+      "department": "CICT",
+      "last_name": "Garcia",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 20,
+      "first_name": "Antonio",
+      "department": "CICT",
+      "last_name": "Mendoza",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 21,
+      "first_name": "Rachel",
+      "department": "CICT",
+      "last_name": "Torres",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 22,
+      "first_name": "Steven",
+      "department": "CICT",
+      "last_name": "Villanueva",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 23,
+      "first_name": "Michelle",
+      "department": "CICT",
+      "last_name": "Ramos",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 24,
+      "first_name": "Carlos",
+      "department": "CICT",
+      "last_name": "Castro",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 25,
+      "first_name": "Amanda",
+      "department": "CICT",
+      "last_name": "Flores",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 26,
+      "first_name": "Micko",
+      "department": "CICT",
+      "last_name": "Pogi",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 29,
+      "first_name": "lad",
+      "department": "CICT",
+      "last_name": "grvic",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 30,
+      "first_name": "Micko",
+      "department": "CICT",
+      "last_name": "La madrid",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 31,
+      "first_name": "Alexander",
+      "department": "CICT",
+      "last_name": "Tan",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 32,
+      "first_name": "Bernadette",
+      "department": "CICT",
+      "last_name": "Aquino",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 33,
+      "first_name": "Christian",
+      "department": "CICT",
+      "last_name": "del Rosario",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 34,
+      "first_name": "Diana",
+      "department": "CICT",
+      "last_name": "Navarro",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 35,
+      "first_name": "Eduardo",
+      "department": "CICT",
+      "last_name": "Castillo",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 36,
+      "first_name": "Fatima",
+      "department": "CICT",
+      "last_name": "Soriano",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 37,
+      "first_name": "Gabriel",
+      "department": "CICT",
+      "last_name": "Bautista",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 38,
+      "first_name": "Hannah",
+      "department": "CICT",
+      "last_name": "Mercado",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 39,
+      "first_name": "Ivan",
+      "department": "CICT",
+      "last_name": "Padilla",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 40,
+      "first_name": "Jasmine",
+      "department": "CICT",
+      "last_name": "Lim",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 41,
+      "first_name": "Kenneth",
+      "department": "CICT",
+      "last_name": "Salazar",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 42,
+      "first_name": "Lorraine",
+      "department": "CICT",
+      "last_name": "Valdez",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 43,
+      "first_name": "Mark",
+      "department": "CICT",
+      "last_name": "Villanueva",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 44,
+      "first_name": "Nicole",
+      "department": "CICT",
+      "last_name": "Domingo",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 45,
+      "first_name": "Oliver",
+      "department": "CICT",
+      "last_name": "Pascual",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 46,
+      "first_name": "Patricia",
+      "department": "CICT",
+      "last_name": "Santiago",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 47,
+      "first_name": "Rafael",
+      "department": "CICT",
+      "last_name": "Estrada",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 48,
+      "first_name": "Stephanie",
+      "department": "CICT",
+      "last_name": "Guerrero",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 50,
+      "first_name": "Victoria",
+      "department": "CICT",
+      "last_name": "Samson",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 51,
+      "first_name": "Ramon",
+      "department": "CICT",
+      "last_name": "Dizon",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 52,
+      "first_name": "Katrina",
+      "department": "CICT",
+      "last_name": "Legaspi",
+      "max_hours": 40
+    },
+    {
+      "prof_id": 53,
+      "first_name": "Miguel",
+      "department": "CICT",
+      "last_name": "Ocampo",
+      "max_hours": 40
+    }
+  ],
+  "courses": [
+    {
+      "course_id": 1,
+      "course_name": "CC-100",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 1,
+      "ilp_hours": 1,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 21,
+      "course_name": "IT-MS01",
+      "lecture_hours": 3,
+      "lab_hours": 0,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 30,
+      "course_name": "IT-MS02",
+      "lecture_hours": 3,
+      "lab_hours": 0,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 62,
+      "course_name": "IT-SP01",
+      "lecture_hours": 3,
+      "lab_hours": 0,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "General",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 63,
+      "course_name": "IT-CAP02",
+      "lecture_hours": 3,
+      "lab_hours": 0,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "General",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 64,
+      "course_name": "IT-SW01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 2.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "General",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 50,
+      "course_name": "IT-IAS02",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "General",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 52,
+      "course_name": "IT-WS03",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Web Development",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 53,
+      "course_name": "IT-WS04",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Web Development",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 54,
+      "course_name": "IT-WS05",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Web Development",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 55,
+      "course_name": "IT-IM02",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Database Systems",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 56,
+      "course_name": "IT-IM03",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Database Systems",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 57,
+      "course_name": "IT-IM04",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Database Systems",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 58,
+      "course_name": "IT-NET03",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Networking",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 59,
+      "course_name": "IT-NET04",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Networking",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 60,
+      "course_name": "IT-NET05",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Networking",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 61,
+      "course_name": "IT-SIA01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "General",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 65,
+      "course_name": "IT-WS06",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "Web Development",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 66,
+      "course_name": "IT-WS07",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "Web Development",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 67,
+      "course_name": "IT-IM05",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "Database Systems",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 68,
+      "course_name": "IT-IM06",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "Database Systems",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 69,
+      "course_name": "IT-NET06",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "Networking",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 70,
+      "course_name": "IT-NET07",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 4,
+      "ilp_hours": 1,
+      "major": "Networking",
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 2,
+      "course_name": "CC-101",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 1,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 3,
+      "course_name": "IT-NET01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 1,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 10,
+      "course_name": "CC-102",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 1,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 11,
+      "course_name": "IT-NET02",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 1,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 12,
+      "course_name": "IT-WS01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 1,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 18,
+      "course_name": "CC-103",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 19,
+      "course_name": "IT-PF01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 20,
+      "course_name": "IT-WS02",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 26,
+      "course_name": "CC-104",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 27,
+      "course_name": "CC-105",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 28,
+      "course_name": "IT-PF02",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 29,
+      "course_name": "IT-HCI01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 2,
+      "ilp_hours": null,
+      "major": null,
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 51,
+      "course_name": "IT-CAP01",
+      "lecture_hours": 3,
+      "lab_hours": 0,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "General",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 48,
+      "course_name": "IT-WS02",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": "Web",
+      "semester": "2nd Semester"
+    },
+    {
+      "course_id": 44,
+      "course_name": "IT-IM01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 46,
+      "course_name": "IT-SA01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 45,
+      "course_name": "IT-IPT01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 47,
+      "course_name": "IT-IAS01",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": 3.0,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": null,
+      "semester": "1st Semester"
+    },
+    {
+      "course_id": 72,
+      "course_name": "IT-IPT02",
+      "lecture_hours": 2,
+      "lab_hours": 2,
+      "program": "BSIT",
+      "units": null,
+      "year_level": 3,
+      "ilp_hours": 1,
+      "major": null,
+      "semester": "1st Semester"
+    }
+  ],
+  "assignments": [
+    {
+      "prof_course_id": 297,
+      "prof_id": 19,
+      "course_id": 46
+    },
+    {
+      "prof_course_id": 298,
+      "prof_id": 20,
+      "course_id": 45
+    },
+    {
+      "prof_course_id": 299,
+      "prof_id": 25,
+      "course_id": 61
+    },
+    {
+      "prof_course_id": 300,
+      "prof_id": 34,
+      "course_id": 61
+    },
+    {
+      "prof_course_id": 301,
+      "prof_id": 21,
+      "course_id": 44
+    },
+    {
+      "prof_course_id": 302,
+      "prof_id": 29,
+      "course_id": 68
+    },
+    {
+      "prof_course_id": 303,
+      "prof_id": 38,
+      "course_id": 68
+    },
+    {
+      "prof_course_id": 304,
+      "prof_id": 1,
+      "course_id": 46
+    },
+    {
+      "prof_course_id": 305,
+      "prof_id": 1,
+      "course_id": 50
+    },
+    {
+      "prof_course_id": 306,
+      "prof_id": 5,
+      "course_id": 50
+    },
+    {
+      "prof_course_id": 308,
+      "prof_id": 2,
+      "course_id": 46
+    },
+    {
+      "prof_course_id": 309,
+      "prof_id": 5,
+      "course_id": 64
+    },
+    {
+      "prof_course_id": 311,
+      "prof_id": 54,
+      "course_id": 64
+    },
+    {
+      "prof_course_id": 312,
+      "prof_id": 29,
+      "course_id": 64
+    },
+    {
+      "prof_course_id": 166,
+      "prof_id": 49,
+      "course_id": 1
+    },
+    {
+      "prof_course_id": 167,
+      "prof_id": 49,
+      "course_id": 2
+    },
+    {
+      "prof_course_id": 168,
+      "prof_id": 49,
+      "course_id": 10
+    },
+    {
+      "prof_course_id": 169,
+      "prof_id": 32,
+      "course_id": 2
+    },
+    {
+      "prof_course_id": 170,
+      "prof_id": 32,
+      "course_id": 10
+    },
+    {
+      "prof_course_id": 171,
+      "prof_id": 32,
+      "course_id": 18
+    },
+    {
+      "prof_course_id": 172,
+      "prof_id": 37,
+      "course_id": 10
+    },
+    {
+      "prof_course_id": 173,
+      "prof_id": 37,
+      "course_id": 18
+    },
+    {
+      "prof_course_id": 174,
+      "prof_id": 37,
+      "course_id": 26
+    },
+    {
+      "prof_course_id": 175,
+      "prof_id": 35,
+      "course_id": 18
+    },
+    {
+      "prof_course_id": 176,
+      "prof_id": 35,
+      "course_id": 26
+    },
+    {
+      "prof_course_id": 177,
+      "prof_id": 35,
+      "course_id": 27
+    },
+    {
+      "prof_course_id": 178,
+      "prof_id": 24,
+      "course_id": 26
+    },
+    {
+      "prof_course_id": 179,
+      "prof_id": 24,
+      "course_id": 27
+    },
+    {
+      "prof_course_id": 180,
+      "prof_id": 24,
+      "course_id": 19
+    },
+    {
+      "prof_course_id": 181,
+      "prof_id": 18,
+      "course_id": 27
+    },
+    {
+      "prof_course_id": 182,
+      "prof_id": 18,
+      "course_id": 19
+    },
+    {
+      "prof_course_id": 183,
+      "prof_id": 18,
+      "course_id": 28
+    },
+    {
+      "prof_course_id": 184,
+      "prof_id": 51,
+      "course_id": 19
+    },
+    {
+      "prof_course_id": 185,
+      "prof_id": 51,
+      "course_id": 28
+    },
+    {
+      "prof_course_id": 186,
+      "prof_id": 51,
+      "course_id": 1
+    },
+    {
+      "prof_course_id": 187,
+      "prof_id": 44,
+      "course_id": 28
+    },
+    {
+      "prof_course_id": 188,
+      "prof_id": 44,
+      "course_id": 1
+    },
+    {
+      "prof_course_id": 189,
+      "prof_id": 44,
+      "course_id": 2
+    },
+    {
+      "prof_course_id": 190,
+      "prof_id": 47,
+      "course_id": 3
+    },
+    {
+      "prof_course_id": 191,
+      "prof_id": 47,
+      "course_id": 11
+    },
+    {
+      "prof_course_id": 192,
+      "prof_id": 47,
+      "course_id": 58
+    },
+    {
+      "prof_course_id": 196,
+      "prof_id": 25,
+      "course_id": 58
+    },
+    {
+      "prof_course_id": 197,
+      "prof_id": 25,
+      "course_id": 59
+    },
+    {
+      "prof_course_id": 198,
+      "prof_id": 25,
+      "course_id": 60
+    },
+    {
+      "prof_course_id": 199,
+      "prof_id": 19,
+      "course_id": 59
+    },
+    {
+      "prof_course_id": 200,
+      "prof_id": 19,
+      "course_id": 60
+    },
+    {
+      "prof_course_id": 201,
+      "prof_id": 19,
+      "course_id": 69
+    },
+    {
+      "prof_course_id": 205,
+      "prof_id": 48,
+      "course_id": 69
+    },
+    {
+      "prof_course_id": 206,
+      "prof_id": 48,
+      "course_id": 70
+    },
+    {
+      "prof_course_id": 207,
+      "prof_id": 48,
+      "course_id": 3
+    },
+    {
+      "prof_course_id": 208,
+      "prof_id": 30,
+      "course_id": 70
+    },
+    {
+      "prof_course_id": 209,
+      "prof_id": 30,
+      "course_id": 3
+    },
+    {
+      "prof_course_id": 210,
+      "prof_id": 30,
+      "course_id": 11
+    },
+    {
+      "prof_course_id": 211,
+      "prof_id": 52,
+      "course_id": 12
+    },
+    {
+      "prof_course_id": 212,
+      "prof_id": 52,
+      "course_id": 20
+    },
+    {
+      "prof_course_id": 213,
+      "prof_id": 52,
+      "course_id": 48
+    },
+    {
+      "prof_course_id": 214,
+      "prof_id": 40,
+      "course_id": 20
+    },
+    {
+      "prof_course_id": 215,
+      "prof_id": 40,
+      "course_id": 48
+    },
+    {
+      "prof_course_id": 216,
+      "prof_id": 40,
+      "course_id": 52
+    },
+    {
+      "prof_course_id": 217,
+      "prof_id": 20,
+      "course_id": 48
+    },
+    {
+      "prof_course_id": 218,
+      "prof_id": 20,
+      "course_id": 52
+    },
+    {
+      "prof_course_id": 219,
+      "prof_id": 20,
+      "course_id": 53
+    },
+    {
+      "prof_course_id": 220,
+      "prof_id": 38,
+      "course_id": 52
+    },
+    {
+      "prof_course_id": 221,
+      "prof_id": 38,
+      "course_id": 53
+    },
+    {
+      "prof_course_id": 222,
+      "prof_id": 38,
+      "course_id": 54
+    },
+    {
+      "prof_course_id": 223,
+      "prof_id": 54,
+      "course_id": 53
+    },
+    {
+      "prof_course_id": 224,
+      "prof_id": 54,
+      "course_id": 54
+    },
+    {
+      "prof_course_id": 225,
+      "prof_id": 54,
+      "course_id": 65
+    },
+    {
+      "prof_course_id": 226,
+      "prof_id": 34,
+      "course_id": 54
+    },
+    {
+      "prof_course_id": 227,
+      "prof_id": 34,
+      "course_id": 65
+    },
+    {
+      "prof_course_id": 228,
+      "prof_id": 34,
+      "course_id": 66
+    },
+    {
+      "prof_course_id": 229,
+      "prof_id": 53,
+      "course_id": 65
+    },
+    {
+      "prof_course_id": 230,
+      "prof_id": 53,
+      "course_id": 66
+    },
+    {
+      "prof_course_id": 231,
+      "prof_id": 53,
+      "course_id": 12
+    },
+    {
+      "prof_course_id": 232,
+      "prof_id": 39,
+      "course_id": 66
+    },
+    {
+      "prof_course_id": 233,
+      "prof_id": 39,
+      "course_id": 12
+    },
+    {
+      "prof_course_id": 234,
+      "prof_id": 39,
+      "course_id": 20
+    },
+    {
+      "prof_course_id": 235,
+      "prof_id": 45,
+      "course_id": 21
+    },
+    {
+      "prof_course_id": 236,
+      "prof_id": 45,
+      "course_id": 30
+    },
+    {
+      "prof_course_id": 237,
+      "prof_id": 45,
+      "course_id": 47
+    },
+    {
+      "prof_course_id": 241,
+      "prof_id": 26,
+      "course_id": 47
+    },
+    {
+      "prof_course_id": 242,
+      "prof_id": 26,
+      "course_id": 50
+    },
+    {
+      "prof_course_id": 243,
+      "prof_id": 26,
+      "course_id": 45
+    },
+    {
+      "prof_course_id": 244,
+      "prof_id": 23,
+      "course_id": 50
+    },
+    {
+      "prof_course_id": 245,
+      "prof_id": 23,
+      "course_id": 45
+    },
+    {
+      "prof_course_id": 246,
+      "prof_id": 23,
+      "course_id": 72
+    },
+    {
+      "prof_course_id": 247,
+      "prof_id": 17,
+      "course_id": 45
+    },
+    {
+      "prof_course_id": 248,
+      "prof_id": 17,
+      "course_id": 72
+    },
+    {
+      "prof_course_id": 249,
+      "prof_id": 17,
+      "course_id": 46
+    },
+    {
+      "prof_course_id": 253,
+      "prof_id": 41,
+      "course_id": 46
+    },
+    {
+      "prof_course_id": 254,
+      "prof_id": 41,
+      "course_id": 21
+    },
+    {
+      "prof_course_id": 255,
+      "prof_id": 41,
+      "course_id": 30
+    },
+    {
+      "prof_course_id": 256,
+      "prof_id": 50,
+      "course_id": 29
+    },
+    {
+      "prof_course_id": 257,
+      "prof_id": 50,
+      "course_id": 51
+    },
+    {
+      "prof_course_id": 258,
+      "prof_id": 50,
+      "course_id": 63
+    },
+    {
+      "prof_course_id": 259,
+      "prof_id": 46,
+      "course_id": 51
+    },
+    {
+      "prof_course_id": 260,
+      "prof_id": 46,
+      "course_id": 63
+    },
+    {
+      "prof_course_id": 261,
+      "prof_id": 46,
+      "course_id": 61
+    },
+    {
+      "prof_course_id": 265,
+      "prof_id": 36,
+      "course_id": 61
+    },
+    {
+      "prof_course_id": 266,
+      "prof_id": 36,
+      "course_id": 62
+    },
+    {
+      "prof_course_id": 267,
+      "prof_id": 36,
+      "course_id": 64
+    },
+    {
+      "prof_course_id": 268,
+      "prof_id": 31,
+      "course_id": 62
+    },
+    {
+      "prof_course_id": 269,
+      "prof_id": 31,
+      "course_id": 64
+    },
+    {
+      "prof_course_id": 270,
+      "prof_id": 31,
+      "course_id": 29
+    },
+    {
+      "prof_course_id": 271,
+      "prof_id": 21,
+      "course_id": 64
+    },
+    {
+      "prof_course_id": 272,
+      "prof_id": 21,
+      "course_id": 29
+    },
+    {
+      "prof_course_id": 273,
+      "prof_id": 21,
+      "course_id": 51
+    },
+    {
+      "prof_course_id": 274,
+      "prof_id": 42,
+      "course_id": 44
+    },
+    {
+      "prof_course_id": 275,
+      "prof_id": 42,
+      "course_id": 55
+    },
+    {
+      "prof_course_id": 276,
+      "prof_id": 42,
+      "course_id": 56
+    },
+    {
+      "prof_course_id": 280,
+      "prof_id": 43,
+      "course_id": 56
+    },
+    {
+      "prof_course_id": 281,
+      "prof_id": 43,
+      "course_id": 57
+    },
+    {
+      "prof_course_id": 282,
+      "prof_id": 43,
+      "course_id": 67
+    },
+    {
+      "prof_course_id": 283,
+      "prof_id": 22,
+      "course_id": 57
+    },
+    {
+      "prof_course_id": 284,
+      "prof_id": 22,
+      "course_id": 67
+    },
+    {
+      "prof_course_id": 285,
+      "prof_id": 22,
+      "course_id": 68
+    },
+    {
+      "prof_course_id": 286,
+      "prof_id": 33,
+      "course_id": 67
+    },
+    {
+      "prof_course_id": 287,
+      "prof_id": 33,
+      "course_id": 68
+    },
+    {
+      "prof_course_id": 288,
+      "prof_id": 33,
+      "course_id": 44
+    }
+  ]
+}

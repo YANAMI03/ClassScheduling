@@ -46,7 +46,7 @@
                 {% for entry in assigned_entries %}
                 <tr>
                     <td><strong>{{ entry.course_name or 'TBA' }}</strong></td>
-                    <td>{{ entry.professor or 'TBA' }}</td>
+                    <td>{{ entry.professor or 'Professor A' }}</td>
                     <td><span class="badge-custom badge-primary">{{ entry.section or 'TBA' }}</span></td>
                     <td>{{ entry.room or 'TBA' }}</td>
                     <td><strong>{{ entry.day or 'TBA' }}</strong></td>

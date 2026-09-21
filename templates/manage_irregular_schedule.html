@@ -134,7 +134,7 @@
                             <td><span class="badge-custom badge-primary">{{ entry.class_start }} - {{ entry.class_end }}</span></td>
                             <td>
                                 <div class="small">R: {{ entry.room or 'TBA' }}</div>
-                                <div class="small text-muted">P: {{ entry.professor or 'TBA' }}</div>
+                                <div class="small text-muted">P: {{ entry.professor or 'Professor A' }}</div>
                             </td>
                             <td class="text-end">
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-unassign-section" data-student-id="{{ student.student_id }}" data-course-id="{{ entry.course_id }}" title="Remove Subject">
