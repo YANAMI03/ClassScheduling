@@ -4,6 +4,7 @@
 .env
 .env.*
 !.env.example
+active_token.txt
 
 # ==========================================
 # Python Virtual Environments

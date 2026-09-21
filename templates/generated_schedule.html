@@ -190,7 +190,7 @@
                                                 {% endif %}
                                             </div>
                                         </div>
-                                        {% if block.professor and block.professor != 'TBA' %}
+                                        {% if block.professor %}
                                         <div class="text-muted small text-truncate mt-auto pt-1 d-flex align-items-center gap-1" style="font-size: 0.7rem;">
                                             <i class="bx bx-user text-primary"></i><span class="text-truncate">{{ block.professor }}</span>
                                         </div>
@@ -402,7 +402,7 @@ $(function(){
 
         $('#modalCourseName').text($t.data('course') || 'TBA');
         $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
-        $('#modalProfessor').text($t.data('professor') || 'TBA');
+        $('#modalProfessor').text($t.data('professor') || 'Professor A');
         $('#modalRoom').text($t.data('room') || 'TBA');
         $('#modalDay').text($t.data('day') || 'TBA');
         $('#modalTime').text($t.data('time') || 'TBA');
