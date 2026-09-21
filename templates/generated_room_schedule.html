@@ -16,6 +16,9 @@
         <p class="page-subtitle">View occupied classes and available (unoccupied) time slots across the operating week</p>
     </div>
     <div class="d-flex align-items-center gap-2">
+        <a href="/room_schedule/{{ room.room_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success" title="Export Room Schedule to Excel">
+            <i class="bx bx-file me-1"></i> Export to Excel
+        </a>
         <a href="/room_schedule" class="btn btn-outline-secondary">
             <i class="bx bx-arrow-back me-1"></i> Back to Rooms
         </a>
