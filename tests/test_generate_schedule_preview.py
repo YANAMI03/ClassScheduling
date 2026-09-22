@@ -1316,10 +1316,9 @@ def test_view_professor_schedule_calculates_workload(monkeypatch):
     resp = client.get('/professor_schedule/1')
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "Scheduled Workload" in html
-    assert "3 hours assigned" in html
-    assert "37 hours remaining" in html
-    assert "Weekly Workload Cap" in html
+    assert "Weekly Assigned Workload" in html
+    assert "3 hrs assigned" in html
+    assert "Specialization" in html
     assert "Duration" in html
     assert "3 hrs" in html
 
@@ -1413,9 +1412,6 @@ def test_api_professor_workload_endpoint(monkeypatch):
     data = resp.get_json()
     assert data['professor_id'] == 1
     assert data['total_scheduled_hours'] == 4.0
-    assert data['remaining_hours'] == 36.0
-    assert data['max_hours'] == 40.0
-    assert data['is_overloaded'] is False
     assert data['is_preview'] is True
 
 
@@ -1451,8 +1447,6 @@ def test_professor_schedule_list_displays_hours(monkeypatch):
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "4 hrs" in html
-    assert "40 hrs assigned" in html
-    assert "36 hrs remaining" in html
 
 
 def test_generate_schedule_workload_balanced_across_faculty(monkeypatch):

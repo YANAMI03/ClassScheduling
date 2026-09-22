@@ -49,19 +49,23 @@
                     <i class="bx bx-check-circle"></i> Course name is available
                 </div>
             </div>
-            <div class="col-lg-2 col-md-4">
+            <div class="col-lg-2 col-md-3">
+                <label class="form-label">Units</label>
+                <input type="number" name="units" id="add_units" class="form-control" placeholder="0" min="0" step="any" value="3">
+            </div>
+            <div class="col-lg-2 col-md-3">
                 <label class="form-label">Lecture Hours</label>
                 <input type="number" name="lecture_hours" class="form-control" placeholder="0" min="0" value="0">
             </div>
-            <div class="col-lg-2 col-md-4">
+            <div class="col-lg-2 col-md-3">
                 <label class="form-label">Lab Hours</label>
                 <input type="number" name="lab_hours" class="form-control" placeholder="0" min="0" value="0">
             </div>
-            <div class="col-lg-2 col-md-4">
+            <div class="col-lg-2 col-md-3">
                 <label class="form-label">ILP Hours</label>
                 <input type="number" name="ilp_hours" class="form-control" placeholder="0" min="0" value="0">
             </div>
-            <div class="col-lg-2 col-md-4">
+            <div class="col-lg-3 col-md-6">
                 <label class="form-label">Program</label>
                 <input type="text" name="program" class="form-control" placeholder="e.g. BSIT, BSCS" value="{{ program or session.get('program', '') }}" required>
             </div>
@@ -160,6 +164,7 @@
             <thead>
                 <tr>
                     <th>Course Name</th>
+                    <th>Units</th>
                     <th>Lecture Hrs</th>
                     <th>Lab Hrs</th>
                     <th>ILP Hrs</th>
@@ -176,6 +181,7 @@
                 {% for course in items %}
                 <tr class="course-row" data-year-level="{{ course.year_level or '' }}" data-semester="{{ course.semester or '' }}">
                     <td><strong>{{course.course_name}}</strong></td>
+                    <td>{{course.units if course.units is not none else '—'}}</td>
                     <td>{{course.lecture_hours}}</td>
                     <td>{{course.lab_hours}}</td>
                     <td>{{course.ilp_hours or 0}}</td>
@@ -192,7 +198,7 @@
                     <td><span class="badge-custom badge-success">Year {{course.year_level}}</span></td>
                     <td>{{ course.semester or '—' }}</td>
                     <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-major="{{course.major or ''}}" data-semester="{{course.semester or ''}}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-major="{{course.major or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_course/{{course.course_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this course?">
@@ -202,7 +208,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{% if show_major %}9{% else %}8{% endif %}">
+                    <td colspan="{% if show_major %}10{% else %}9{% endif %}">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-book"></i></div>
                             <div class="empty-state__text">{{ empty_msg }}</div>
@@ -251,21 +257,27 @@
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
+                            <label class="form-label">Units</label>
+                            <input type="number" name="units" id="edit_units" class="form-control" min="0" step="any" placeholder="0">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Program</label>
+                            <input type="text" name="program" id="edit_program" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
                             <label class="form-label">Lecture Hours</label>
                             <input type="number" name="lecture_hours" id="edit_lecture" class="form-control" min="0">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label">Lab Hours</label>
                             <input type="number" name="lab_hours" id="edit_lab" class="form-control" min="0">
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">ILP Hours</label>
-                        <input type="number" name="ilp_hours" id="edit_ilp" class="form-control" min="0">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Program</label>
-                        <input type="text" name="program" id="edit_program" class="form-control" required>
+                        <div class="col-md-4">
+                            <label class="form-label">ILP Hours</label>
+                            <input type="number" name="ilp_hours" id="edit_ilp" class="form-control" min="0">
+                        </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-4">
@@ -372,6 +384,7 @@ $(function(){
     $(document).on('click', '.edit-btn', function(){
         var $t = $(this);
         $('#edit_name').val($t.data('name'));
+        $('#edit_units').val($t.data('units') !== undefined ? $t.data('units') : '');
         $('#edit_lecture').val($t.data('lecture'));
         $('#edit_lab').val($t.data('lab'));
         $('#edit_ilp').val($t.data('ilp'));

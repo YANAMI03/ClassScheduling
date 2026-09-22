@@ -1,34 +1,289 @@
 {% extends "base.html" %}
-{% block title %}Professor Courses - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Professor Course Assignments</h5>{% endblock %}
+{% block title %}Professor Courses & Teaching Load - Scheduler{% endblock %}
+{% block header_title %}<h5 class="header__title">Professor Course Assignments & Teaching Load</h5>{% endblock %}
+
+{% block head_extra %}
+<style>
+.load-meter-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    transition: all var(--transition);
+}
+.load-meter-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: var(--shadow-sm);
+}
+.course-catalog-container {
+    max-height: 480px;
+    overflow-y: auto;
+    border-radius: var(--radius-sm);
+}
+.course-card-item {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.5rem;
+    transition: all 0.2s ease;
+}
+.course-card-item:hover {
+    border-color: #94a3b8;
+    background: #fafafa;
+}
+.course-card-item.selected {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+.section-stepper {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.section-stepper .btn-step {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+.section-stepper input.step-input {
+    width: 48px;
+    text-align: center;
+    padding: 0.2rem 0.25rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.stat-pill {
+    font-size: 0.72rem;
+    padding: 0.18rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 500;
+}
+.stat-pill-lec { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.stat-pill-lab { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.stat-pill-ilp { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+.stat-pill-unit { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+
+.table-custom td {
+    vertical-align: middle;
+}
+.course-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.25rem 0.55rem;
+    margin: 0.2rem 0.25rem 0.2rem 0;
+    font-size: 0.82rem;
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header mb-4">
     <div>
-        <h1 class="page-title">Professors' Courses</h1>
-        <p class="page-subtitle">Assign courses to professors for scheduling</p>
+        <h1 class="page-title">Professors' Teaching Load & Course Assignments</h1>
+        <p class="page-subtitle">Assign courses, set section counts, and monitor real-time weekly hours & unit workload capacities</p>
     </div>
 </div>
 
+<!-- Dashboard Stats Row -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary" style="width: 44px; height: 44px; font-size: 1.3rem;">
+                <i class="bx bx-user-check"></i>
+            </div>
+            <div>
+                <div class="text-muted small">Total Faculty</div>
+                <div class="fw-bold fs-5">{{ professors|length }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success" style="width: 44px; height: 44px; font-size: 1.3rem;">
+                <i class="bx bx-book-reader"></i>
+            </div>
+            <div>
+                <div class="text-muted small">With Assignments</div>
+                <div class="fw-bold fs-5">{{ prof_courses|groupby('prof_id')|list|length }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info" style="width: 44px; height: 44px; font-size: 1.3rem;">
+                <i class="bx bx-book"></i>
+            </div>
+            <div>
+                <div class="text-muted small">Course Catalog</div>
+                <div class="fw-bold fs-5">{{ courses|length }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center bg-warning bg-opacity-10 text-warning" style="width: 44px; height: 44px; font-size: 1.3rem;">
+                <i class="bx bx-layer"></i>
+            </div>
+            <div>
+                <div class="text-muted small">Total Sections</div>
+                <div class="fw-bold fs-5">
+                    {% set total_assigned_secs = prof_courses|map(attribute='sections')|sum if prof_courses else 0 %}
+                    {{ total_assigned_secs }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Assignment Workspace -->
 <div class="card-custom mb-4">
     <div class="card-custom__header">
-        <h5 class="card-custom__title"><i class="bx bx-link me-2"></i>Assign Courses to Professor</h5>
+        <h5 class="card-custom__title"><i class="bx bx-slider-alt me-2 text-primary"></i>Assign Courses & Manage Teaching Load</h5>
+        <span class="text-muted small">Real-time calculations for Lecture, Lab, and ILP hours</span>
     </div>
-    <form action="/add_prof_course" method="POST">
-        <div class="row g-3 align-items-stretch">
-            <div class="col-md-5 d-flex flex-column">
-                <label class="form-label">Professor</label>
-                <select class="form-select" name="prof_id" required>
-                    <option value="" selected disabled>Select Professor</option>
-                    {% for prof in professors %}
-                    <option value="{{ prof.prof_id }}">{{ prof.first_name }} {{ prof.last_name }} ({{ prof.department }})</option>
-                    {% endfor %}
-                </select>
+    <form action="/add_prof_course" method="POST" id="assignCourseForm">
+        <div class="row g-4">
+            <!-- Left Column: Professor Selection & Live Load Summary Panel -->
+            <div class="col-lg-5 col-xl-4 d-flex flex-column">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="prof_select">
+                        <i class="bx bx-user me-1 text-primary"></i>Select Professor <span class="text-danger">*</span>
+                    </label>
+                    <select class="form-select form-select-lg" name="prof_id" id="prof_select" required>
+                        <option value="" selected disabled>-- Select a Professor --</option>
+                        {% for prof in professors %}
+                        <option value="{{ prof.prof_id }}"
+                                data-id="{{ prof.prof_id }}"
+                                data-name="{{ prof.first_name }} {{ prof.last_name }}"
+                                data-dept="{{ prof.department or 'N/A' }}"
+                                data-specialization="{{ prof.specialization or '' }}"
+                                data-min-units="{{ prof.min_units or 0 }}"
+                                data-max-units="{{ prof.max_units or 24 }}">
+                            {{ prof.first_name }} {{ prof.last_name }} ({{ prof.department or 'General' }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div id="prof-info-banner" class="mt-2 text-muted small d-none">
+                        <span class="badge bg-light text-dark border me-1"><i class="bx bx-building me-1"></i><span id="prof-banner-dept"></span></span>
+                        <span class="badge bg-light text-dark border me-1"><i class="bx bx-star me-1"></i><span id="prof-banner-spec"></span></span>
+                        <span class="badge bg-light text-dark border"><i class="bx bx-bookmark me-1"></i><span id="prof-banner-units">0-24</span> units</span>
+                    </div>
+                </div>
+
+                <!-- Teaching Load Summary Panel -->
+                <div class="load-meter-card flex-grow-1 d-flex flex-column" id="teaching-load-panel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold mb-0 text-dark">
+                            <i class="bx bx-tachometer me-1 text-primary"></i>Teaching Load Summary
+                        </h6>
+                        <span class="badge bg-secondary" id="load-status-badge">
+                            Awaiting Selection
+                        </span>
+                    </div>
+
+                    <!-- Weekly Hours Meter -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-baseline mb-1">
+                            <span class="small text-muted fw-semibold">
+                                <i class="bx bx-time-five me-1 text-primary"></i>Weekly Hours
+                            </span>
+                            <span class="small fw-bold">
+                                <span id="lbl-total-hours" class="fs-6">0.0</span> / <span id="lbl-max-hours">40.0</span> hrs
+                            </span>
+                        </div>
+                        <div class="progress" style="height: 10px; border-radius: 5px;">
+                            <div id="bar-total-hours" class="progress-bar bg-primary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted" style="font-size: 0.75rem;">(Lec + Lab + ILP) × sections</small>
+                            <small id="lbl-hours-percent" class="text-muted fw-semibold" style="font-size: 0.75rem;">0% of max</small>
+                        </div>
+                    </div>
+
+                    <!-- Total Units Meter -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-baseline mb-1">
+                            <span class="small text-muted fw-semibold">
+                                <i class="bx bx-book-bookmark me-1 text-primary"></i>Total Units
+                            </span>
+                            <span class="small fw-bold">
+                                <span id="lbl-total-units" class="fs-6">0.0</span> / <span id="lbl-max-units">24.0</span> units
+                            </span>
+                        </div>
+                        <div class="progress" style="height: 10px; border-radius: 5px;">
+                            <div id="bar-total-units" class="progress-bar bg-primary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted" style="font-size: 0.75rem;">
+                                Min Target: <span id="lbl-min-units" class="fw-semibold">0.0</span> units
+                            </small>
+                            <small id="lbl-units-percent" class="text-muted fw-semibold" style="font-size: 0.75rem;">0% of max</small>
+                        </div>
+                    </div>
+
+                    <!-- Summary Stats Box -->
+                    <div class="d-flex justify-content-around py-2 my-2 bg-white rounded border text-center">
+                        <div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Selected Courses</div>
+                            <div class="fw-bold fs-6 text-primary" id="lbl-selected-courses-count">0</div>
+                        </div>
+                        <div class="border-end"></div>
+                        <div>
+                            <div class="text-muted" style="font-size: 0.75rem;">Total Sections</div>
+                            <div class="fw-bold fs-6 text-primary" id="lbl-selected-sections-count">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Live Real-Time Course Load Breakdown -->
+                    <div class="my-2" id="selected-courses-breakdown-card" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small fw-bold text-dark"><i class="bx bx-calculator me-1 text-primary"></i>Load Breakdown per Course</span>
+                            <small class="text-muted" style="font-size: 0.72rem;">(Hours & Units &times; Sections)</small>
+                        </div>
+                        <div class="border rounded bg-white p-2" id="selected-courses-breakdown-list" style="max-height: 180px; overflow-y: auto;">
+                            <!-- Populated dynamically in real-time via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Feedback Alert -->
+                    <div id="load-feedback-alert" class="alert alert-info py-2 px-3 mt-auto mb-0 small">
+                        <i class="bx bx-info-circle me-1"></i> Select a professor and check courses to view real-time workload calculation.
+                    </div>
+                </div>
+
+                <!-- Hidden inputs for cross-tab selected courses -->
                 <div id="selected-course-inputs" style="display:none;"></div>
+
+                <!-- Submit Action Button -->
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold" id="btn-assign-courses" disabled>
+                        <i class="bx bx-link me-1"></i> Assign Courses & Update Load
+                    </button>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small id="btn-assign-hint" class="text-muted" style="font-size: 0.78rem;">Select professor and at least one course</small>
+                        <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none p-0" id="btn-clear-selection" style="font-size: 0.78rem;">
+                            <i class="bx bx-reset me-1"></i>Reset Selection
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="col-md-7 d-flex flex-column">
-                <label class="form-label">Select Courses</label>
-                <div class="card-custom p-3 d-flex flex-column h-100" style="min-height: 340px; max-height: 340px;">
+
+            <!-- Right Column: Course Selection & Section Manager -->
+            <div class="col-lg-7 col-xl-8 d-flex flex-column">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <label class="form-label fw-semibold mb-0">
+                        <i class="bx bx-book-content me-1 text-primary"></i>Course Catalog & Sections
+                    </label>
+                    <span class="badge bg-light text-secondary border" id="visible-course-count">Showing {{ courses|length }} courses</span>
+                </div>
+
+                <div class="card-custom p-3 d-flex flex-column h-100">
+                    <!-- Year Filter Tabs -->
                     <div class="btn-group w-100 mb-3" role="group" aria-label="Course year filters">
                         <button type="button" class="btn btn-primary btn-sm year-filter-btn active" data-year="all">All Courses</button>
                         <button type="button" class="btn btn-outline-primary btn-sm year-filter-btn" data-year="1">1st Year</button>
@@ -36,73 +291,169 @@
                         <button type="button" class="btn btn-outline-primary btn-sm year-filter-btn" data-year="3">3rd Year</button>
                         <button type="button" class="btn btn-outline-primary btn-sm year-filter-btn" data-year="4">4th Year</button>
                     </div>
-                    <div class="overflow-auto flex-grow-1" style="min-height: 0;">
-                        <div class="checkbox-grid" id="course-checkbox-list">
-                            {% for course in courses %}
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="course_ids" value="{{ course.course_id }}" id="add_course_{{ course.course_id }}">
-                                <label class="form-check-label" for="add_course_{{ course.course_id }}">
-                                    {{ course.course_name }}
-                                    {% if course.program %}
-                                    <small class="text-muted d-block">{{ course.program }}</small>
-                                    {% endif %}
-                                </label>
+
+                    <!-- Course Search Filter -->
+                    <div class="input-group input-group-sm mb-3">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bx bx-search"></i></span>
+                        <input type="text" class="form-control border-start-0" id="course-search-input" placeholder="Search course by code, title, or program...">
+                        <button class="btn btn-outline-secondary" type="button" id="btn-clear-search" style="display:none;">&times;</button>
+                    </div>
+
+                    <!-- Scrollable Course List -->
+                    <div class="course-catalog-container flex-grow-1" id="course-checkbox-list">
+                        {% for course in courses %}
+                        {% set course_hrs = (course.lecture_hours or 0) + (course.lab_hours or 0) + (course.ilp_hours or 0) %}
+                        <div class="course-card-item" id="card_add_course_{{ course.course_id }}" data-cid="{{ course.course_id }}" data-year="{{ course.year_level or '' }}" data-name="{{ course.course_name|lower }}" data-program="{{ (course.program or '')|lower }}">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="d-flex align-items-start gap-2 flex-grow-1" style="min-width: 220px;">
+                                    <input class="form-check-input mt-1 course-check" type="checkbox" name="course_ids" value="{{ course.course_id }}" id="add_course_{{ course.course_id }}">
+                                    <label class="form-check-label mb-0" for="add_course_{{ course.course_id }}" style="cursor: pointer;">
+                                        <span class="fw-semibold text-dark d-block">{{ course.course_name }}</span>
+                                        <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
+                                            {% if course.program %}
+                                            <span class="badge bg-secondary-subtle text-secondary border px-1 py-0" style="font-size: 0.72rem;">{{ course.program }}</span>
+                                            {% endif %}
+                                            <span class="stat-pill stat-pill-lec">Lec: {{ course.lecture_hours or 0 }}h</span>
+                                            <span class="stat-pill stat-pill-lab">Lab: {{ course.lab_hours or 0 }}h</span>
+                                            <span class="stat-pill stat-pill-ilp">ILP: {{ course.ilp_hours or 0 }}h</span>
+                                            <span class="stat-pill stat-pill-unit">Units: {{ course.units or 0 }}</span>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 ms-auto section-control-wrap">
+                                    <div class="d-flex flex-column align-items-end">
+                                        <div class="d-flex align-items-center gap-2 bg-light px-2 py-1 rounded border">
+                                            <label class="form-label mb-0 small fw-bold text-dark text-nowrap" for="sec_add_{{ course.course_id }}">
+                                                <i class="bx bx-layer me-1 text-primary"></i>Number of Sections:
+                                            </label>
+                                            <div class="input-group input-group-sm section-stepper" style="width: 105px;">
+                                                <button type="button" class="btn btn-outline-secondary btn-step btn-sec-minus" data-cid="{{ course.course_id }}" title="Decrease sections" aria-label="Decrease sections">-</button>
+                                                <input type="number" min="1" max="20" class="form-control step-input section-input text-center fw-bold" id="sec_add_{{ course.course_id }}" name="sections_{{ course.course_id }}" data-cid="{{ course.course_id }}" value="1" title="Number of sections" aria-label="Number of Sections">
+                                                <button type="button" class="btn btn-outline-secondary btn-step btn-sec-plus" data-cid="{{ course.course_id }}" title="Increase sections" aria-label="Increase sections">+</button>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-1 mt-1">
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle subtotal-badge" id="subtotal_add_{{ course.course_id }}" style="font-size: 0.75rem;">
+                                                {{ course_hrs }} hrs/wk &bull; {{ course.units or 0 }} units (1 sec)
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            {% endfor %}
                         </div>
+                        {% endfor %}
                         {% if not courses %}
-                        <p class="text-muted text-center mb-0">No courses available.</p>
+                        <div class="empty-state py-4 text-center">
+                            <div class="empty-state__icon text-muted fs-1"><i class="bx bx-book-open"></i></div>
+                            <div class="empty-state__text text-muted">No courses available in this view</div>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
-            </div>
-            <div class="col-12">
-                <button type="submit" class="btn btn-primary">
-                    <i class="bx bx-link"></i> Assign Courses
-                </button>
             </div>
         </div>
     </form>
 </div>
 
+<!-- Current Assignments Table -->
 <div class="card-custom">
     <div class="card-custom__header">
-        <h5 class="card-custom__title">Current Assignments</h5>
-        <span class="badge-custom badge-primary">{{ prof_courses|groupby('prof_id')|list|length }} professors</span>
+        <div>
+            <h5 class="card-custom__title"><i class="bx bx-list-check me-2 text-primary"></i>Current Assignments & Load Status</h5>
+            <span class="text-muted small">Summary of assigned courses, section counts, and capacity compliance</span>
+        </div>
+        <span class="badge-custom badge-primary">{{ prof_courses|groupby('prof_id')|list|length }} professors assigned</span>
     </div>
     <div class="table-responsive">
         <table class="table-custom">
             <thead>
                 <tr>
-                    <th>Professor</th>
-                    <th>Department</th>
-                    <th>Assigned Courses</th>
-                    <th class="text-end">Actions</th>
+                    <th style="width: 22%;">Professor</th>
+                    <th style="width: 14%;">Department</th>
+                    <th style="width: 34%;">Assigned Courses & Sections</th>
+                    <th style="width: 18%;">Teaching Load</th>
+                    <th style="width: 12%;" class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for prof_group in prof_courses|groupby('prof_id') %}
+                {% set p_first = prof_group.list[0].prof_first_name %}
+                {% set p_last = prof_group.list[0].prof_last_name %}
+                {% set p_dept = prof_group.list[0].prof_department or 'N/A' %}
+                {% set p_spec = prof_group.list[0].specialization or '-' %}
+                {% set p_min_units = prof_group.list[0].min_units or 0 %}
+                {% set p_max_units = prof_group.list[0].max_units or 24 %}
+                {% set total_prof_hours = prof_group.list|map(attribute='weekly_hours')|sum %}
+                {% set total_prof_units = prof_group.list|map(attribute='total_units')|sum %}
+                {% set total_prof_secs = prof_group.list|map(attribute='sections')|sum %}
+
+                {% set is_units_exceeded = total_prof_units > p_max_units %}
+                {% set is_exceeded = is_units_exceeded %}
+                {% set is_underload = not is_exceeded and p_min_units > 0 and total_prof_units < p_min_units %}
+                {% set is_near = not is_exceeded and not is_underload and (p_max_units > 0 and total_prof_units >= 0.8 * p_max_units) %}
+
                 <tr>
                     <td class="align-middle">
-                        <strong>{{ prof_group.list[0].prof_first_name }} {{ prof_group.list[0].prof_last_name }}</strong>
+                        <div class="fw-bold text-dark">{{ p_first }} {{ p_last }}</div>
+                        <div class="text-muted small" style="font-size: 0.78rem;">
+                            Spec: {{ p_spec }} &bull; {{ p_min_units }}-{{ p_max_units }} units
+                        </div>
                     </td>
                     <td class="align-middle">
-                        <span class="badge-custom badge-success">{{ prof_group.list[0].prof_department or 'N/A' }}</span>
+                        <span class="badge-custom badge-success">{{ p_dept }}</span>
                     </td>
                     <td class="align-middle">
-                        {% for c in prof_group.list %}
-                        <span class="badge-custom badge-primary me-1 mb-1">{{ c.course_name }}</span>
-                        {% endfor %}
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for c in prof_group.list %}
+                            <div class="course-badge-pill" title="Lec: {{ c.lecture_hours }}h, Lab: {{ c.lab_hours }}h, ILP: {{ c.ilp_hours }}h, Units: {{ c.units }}">
+                                <span class="fw-semibold me-1">{{ c.course_name }}</span>
+                                <span class="badge bg-primary text-white me-1">{{ c.sections }} sec</span>
+                                <small class="text-muted">({{ c.weekly_hours }}h, {{ c.total_units }}u)</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-1 text-muted small" style="font-size: 0.75rem;">
+                            {{ prof_group.list|length }} courses &bull; {{ total_prof_secs }} total sections
+                        </div>
+                    </td>
+                    <td class="align-middle">
+                        <div class="mb-1 d-flex justify-content-between align-items-center">
+                            <span class="small fw-semibold">Hours:</span>
+                            <span class="small fw-bold text-dark">
+                                {{ total_prof_hours }} hrs
+                            </span>
+                        </div>
+                        <div class="mb-1 d-flex justify-content-between align-items-center">
+                            <span class="small fw-semibold">Units:</span>
+                            <span class="small fw-bold {% if is_units_exceeded %}text-danger{% elif is_underload %}text-warning{% else %}text-dark{% endif %}">
+                                {{ total_prof_units }} / {{ p_max_units }} u
+                            </span>
+                        </div>
+                        <div class="mt-1">
+                            {% if is_exceeded %}
+                            <span class="badge bg-danger"><i class="bx bx-x-circle me-1"></i>Exceeded Limit</span>
+                            {% elif is_underload %}
+                            <span class="badge bg-warning text-dark"><i class="bx bx-info-circle me-1"></i>Underload (Min {{ p_min_units }})</span>
+                            {% elif is_near %}
+                            <span class="badge bg-warning text-dark"><i class="bx bx-time-five me-1"></i>Near Limit</span>
+                            {% else %}
+                            <span class="badge bg-success"><i class="bx bx-check-circle me-1"></i>Balanced</span>
+                            {% endif %}
+                        </div>
                     </td>
                     <td class="text-end align-middle">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn"
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn me-1"
                                 data-bs-toggle="modal"
                                 data-bs-target="#editModal"
                                 data-id="{{ prof_group.grouper }}"
-                                data-firstname="{{ prof_group.list[0].prof_first_name }}"
-                                data-lastname="{{ prof_group.list[0].prof_last_name }}"
-                                data-department="{{ prof_group.list[0].prof_department }}"
-                                data-courses="{% for c in prof_group.list %}{{ c.course_id }}{% if not loop.last %},{% endif %}{% endfor %}">
+                                data-firstname="{{ p_first }}"
+                                data-lastname="{{ p_last }}"
+                                data-department="{{ p_dept }}"
+                                data-specialization="{{ p_spec }}"
+                                data-minunits="{{ p_min_units }}"
+                                data-maxunits="{{ p_max_units }}"
+                                data-courses="{% for c in prof_group.list %}{{ c.course_id }}{% if not loop.last %},{% endif %}{% endfor %}"
+                                data-sections="{% for c in prof_group.list %}{{ c.course_id }}:{{ c.sections }}{% if not loop.last %},{% endif %}{% endfor %}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="{{ url_for('delete_prof_course_all', prof_id=prof_group.grouper) }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to remove all course assignments for this professor?">
@@ -112,10 +463,10 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4">
-                        <div class="empty-state">
-                            <div class="empty-state__icon"><i class="bx bx-book-open"></i></div>
-                            <div class="empty-state__text">No course assignments yet</div>
+                    <td colspan="5">
+                        <div class="empty-state py-5 text-center">
+                            <div class="empty-state__icon text-muted fs-1 mb-2"><i class="bx bx-book-open"></i></div>
+                            <div class="empty-state__text text-muted">No course assignments yet. Select a professor and courses above to begin.</div>
                         </div>
                     </td>
                 </tr>
@@ -127,79 +478,153 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Edit Modal -->
 <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="editModalLabel"><i class="bx bx-edit me-2"></i>Edit Professor & Course Assignments</h5>
+                <h5 class="modal-title" id="editModalLabel">
+                    <i class="bx bx-edit me-2 text-primary"></i>Edit Professor & Course Assignments
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="editForm" method="POST">
                 <div class="modal-body">
-                    <!-- Section 1: Professor Information -->
-                    <div class="mb-4">
-                        <h6 class="fw-bold text-primary mb-3"><i class="bx bx-user me-2"></i>Professor Information</h6>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">First Name</label>
-                                <input type="text" name="first_name" id="edit_firstname" class="form-control" placeholder="Enter first name" required>
+                    <div class="row g-4">
+                        <!-- Left Side: Professor Info & Workload Limits & Modal Load Summary -->
+                        <div class="col-lg-5">
+                            <h6 class="fw-bold text-primary mb-3"><i class="bx bx-user me-2"></i>Professor Profile & Limits</h6>
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">First Name</label>
+                                    <input type="text" name="first_name" id="edit_firstname" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold">Last Name</label>
+                                    <input type="text" name="last_name" id="edit_lastname" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small fw-semibold">Department</label>
+                                    <select class="form-select form-select-sm" name="department" id="edit_department" required>
+                                        <option value="" disabled>Select Department</option>
+                                        <option value="CICT">CICT (College of Information and Communications Technology)</option>
+                                        <option value="CBA">CBA (College of Business Administration)</option>
+                                        <option value="CEA">CEA (College of Engineering and Architecture)</option>
+                                        <option value="CAS">CAS (College of Arts and Sciences)</option>
+                                        <option value="CON">CON (College of Nursing)</option>
+                                    </select>
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label small fw-semibold">Specialization</label>
+                                    <input type="text" name="specialization" id="edit_specialization" class="form-control form-control-sm" placeholder="e.g. Web Dev">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label small fw-semibold">Min Units</label>
+                                    <input type="number" step="0.5" min="0" max="40" name="min_units" id="edit_min_units" class="form-control form-control-sm" value="0">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label small fw-semibold">Max Units</label>
+                                    <input type="number" step="0.5" min="1" max="50" name="max_units" id="edit_max_units" class="form-control form-control-sm" value="24" required>
+                                </div>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Last Name</label>
-                                <input type="text" name="last_name" id="edit_lastname" class="form-control" placeholder="Enter last name" required>
-                            </div>
-                            <div class="col-md-12">
-                                <label class="form-label">Department</label>
-                                <select class="form-select" name="department" id="edit_department" required>
-                                    <option value="" disabled>Select Department</option>
-                                    <option value="CICT">CICT (College of Information and Communications Technology)</option>
-                                    <option value="CBA">CBA (College of Business Administration)</option>
-                                    <option value="CEA">CEA (College of Engineering and Architecture)</option>
-                                    <option value="CAS">CAS (College of Arts and Sciences)</option>
-                                    <option value="CON">CON (College of Nursing)</option>
-                                </select>
+
+                            <!-- Modal Load Summary Panel -->
+                            <div class="load-meter-card" id="edit-load-panel">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-bold small text-dark"><i class="bx bx-tachometer me-1 text-primary"></i>Live Workload Summary</span>
+                                    <span class="badge bg-secondary" id="edit-load-status-badge">Calculating</span>
+                                </div>
+
+                                <!-- Hours meter -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                        <small class="text-muted fw-semibold">Weekly Hours</small>
+                                        <small class="fw-bold"><span id="edit-lbl-hours">0.0</span> / <span id="edit-lbl-max-hours">40.0</span> hrs</small>
+                                    </div>
+                                    <div class="progress" style="height: 8px;">
+                                        <div id="edit-bar-hours" class="progress-bar bg-primary" role="progressbar" style="width: 0%;"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Units meter -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                        <small class="text-muted fw-semibold">Total Units</small>
+                                        <small class="fw-bold"><span id="edit-lbl-units">0.0</span> / <span id="edit-lbl-max-units">24.0</span> u</small>
+                                    </div>
+                                    <div class="progress" style="height: 8px;">
+                                        <div id="edit-bar-units" class="progress-bar bg-primary" role="progressbar" style="width: 0%;"></div>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mt-1">
+                                        <small class="text-muted" style="font-size: 0.72rem;">Target Min: <span id="edit-lbl-min-units">0</span> u</small>
+                                        <small id="edit-lbl-units-percent" class="text-muted" style="font-size: 0.72rem;">0%</small>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-around py-1 my-2 bg-white rounded border text-center small">
+                                    <div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">Courses: </span>
+                                        <strong class="text-primary" id="edit-lbl-courses-count">0</strong>
+                                    </div>
+                                    <div class="border-end"></div>
+                                    <div>
+                                        <span class="text-muted" style="font-size: 0.7rem;">Sections: </span>
+                                        <strong class="text-primary" id="edit-lbl-sections-count">0</strong>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Modal Breakdown -->
+                                <div class="my-2" id="edit-breakdown-card" style="display: none;">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="small fw-bold text-dark"><i class="bx bx-calculator me-1 text-primary"></i>Assigned Breakdown</span>
+                                        <small class="text-muted" style="font-size: 0.7rem;">(Hours & Units &times; Sec)</small>
+                                    </div>
+                                    <div class="border rounded bg-white p-1" id="edit-breakdown-list" style="max-height: 140px; overflow-y: auto;">
+                                        <!-- Populated dynamically via JS -->
+                                    </div>
+                                </div>
+
+                                <div id="edit-feedback-alert" class="alert alert-info py-2 px-2 mb-0 small" style="font-size: 0.78rem;">
+                                    Adjust assigned courses or sections to update load.
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <hr class="my-3">
+                        <!-- Right Side: Course Selection & Section Stepper -->
+                        <div class="col-lg-7 d-flex flex-column">
+                            <h6 class="fw-bold text-primary mb-2"><i class="bx bx-book me-2"></i>Assigned Courses & Sections</h6>
+                            <p class="text-muted small mb-2">Check courses and set the number of sections assigned to this professor.</p>
 
-                    <!-- Section 2: Assigned Courses -->
-                    <div class="mb-3">
-                        <h6 class="fw-bold text-primary mb-2"><i class="bx bx-book me-2"></i>Assigned Courses</h6>
-                        <p class="text-muted small mb-3">Check or uncheck courses to update assignments for this professor.</p>
-                        <div class="card-custom p-3">
-                            <div class="btn-group w-100 mb-3" role="group" aria-label="Course year filters for edit modal">
-                                <button type="button" class="btn btn-primary btn-sm edit-year-filter-btn active" data-year="all">All Courses</button>
-                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="1">1st Year</button>
-                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="2">2nd Year</button>
-                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="3">3rd Year</button>
-                                <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="4">4th Year</button>
-                            </div>
-                            <div style="max-height: 240px; overflow-y: auto;">
-                                <div class="checkbox-grid" id="edit-course-checkbox-list">
-                                    {% for course in courses %}
-                                    <div class="form-check course-filter-item modal-course-item" data-year="{{ course.year_level or '' }}">
-                                        <input class="form-check-input modal-course-check" type="checkbox" name="course_ids" value="{{ course.course_id }}" id="edit_course_{{ course.course_id }}">
-                                        <label class="form-check-label" for="edit_course_{{ course.course_id }}">
-                                            {{ course.course_name }}
-                                            {% if course.program %}
-                                            <small class="text-muted d-block">{{ course.program }}</small>
-                                            {% endif %}
-                                        </label>
-                                    </div>
-                                    {% endfor %}
+                            <div class="card-custom p-3 d-flex flex-column flex-grow-1">
+                                <div class="btn-group w-100 mb-2" role="group" aria-label="Course year filters for edit modal">
+                                    <button type="button" class="btn btn-primary btn-sm edit-year-filter-btn active" data-year="all">All Courses</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="1">1st Year</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="2">2nd Year</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="3">3rd Year</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="4">4th Year</button>
                                 </div>
-                                {% if not courses %}
-                                <p class="text-muted text-center mb-0">No courses available.</p>
-                                {% endif %}
+
+                                <div class="input-group input-group-sm mb-2">
+                                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bx bx-search"></i></span>
+                                    <input type="text" class="form-control border-start-0" id="edit-course-search-input" placeholder="Search courses in edit modal...">
+                                </div>
+
+                                <div class="course-catalog-container flex-grow-1" id="edit-course-checkbox-list" style="max-height: 320px;">
+                                    <!-- Populated dynamically via JS -->
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Hidden inputs for edit form -->
+                <div id="edit-selected-course-inputs" style="display:none;"></div>
+
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary"><i class="bx bx-save me-1"></i> Save Changes</button>
+                    <button type="submit" class="btn btn-primary fw-semibold" id="btn-edit-save">
+                        <i class="bx bx-save me-1"></i> Save Changes & Update Load
+                    </button>
                 </div>
             </form>
         </div>
@@ -210,13 +635,57 @@
 $(function(){
     $('#editModal').appendTo("body");
 
+    // Master state registries
+    var coursesData = {};
+    {% for c in courses %}
+    coursesData[String({{ c.course_id|tojson }})] = {
+        course_id: {{ c.course_id|tojson }},
+        course_name: {{ c.course_name|tojson }},
+        lecture_hours: {{ c.lecture_hours or 0 }},
+        lab_hours: {{ c.lab_hours or 0 }},
+        ilp_hours: {{ c.ilp_hours or 0 }},
+        units: {{ c.units or 0 }},
+        program: {{ c.program|tojson if c.program else '""' }},
+        year_level: {{ c.year_level|tojson if c.year_level else '""' }}
+    };
+    {% endfor %}
+
+    var profDataMap = {};
+    {% for prof in professors %}
+    profDataMap[String({{ prof.prof_id|tojson }})] = {
+        prof_id: {{ prof.prof_id|tojson }},
+        first_name: {{ prof.first_name|tojson }},
+        last_name: {{ prof.last_name|tojson }},
+        department: {{ prof.department|tojson if prof.department else '""' }},
+        specialization: {{ prof.specialization|tojson if prof.specialization else '""' }},
+        min_units: {{ prof.min_units or 0 }},
+        max_units: {{ prof.max_units or 24 }}
+    };
+    {% endfor %}
+
+    var existingProfAssignments = {
+        {% for prof_group in prof_courses|groupby('prof_id') %}
+        "{{ prof_group.grouper }}": [
+            {% for c in prof_group.list %}
+            { course_id: {{ c.course_id }}, sections: {{ c.sections or 1 }} }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ]{% if not loop.last %},{% endif %}
+        {% endfor %}
+    };
+
+    // Form states
+    var addSelectedIds = new Set();
+    var addSectionMap = {};
+    var currentProfLimits = null;
+
+    var editSelectedIds = new Set();
+    var editSectionMap = {};
+    var editProfLimits = null;
+
     var addCourseList = document.getElementById('course-checkbox-list');
     var editCourseList = document.getElementById('edit-course-checkbox-list');
     var hiddenCourseInputs = document.getElementById('selected-course-inputs');
-    var addSelectedIds = new Set();
-    var editSelectedIds = new Set();
-    var addLoadInFlight = false;
-    var editLoadInFlight = false;
+    var editHiddenCourseInputs = document.getElementById('edit-selected-course-inputs');
 
     function setActiveFilter(buttons, activeButton){
         buttons.each(function(){
@@ -231,157 +700,937 @@ $(function(){
         return '/api/courses' + (yearValue && yearValue !== 'all' ? '?year_level=' + encodeURIComponent(yearValue) : '');
     }
 
-    function renderCourseList(container, courses, selectedIds, inputName, idPrefix){
-        if (!container) return;
-
-        if (!courses.length) {
-            container.innerHTML = '<p class="text-muted text-center mb-0">No courses available.</p>';
+    // Helper to render live interactive breakdown of courses and multiplied load
+    function renderBreakdownList($container, items, onRemove, onSectionChange) {
+        if (!$container.length) return;
+        if (!items || items.length === 0) {
+            $container.html('<div class="text-muted text-center py-2 small" style="font-size: 0.75rem;">No courses assigned yet.</div>');
             return;
         }
 
         var html = '';
-        courses.forEach(function(course){
-            var checked = selectedIds.has(String(course.course_id)) ? ' checked' : '';
-            html += '<div class="form-check">' +
-                '<input class="form-check-input" type="checkbox" name="' + inputName + '" value="' + course.course_id + '" id="' + idPrefix + course.course_id + '"' + checked + '>' +
-                '<label class="form-check-label" for="' + idPrefix + course.course_id + '">' +
-                (course.course_name || 'Untitled Course') +
-                (course.program ? '<small class="text-muted d-block">' + course.program + '</small>' : '') +
-                '</label>' +
-                '</div>';
+        items.forEach(function(item) {
+            var hrsStr = (item.computed_hours % 1 === 0) ? item.computed_hours : item.computed_hours.toFixed(1);
+            var baseHrsStr = (item.base_hours % 1 === 0) ? item.base_hours : item.base_hours.toFixed(1);
+            var unitsStr = (item.computed_units % 1 === 0) ? item.computed_units : item.computed_units.toFixed(1);
+            var baseUnitsStr = (item.units % 1 === 0) ? item.units : item.units.toFixed(1);
+
+            html += '<div class="d-flex align-items-center justify-content-between py-1 px-1 border-bottom flex-wrap gap-1 breakdown-row" data-cid="' + item.course_id + '">';
+            html += '  <div class="flex-grow-1" style="min-width: 130px;">';
+            html += '    <div class="fw-semibold text-dark d-flex align-items-center gap-1" style="font-size: 0.78rem;">';
+            html += '      <span>' + item.course_name + '</span>';
+            if (item.program) {
+                html += '    <span class="badge bg-secondary-subtle text-secondary border px-1 py-0" style="font-size: 0.65rem;">' + item.program + '</span>';
+            }
+            html += '    </div>';
+            html += '    <div class="text-muted" style="font-size: 0.72rem; line-height: 1.2;">';
+            html += '      <span>' + baseHrsStr + 'h &times; ' + item.sections + ' sec = <strong class="text-primary">' + hrsStr + ' hrs/wk</strong></span>';
+            html += '      <span class="ms-1">&bull; ' + baseUnitsStr + 'u &times; ' + item.sections + ' sec = <strong class="text-success">' + unitsStr + ' u</strong></span>';
+            html += '    </div>';
+            html += '  </div>';
+            html += '  <div class="d-flex align-items-center gap-1 ms-auto">';
+            html += '    <div class="input-group input-group-sm" style="width: 86px;">';
+            html += '      <button type="button" class="btn btn-outline-secondary btn-sm p-0 d-flex align-items-center justify-content-center breakdown-sec-minus" data-cid="' + item.course_id + '" style="width: 22px; height: 24px; font-size: 0.8rem; line-height: 1;" title="Decrease sections" aria-label="Decrease sections">-</button>';
+            html += '      <input type="number" min="1" max="20" class="form-control form-control-sm text-center fw-bold p-0 breakdown-sec-input" data-cid="' + item.course_id + '" value="' + item.sections + '" style="height: 24px; font-size: 0.75rem;" title="Sections" aria-label="Sections">';
+            html += '      <button type="button" class="btn btn-outline-secondary btn-sm p-0 d-flex align-items-center justify-content-center breakdown-sec-plus" data-cid="' + item.course_id + '" style="width: 22px; height: 24px; font-size: 0.8rem; line-height: 1;" title="Increase sections" aria-label="Increase sections">+</button>';
+            html += '    </div>';
+            html += '    <button type="button" class="btn btn-outline-danger btn-sm p-0 d-flex align-items-center justify-content-center btn-remove-breakdown" data-cid="' + item.course_id + '" title="Remove course" aria-label="Remove course" style="width: 22px; height: 24px; font-size: 0.85rem; border-radius: 4px; line-height: 1;">&times;</button>';
+            html += '  </div>';
+            html += '</div>';
+        });
+        $container.html(html);
+
+        // Bind interactive events within breakdown list
+        $container.find('.btn-remove-breakdown').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var cid = String($(this).data('cid'));
+            if (onRemove) onRemove(cid);
+        });
+
+        $container.find('.breakdown-sec-minus').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var cid = String($(this).data('cid'));
+            if (onSectionChange) onSectionChange(cid, -1, 'delta');
+        });
+
+        $container.find('.breakdown-sec-plus').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var cid = String($(this).data('cid'));
+            if (onSectionChange) onSectionChange(cid, 1, 'delta');
+        });
+
+        $container.find('.breakdown-sec-input').on('input', function(e) {
+            var cid = String($(this).data('cid'));
+            var raw = $(this).val();
+            if (raw === '') return;
+            var val = parseInt(raw, 10);
+            if (!isNaN(val) && val >= 1 && onSectionChange) {
+                onSectionChange(cid, Math.min(20, val), 'set');
+            }
+        });
+
+        $container.find('.breakdown-sec-input').on('blur change', function(e) {
+            var cid = String($(this).data('cid'));
+            var val = parseInt($(this).val(), 10) || 1;
+            val = Math.max(1, Math.min(20, val));
+            $(this).val(val);
+            if (onSectionChange) onSectionChange(cid, val, 'set');
+        });
+
+        $container.find('.breakdown-sec-input').on('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                $(this).trigger('change');
+            }
+        });
+    }
+
+    // Section change and remove handlers for Add Form
+    function handleAddSectionChange(cid, val, mode) {
+        var current = parseInt(addSectionMap[cid], 10) || 1;
+        var next = (mode === 'delta') ? Math.max(1, Math.min(20, current + val)) : Math.max(1, Math.min(20, val));
+        addSectionMap[cid] = next;
+
+        // Sync catalog card if present in current view
+        var $card = $(addCourseList).find('#card_add_course_' + cid);
+        if ($card.length) {
+            $card.find('.section-input').val(next);
+            updateCourseSubtotalCard($card, cid, next);
+        }
+
+        syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+        updateAddLoadPanel();
+    }
+
+    function handleAddRemove(cid) {
+        addSelectedIds.delete(cid);
+        var $card = $(addCourseList).find('#card_add_course_' + cid);
+        if ($card.length) {
+            $card.removeClass('selected');
+            $card.find('.course-check').prop('checked', false);
+        }
+        syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+        updateAddLoadPanel();
+    }
+
+    // Section change and remove handlers for Edit Modal
+    function handleEditSectionChange(cid, val, mode) {
+        var current = parseInt(editSectionMap[cid], 10) || 1;
+        var next = (mode === 'delta') ? Math.max(1, Math.min(20, current + val)) : Math.max(1, Math.min(20, val));
+        editSectionMap[cid] = next;
+
+        var $card = $(editCourseList).find('#card_edit_course_' + cid);
+        if ($card.length) {
+            $card.find('.section-input').val(next);
+            updateCourseSubtotalCard($card, cid, next);
+        }
+
+        syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+        updateEditLoadPanel();
+    }
+
+    function handleEditRemove(cid) {
+        editSelectedIds.delete(cid);
+        var $card = $(editCourseList).find('#card_edit_course_' + cid);
+        if ($card.length) {
+            $card.removeClass('selected');
+            $card.find('.course-check').prop('checked', false);
+        }
+        syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+        updateEditLoadPanel();
+    }
+
+    // Core Load Calculation Function
+    function calculateLoad(selectedIds, sectionMap, profLimits) {
+        var totalHours = 0;
+        var totalUnits = 0;
+        var courseCount = 0;
+        var sectionCount = 0;
+        var items = [];
+
+        selectedIds.forEach(function(cid) {
+            var c = coursesData[cid];
+            if (!c) return;
+            var sec = parseInt(sectionMap[cid], 10) || 1;
+            if (sec < 1) sec = 1;
+
+            var lec = parseFloat(c.lecture_hours) || 0;
+            var lab = parseFloat(c.lab_hours) || 0;
+            var ilp = parseFloat(c.ilp_hours) || 0;
+            var baseHrs = lec + lab + ilp;
+            var u = parseFloat(c.units) || 0;
+
+            var cHours = baseHrs * sec;
+            var cUnits = u * sec;
+
+            totalHours += cHours;
+            totalUnits += cUnits;
+            courseCount += 1;
+            sectionCount += sec;
+
+            items.push({
+                course_id: String(cid),
+                course_name: c.course_name || ('Course #' + cid),
+                program: c.program || '',
+                sections: sec,
+                lecture_hours: lec,
+                lab_hours: lab,
+                ilp_hours: ilp,
+                base_hours: baseHrs,
+                units: u,
+                computed_hours: cHours,
+                computed_units: cUnits
+            });
+        });
+
+        var minUnits = profLimits ? (parseFloat(profLimits.min_units) || 0) : 0;
+        var maxUnits = profLimits ? (parseFloat(profLimits.max_units) || 24) : 24;
+
+        var unitsExceeded = maxUnits > 0 && totalUnits > maxUnits;
+        var isExceeded = unitsExceeded;
+
+        var isNear = !isExceeded && maxUnits > 0 && (totalUnits >= 0.8 * maxUnits);
+        var isUnderload = !isExceeded && minUnits > 0 && (totalUnits < minUnits);
+        var isSafe = !isExceeded && !isNear && !isUnderload && courseCount > 0;
+
+        return {
+            totalHours: totalHours,
+            totalUnits: totalUnits,
+            courseCount: courseCount,
+            sectionCount: sectionCount,
+            items: items,
+            minUnits: minUnits,
+            maxUnits: maxUnits,
+            unitsExceeded: unitsExceeded,
+            isExceeded: isExceeded,
+            isNear: isNear,
+            isUnderload: isUnderload,
+            isSafe: isSafe
+        };
+    }
+
+    // Update Add Form Load Summary Panel
+    function updateAddLoadPanel() {
+        var result = calculateLoad(addSelectedIds, addSectionMap, currentProfLimits);
+
+        $('#lbl-total-hours').text(result.totalHours.toFixed(1));
+        $('#lbl-max-hours').text(result.maxHours.toFixed(1));
+        $('#lbl-total-units').text(result.totalUnits.toFixed(1));
+        $('#lbl-max-units').text(result.maxUnits.toFixed(1));
+        $('#lbl-min-units').text(result.minUnits.toFixed(1));
+
+        $('#lbl-selected-courses-count').text(result.courseCount);
+        $('#lbl-selected-sections-count').text(result.sectionCount);
+
+        var hoursPct = result.maxHours > 0 ? Math.min(100, Math.round((result.totalHours / result.maxHours) * 100)) : 0;
+        var unitsPct = result.maxUnits > 0 ? Math.min(100, Math.round((result.totalUnits / result.maxUnits) * 100)) : 0;
+
+        $('#lbl-hours-percent').text(hoursPct + '% of max');
+        $('#lbl-units-percent').text(unitsPct + '% of max');
+
+        var $barHours = $('#bar-total-hours');
+        var $barUnits = $('#bar-total-units');
+        $barHours.css('width', hoursPct + '%');
+        $barUnits.css('width', unitsPct + '%');
+
+        $barHours.removeClass('bg-primary bg-success bg-warning bg-danger');
+        $barUnits.removeClass('bg-primary bg-success bg-warning bg-danger');
+
+        var $statusBadge = $('#load-status-badge');
+        var $alert = $('#load-feedback-alert');
+        var $submitBtn = $('#btn-assign-courses');
+        var $btnHint = $('#btn-assign-hint');
+
+        // Render dynamic course load breakdown list with interactive steppers and working remove
+        renderBreakdownList($('#selected-courses-breakdown-list'), result.items, handleAddRemove, handleAddSectionChange);
+
+        if (result.items.length > 0) {
+            $('#selected-courses-breakdown-card').show();
+        } else {
+            $('#selected-courses-breakdown-card').hide();
+        }
+
+        if (!currentProfLimits) {
+            if (result.courseCount > 0) {
+                $statusBadge.attr('class', 'badge bg-info text-dark').html('<i class="bx bx-loader-circle me-1"></i>Pending Professor');
+                $barHours.addClass('bg-primary');
+                $barUnits.addClass('bg-primary');
+                $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
+                      .html('<i class="bx bx-info-circle me-1"></i> Calculating load live: <strong>' + result.totalHours.toFixed(1) + ' hrs</strong>, <strong>' + result.totalUnits.toFixed(1) + ' units</strong> (' + result.sectionCount + ' sections). Select a professor to validate against limits.');
+                $btnHint.text('Select a professor to assign this workload');
+            } else {
+                $statusBadge.attr('class', 'badge bg-secondary').text('Awaiting Selection');
+                $barHours.addClass('bg-primary');
+                $barUnits.addClass('bg-primary');
+                $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
+                      .html('<i class="bx bx-info-circle me-1"></i> Select a professor and check courses to view real-time workload calculation.');
+                $btnHint.text('Select a professor and at least one course');
+            }
+            $submitBtn.prop('disabled', true);
+            return;
+        }
+
+        if (result.courseCount === 0) {
+            $statusBadge.attr('class', 'badge bg-secondary').text('No Courses Selected');
+            $barHours.addClass('bg-primary');
+            $barUnits.addClass('bg-primary');
+            $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
+                  .html('<i class="bx bx-info-circle me-1"></i> Check courses and set sections to build the professor\'s teaching load.');
+            $submitBtn.prop('disabled', true);
+            $btnHint.text('Select at least one course');
+            return;
+        }
+
+        if (result.isExceeded) {
+            $statusBadge.attr('class', 'badge bg-danger').html('<i class="bx bx-x-circle me-1"></i>Limit Exceeded');
+            if (result.hoursExceeded) $barHours.addClass('bg-danger'); else $barHours.addClass('bg-warning');
+            if (result.unitsExceeded) $barUnits.addClass('bg-danger'); else $barUnits.addClass('bg-warning');
+
+            var reason = '';
+            if (result.hoursExceeded && result.unitsExceeded) {
+                reason = 'Both weekly hours (' + result.totalHours.toFixed(1) + ' / ' + result.maxHours + ' hrs) and units (' + result.totalUnits.toFixed(1) + ' / ' + result.maxUnits + ' u) exceed allowable maximum limits.';
+            } else if (result.hoursExceeded) {
+                reason = 'Weekly hours (' + result.totalHours.toFixed(1) + ' hrs) exceed maximum allowable limit of ' + result.maxHours + ' hrs.';
+            } else {
+                reason = 'Total units (' + result.totalUnits.toFixed(1) + ' units) exceed maximum allowable limit of ' + result.maxUnits + ' units.';
+            }
+
+            $alert.attr('class', 'alert alert-danger py-2 px-3 mt-auto mb-0 small')
+                  .html('<i class="bx bx-error-circle me-1"></i> <strong>Limit Exceeded:</strong> ' + reason + ' Submission blocked.');
+            $submitBtn.prop('disabled', true);
+            $btnHint.text('Submission blocked: Workload exceeds professor limits');
+        } else if (result.isUnderload) {
+            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-info-circle me-1"></i>Below Min Target');
+            $barHours.addClass('bg-success');
+            $barUnits.addClass('bg-warning');
+            $alert.attr('class', 'alert alert-warning py-2 px-3 mt-auto mb-0 small')
+                  .html('<i class="bx bx-info-circle me-1"></i> <strong>Underload Notice:</strong> Total units (' + result.totalUnits.toFixed(1) + ' u) is below target minimum (' + result.minUnits + ' u). You may still submit.');
+            $submitBtn.prop('disabled', false);
+            $btnHint.text('Ready to assign (underload target warning)');
+        } else if (result.isNear) {
+            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-time-five me-1"></i>Near Limit (80%+)');
+            $barHours.addClass('bg-warning');
+            $barUnits.addClass('bg-warning');
+            $alert.attr('class', 'alert alert-warning py-2 px-3 mt-auto mb-0 small')
+                  .html('<i class="bx bx-time me-1"></i> <strong>Approaching Capacity:</strong> Workload is near maximum limit (' + result.totalHours.toFixed(1) + ' hrs, ' + result.totalUnits.toFixed(1) + ' units).');
+            $submitBtn.prop('disabled', false);
+            $btnHint.text('Ready to assign');
+        } else {
+            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Safe Range');
+            $barHours.addClass('bg-success');
+            $barUnits.addClass('bg-success');
+            $alert.attr('class', 'alert alert-success py-2 px-3 mt-auto mb-0 small')
+                  .html('<i class="bx bx-check-circle me-1"></i> <strong>Load Balanced:</strong> Hours (' + result.totalHours.toFixed(1) + ' hrs) and units (' + result.totalUnits.toFixed(1) + ' u) are within safe parameters.');
+            $submitBtn.prop('disabled', false);
+            $btnHint.text('Ready to assign');
+        }
+    }
+
+    // Update Edit Modal Load Summary Panel
+    function updateEditLoadPanel() {
+        var result = calculateLoad(editSelectedIds, editSectionMap, editProfLimits);
+
+        $('#edit-lbl-hours').text(result.totalHours.toFixed(1));
+        $('#edit-lbl-max-hours').text(result.maxHours.toFixed(1));
+        $('#edit-lbl-units').text(result.totalUnits.toFixed(1));
+        $('#edit-lbl-max-units').text(result.maxUnits.toFixed(1));
+        $('#edit-lbl-min-units').text(result.minUnits.toFixed(1));
+
+        $('#edit-lbl-courses-count').text(result.courseCount);
+        $('#edit-lbl-sections-count').text(result.sectionCount);
+
+        var hoursPct = result.maxHours > 0 ? Math.min(100, Math.round((result.totalHours / result.maxHours) * 100)) : 0;
+        var unitsPct = result.maxUnits > 0 ? Math.min(100, Math.round((result.totalUnits / result.maxUnits) * 100)) : 0;
+
+        $('#edit-lbl-units-percent').text(unitsPct + '%');
+
+        var $barHours = $('#edit-bar-hours');
+        var $barUnits = $('#edit-bar-units');
+        $barHours.css('width', hoursPct + '%');
+        $barUnits.css('width', unitsPct + '%');
+
+        $barHours.removeClass('bg-primary bg-success bg-warning bg-danger');
+        $barUnits.removeClass('bg-primary bg-success bg-warning bg-danger');
+
+        var $statusBadge = $('#edit-load-status-badge');
+        var $alert = $('#edit-feedback-alert');
+        var $submitBtn = $('#btn-edit-save');
+
+        // Render dynamic course load breakdown list in modal with interactive steppers and working remove
+        renderBreakdownList($('#edit-breakdown-list'), result.items, handleEditRemove, handleEditSectionChange);
+
+        if (result.items.length > 0) {
+            $('#edit-breakdown-card').show();
+        } else {
+            $('#edit-breakdown-card').hide();
+        }
+
+        if (result.courseCount === 0) {
+            $statusBadge.attr('class', 'badge bg-secondary').text('No Courses');
+            $barHours.addClass('bg-primary');
+            $barUnits.addClass('bg-primary');
+            $alert.attr('class', 'alert alert-info py-2 px-2 mb-0 small')
+                  .html('<i class="bx bx-info-circle me-1"></i> Select courses to assign to this professor.');
+            $submitBtn.prop('disabled', false);
+            return;
+        }
+
+        if (result.isExceeded) {
+            $statusBadge.attr('class', 'badge bg-danger').html('<i class="bx bx-x-circle me-1"></i>Exceeded');
+            if (result.hoursExceeded) $barHours.addClass('bg-danger'); else $barHours.addClass('bg-warning');
+            if (result.unitsExceeded) $barUnits.addClass('bg-danger'); else $barUnits.addClass('bg-warning');
+
+            var msg = result.hoursExceeded ? 'Hours (' + result.totalHours.toFixed(1) + ' hrs) exceed max ' + result.maxHours + 'h.' : 'Units (' + result.totalUnits.toFixed(1) + ' u) exceed max ' + result.maxUnits + 'u.';
+            $alert.attr('class', 'alert alert-danger py-2 px-2 mb-0 small')
+                  .html('<i class="bx bx-error-circle me-1"></i> <strong>Exceeded:</strong> ' + msg + ' Save disabled.');
+            $submitBtn.prop('disabled', true);
+        } else if (result.isUnderload) {
+            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-info-circle me-1"></i>Underload');
+            $barHours.addClass('bg-success');
+            $barUnits.addClass('bg-warning');
+            $alert.attr('class', 'alert alert-warning py-2 px-2 mb-0 small')
+                  .html('<i class="bx bx-info-circle me-1"></i> Units (' + result.totalUnits.toFixed(1) + ' u) below min target of ' + result.minUnits + ' u.');
+            $submitBtn.prop('disabled', false);
+        } else if (result.isNear) {
+            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-time-five me-1"></i>Near Limit');
+            $barHours.addClass('bg-warning');
+            $barUnits.addClass('bg-warning');
+            $alert.attr('class', 'alert alert-warning py-2 px-2 mb-0 small')
+                  .html('<i class="bx bx-time me-1"></i> Near capacity (' + result.totalHours.toFixed(1) + 'h / ' + result.totalUnits.toFixed(1) + 'u).');
+            $submitBtn.prop('disabled', false);
+        } else {
+            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Safe Range');
+            $barHours.addClass('bg-success');
+            $barUnits.addClass('bg-success');
+            $alert.attr('class', 'alert alert-success py-2 px-2 mb-0 small')
+                  .html('<i class="bx bx-check-circle me-1"></i> Workload balanced (' + result.totalHours.toFixed(1) + 'h, ' + result.totalUnits.toFixed(1) + 'u).');
+            $submitBtn.prop('disabled', false);
+        }
+    }
+
+    // Render Course List for container (Add or Edit)
+    function renderCourseList(container, courses, selectedIds, sectionMap, inputPrefix, idPrefix) {
+        if (!container) return;
+
+        if (!courses.length) {
+            container.innerHTML = '<div class="empty-state py-4 text-center"><div class="empty-state__text text-muted">No courses found.</div></div>';
+            return;
+        }
+
+        var html = '';
+        courses.forEach(function(course) {
+            coursesData[course.course_id] = course;
+            var cid = String(course.course_id);
+            var isChecked = selectedIds.has(cid);
+            var secCount = parseInt(sectionMap[cid], 10) || 1;
+            if (secCount < 1) secCount = 1;
+
+            var lec = parseFloat(course.lecture_hours) || 0;
+            var lab = parseFloat(course.lab_hours) || 0;
+            var ilp = parseFloat(course.ilp_hours) || 0;
+            var u = parseFloat(course.units) || 0;
+            var courseHrs = (lec + lab + ilp) * secCount;
+            var courseUnits = u * secCount;
+            var hrsStr = (courseHrs % 1 === 0) ? courseHrs : courseHrs.toFixed(1);
+            var unitsStr = (courseUnits % 1 === 0) ? courseUnits : courseUnits.toFixed(1);
+
+            html += '<div class="course-card-item' + (isChecked ? ' selected' : '') + '" id="card_' + idPrefix + course.course_id + '" data-cid="' + course.course_id + '" data-year="' + (course.year_level || '') + '" data-name="' + (course.course_name || '').toLowerCase() + '" data-program="' + (course.program || '').toLowerCase() + '">';
+            html += '  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">';
+            html += '    <div class="d-flex align-items-start gap-2 flex-grow-1" style="min-width: 200px;">';
+            html += '      <input class="form-check-input mt-1 course-check" type="checkbox" value="' + course.course_id + '" id="' + idPrefix + course.course_id + '"' + (isChecked ? ' checked' : '') + '>';
+            html += '      <label class="form-check-label mb-0" for="' + idPrefix + course.course_id + '" style="cursor: pointer;">';
+            html += '        <span class="fw-semibold text-dark d-block">' + (course.course_name || 'Untitled') + '</span>';
+            html += '        <div class="d-flex flex-wrap gap-1 align-items-center mt-1">';
+            if (course.program) {
+                html += '          <span class="badge bg-secondary-subtle text-secondary border px-1 py-0" style="font-size: 0.72rem;">' + course.program + '</span>';
+            }
+            html += '          <span class="stat-pill stat-pill-lec">Lec: ' + lec + 'h</span>';
+            html += '          <span class="stat-pill stat-pill-lab">Lab: ' + lab + 'h</span>';
+            html += '          <span class="stat-pill stat-pill-ilp">ILP: ' + ilp + 'h</span>';
+            html += '          <span class="stat-pill stat-pill-unit">Units: ' + u + '</span>';
+            html += '        </div>';
+            html += '      </label>';
+            html += '    </div>';
+            html += '    <div class="d-flex align-items-center gap-2 ms-auto section-control-wrap">';
+            html += '      <div class="d-flex flex-column align-items-end">';
+            html += '        <div class="d-flex align-items-center gap-2 bg-light px-2 py-1 rounded border">';
+            html += '          <label class="form-label mb-0 small fw-bold text-dark text-nowrap" for="sec_' + idPrefix + course.course_id + '"><i class="bx bx-layer me-1 text-primary"></i>Number of Sections:</label>';
+            html += '          <div class="input-group input-group-sm section-stepper" style="width: 105px;">';
+            html += '            <button type="button" class="btn btn-outline-secondary btn-step btn-sec-minus" data-cid="' + course.course_id + '" title="Decrease sections" aria-label="Decrease sections">-</button>';
+            html += '            <input type="number" min="1" max="20" class="form-control step-input section-input text-center fw-bold" id="sec_' + idPrefix + course.course_id + '" name="' + (inputPrefix || 'sections_') + course.course_id + '" data-cid="' + course.course_id + '" value="' + secCount + '" title="Number of sections" aria-label="Number of Sections">';
+            html += '            <button type="button" class="btn btn-outline-secondary btn-step btn-sec-plus" data-cid="' + course.course_id + '" title="Increase sections" aria-label="Increase sections">+</button>';
+            html += '          </div>';
+            html += '        </div>';
+            html += '        <div class="d-flex align-items-center gap-1 mt-1">';
+            html += '          <span class="badge bg-primary-subtle text-primary border border-primary-subtle subtotal-badge" id="subtotal_' + idPrefix + course.course_id + '" style="font-size: 0.75rem;">';
+            html +=              hrsStr + ' hrs/wk &bull; ' + unitsStr + ' units (' + secCount + (secCount === 1 ? ' sec' : ' secs') + ')';
+            html += '          </span>';
+            html += '        </div>';
+            html += '      </div>';
+            html += '    </div>';
+            html += '  </div>';
+            html += '</div>';
         });
 
         container.innerHTML = html;
     }
 
-    function updateSelectionState(container, selectedIds){
+    // Sync Hidden Inputs for submission across tab switches
+    function syncHiddenInputs(container, selectedIds, sectionMap, namePrefix) {
         if (!container) return;
-        container.querySelectorAll('input[type="checkbox"]').forEach(function(input){
-            if (selectedIds.has(input.value)) {
-                input.checked = true;
-            }
+        container.innerHTML = '';
+        selectedIds.forEach(function(cid) {
+            var cInput = document.createElement('input');
+            cInput.type = 'hidden';
+            cInput.name = 'course_ids';
+            cInput.value = cid;
+            container.appendChild(cInput);
+
+            var sInput = document.createElement('input');
+            sInput.type = 'hidden';
+            sInput.name = (namePrefix || 'sections_') + cid;
+            sInput.value = sectionMap[cid] || 1;
+            container.appendChild(sInput);
         });
     }
 
-    function syncHiddenCourseInputs(selectedIds){
-        if (!hiddenCourseInputs) return;
-        hiddenCourseInputs.innerHTML = '';
-        selectedIds.forEach(function(courseId){
-            var input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'course_ids';
-            input.value = courseId;
-            hiddenCourseInputs.appendChild(input);
-        });
-    }
-
-    function loadCourses(container, buttons, yearValue, selectedIds, inputName, idPrefix, loadingFlagRef){
+    // Load Courses from API for Year Filter
+    function loadCourses(container, buttons, yearValue, selectedIds, sectionMap, inputPrefix, idPrefix, onComplete) {
         if (!container) return;
 
-        if (loadingFlagRef) {
-            loadingFlagRef.value = true;
-        }
-
-        buttons.each(function(){
-            $(this).prop('disabled', true);
-        });
-
-        container.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading courses...</div>';
+        buttons.each(function(){ $(this).prop('disabled', true); });
+        container.innerHTML = '<div class="text-muted small py-4 text-center"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading courses...</div>';
 
         fetch(getCourseListUrl(yearValue))
             .then(function(response){
-                if (!response.ok) {
-                    throw new Error('Unable to load courses.');
-                }
+                if (!response.ok) throw new Error('Unable to load courses.');
                 return response.json();
             })
             .then(function(data){
-                renderCourseList(container, data.courses || [], selectedIds, inputName, idPrefix);
-                updateSelectionState(container, selectedIds);
-                syncHiddenCourseInputs(selectedIds);
+                var list = data.courses || [];
+                list.forEach(function(c){ coursesData[c.course_id] = c; });
+                renderCourseList(container, list, selectedIds, sectionMap, inputPrefix, idPrefix);
+                if (onComplete) onComplete();
             })
             .catch(function(){
-                container.innerHTML = '<p class="text-muted text-center mb-0">Unable to load courses right now.</p>';
+                container.innerHTML = '<p class="text-muted text-center py-4 mb-0">Unable to load courses right now.</p>';
             })
             .finally(function(){
-                buttons.each(function(){
-                    $(this).prop('disabled', false);
-                });
-                if (loadingFlagRef) {
-                    loadingFlagRef.value = false;
-                }
+                buttons.each(function(){ $(this).prop('disabled', false); });
             });
     }
 
-    function bindSelectionTracking(container, selectedIds){
+    // Event binding for course selection & stepper changes
+    function setupContainerEvents(container, selectedIds, sectionMap, idPrefix, onUpdate) {
         if (!container) return;
-        container.addEventListener('change', function(event){
-            if (event.target && event.target.matches('input[type="checkbox"]')) {
-                if (event.target.checked) {
-                    selectedIds.add(event.target.value);
-                } else {
-                    selectedIds.delete(event.target.value);
+
+        // Checkbox change
+        $(container).on('change', '.course-check', function(e) {
+            var $chk = $(this);
+            var $card = $chk.closest('.course-card-item');
+            var cid = String($chk.val());
+            var $secInput = $card.find('.section-input');
+            var isChecked = $chk.is(':checked');
+
+            if (isChecked) {
+                selectedIds.add(cid);
+                if (!sectionMap[cid]) sectionMap[cid] = parseInt($secInput.val(), 10) || 1;
+                $card.addClass('selected');
+                $secInput.val(sectionMap[cid]);
+            } else {
+                selectedIds.delete(cid);
+                $card.removeClass('selected');
+            }
+
+            updateCourseSubtotalCard($card, cid, sectionMap[cid] || 1);
+            if (onUpdate) onUpdate();
+        });
+
+        // Click card body to toggle checkbox (ignoring clicks on inputs, buttons, and steppers)
+        $(container).on('click', '.course-card-item', function(e) {
+            if ($(e.target).closest('input, button, a, label, .section-control-wrap, .section-stepper').length) {
+                return;
+            }
+            var $card = $(this);
+            var $chk = $card.find('.course-check');
+            var nextChecked = !$chk.is(':checked');
+            $chk.prop('checked', nextChecked).trigger('change');
+        });
+
+        // Stepper - button
+        $(container).on('click', '.btn-sec-minus', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var $btn = $(this);
+            var $card = $btn.closest('.course-card-item');
+            var cid = String($btn.data('cid') || $card.data('cid'));
+            var $secInput = $card.find('.section-input');
+            var $chk = $card.find('.course-check');
+
+            var current = parseInt(sectionMap[cid], 10) || parseInt($secInput.val(), 10) || 1;
+            var next = Math.max(1, current - 1);
+
+            sectionMap[cid] = next;
+            $secInput.val(next);
+
+            if (!$chk.is(':checked')) {
+                $chk.prop('checked', true);
+                selectedIds.add(cid);
+                $card.addClass('selected');
+            }
+
+            updateCourseSubtotalCard($card, cid, next);
+            if (onUpdate) onUpdate();
+        });
+
+        // Stepper + button
+        $(container).on('click', '.btn-sec-plus', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var $btn = $(this);
+            var $card = $btn.closest('.course-card-item');
+            var cid = String($btn.data('cid') || $card.data('cid'));
+            var $secInput = $card.find('.section-input');
+            var $chk = $card.find('.course-check');
+
+            var current = parseInt(sectionMap[cid], 10) || parseInt($secInput.val(), 10) || 1;
+            var next = Math.min(20, current + 1);
+
+            sectionMap[cid] = next;
+            $secInput.val(next);
+
+            if (!$chk.is(':checked')) {
+                $chk.prop('checked', true);
+                selectedIds.add(cid);
+                $card.addClass('selected');
+            }
+
+            updateCourseSubtotalCard($card, cid, next);
+            if (onUpdate) onUpdate();
+        });
+
+        // Stepper manual input (typing) - allow editing without immediately overriding with 1
+        $(container).on('input', '.section-input', function(e) {
+            var $input = $(this);
+            var $card = $input.closest('.course-card-item');
+            var cid = String($input.data('cid') || $card.data('cid'));
+            var raw = $input.val();
+            if (raw === '') return; // User is in the middle of backspacing/typing
+            var val = parseInt(raw, 10);
+            if (!isNaN(val) && val >= 1) {
+                val = Math.min(20, val);
+                sectionMap[cid] = val;
+                var $chk = $card.find('.course-check');
+                if (!$chk.is(':checked')) {
+                    $chk.prop('checked', true);
+                    selectedIds.add(cid);
+                    $card.addClass('selected');
                 }
-                syncHiddenCourseInputs(selectedIds);
+                updateCourseSubtotalCard($card, cid, val);
+                if (onUpdate) onUpdate();
             }
         });
-    }
 
-    bindSelectionTracking(addCourseList, addSelectedIds);
-    bindSelectionTracking(editCourseList, editSelectedIds);
+        // Stepper blur / change - normalize invalid or empty values to 1
+        $(container).on('blur change', '.section-input', function(e) {
+            var $input = $(this);
+            var $card = $input.closest('.course-card-item');
+            var cid = String($input.data('cid') || $card.data('cid'));
+            var val = parseInt($input.val(), 10);
+            if (isNaN(val) || val < 1) val = 1;
+            if (val > 20) val = 20;
 
-    // Load the initial course list from the backend so the box is populated server-side style
-    setActiveFilter($('.year-filter-btn'), $('.year-filter-btn[data-year="all"]'));
-    loadCourses(addCourseList, $('.year-filter-btn'), 'all', addSelectedIds, 'course_ids', 'add_course_', { value: false });
-    syncHiddenCourseInputs(addSelectedIds);
+            sectionMap[cid] = val;
+            $input.val(val);
 
-    var addCourseForm = document.querySelector('form[action="/add_prof_course"]');
-    if (addCourseForm) {
-        addCourseForm.addEventListener('submit', function(){
-            syncHiddenCourseInputs(addSelectedIds);
-            addCourseList.querySelectorAll('input[type="checkbox"]').forEach(function(input){
-                input.removeAttribute('name');
-            });
+            var $chk = $card.find('.course-check');
+            if ($chk.is(':checked')) {
+                selectedIds.add(cid);
+                $card.addClass('selected');
+            }
+
+            updateCourseSubtotalCard($card, cid, val);
+            if (onUpdate) onUpdate();
         });
     }
 
-    $('.year-filter-btn').on('click', function(){
+    // Prevent enter key on any section inputs from submitting the form unexpectedly
+    $(document).on('keydown', '.section-input, .breakdown-sec-input', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            $(this).trigger('change');
+        }
+    });
+
+    function updateCourseSubtotalCard($card, cid, secCount) {
+        var c = coursesData[String(cid)];
+        if (!c) return;
+        var sec = parseInt(secCount, 10) || 1;
+        var lec = parseFloat(c.lecture_hours) || 0;
+        var lab = parseFloat(c.lab_hours) || 0;
+        var ilp = parseFloat(c.ilp_hours) || 0;
+        var u = parseFloat(c.units) || 0;
+        var courseHrs = (lec + lab + ilp) * sec;
+        var courseUnits = u * sec;
+        var hrsStr = (courseHrs % 1 === 0) ? courseHrs : courseHrs.toFixed(1);
+        var unitsStr = (courseUnits % 1 === 0) ? courseUnits : courseUnits.toFixed(1);
+        $card.find('.subtotal-badge').html(hrsStr + ' hrs/wk &bull; ' + unitsStr + ' units (' + sec + (sec === 1 ? ' sec' : ' secs') + ')');
+    }
+
+    setupContainerEvents(addCourseList, addSelectedIds, addSectionMap, 'add_course_', function() {
+        syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+        updateAddLoadPanel();
+    });
+
+    setupContainerEvents(editCourseList, editSelectedIds, editSectionMap, 'edit_course_', function() {
+        syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+        updateEditLoadPanel();
+    });
+
+    // Professor Selector Change Handler
+    $('#prof_select').on('change', function() {
+        var profId = $(this).val();
+        var prof = profDataMap[String(profId)];
+        if (!prof) return;
+
+        currentProfLimits = {
+            prof_id: profId,
+            specialization: prof.specialization || '',
+            min_units: parseFloat(prof.min_units) || 0,
+            max_units: parseFloat(prof.max_units) || 24
+        };
+
+        // Update Info Banner
+        $('#prof-banner-dept').text(prof.department || 'General');
+        $('#prof-banner-spec').text(prof.specialization || 'None');
+        $('#prof-banner-units').text((prof.min_units || 0) + ' - ' + (prof.max_units || 24));
+        $('#prof-info-banner').removeClass('d-none');
+
+        // Pre-populate existing assignments from DB for this prof
+        var existingList = existingProfAssignments[profId] || [];
+        if (existingList.length > 0 && addSelectedIds.size === 0) {
+            // No user selections yet: load existing assignments
+            existingList.forEach(function(item) {
+                var cidStr = String(item.course_id);
+                addSelectedIds.add(cidStr);
+                addSectionMap[cidStr] = item.sections || 1;
+            });
+        } else if (existingList.length > 0) {
+            // Merge existing assignments with user's current selections
+            existingList.forEach(function(item) {
+                var cidStr = String(item.course_id);
+                if (!addSelectedIds.has(cidStr)) {
+                    addSelectedIds.add(cidStr);
+                    addSectionMap[cidStr] = item.sections || 1;
+                }
+            });
+        }
+
+        // Update visible checkboxes & inputs in addCourseList
+        $(addCourseList).find('.course-card-item').each(function() {
+            var $card = $(this);
+            var cid = String($card.data('cid'));
+            var isChecked = addSelectedIds.has(cid);
+            var secVal = addSectionMap[cid] || 1;
+
+            $card.find('.course-check').prop('checked', isChecked);
+            $card.find('.section-input').val(secVal);
+            $card.toggleClass('selected', isChecked);
+            updateCourseSubtotalCard($card, cid, secVal);
+        });
+
+        syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+        updateAddLoadPanel();
+    });
+
+    // Reset / Clear Selection button
+    $('#btn-clear-selection').on('click', function() {
+        addSelectedIds.clear();
+        addSectionMap = {};
+        $(addCourseList).find('.course-card-item').each(function() {
+            var $card = $(this);
+            var cid = $card.data('cid');
+            $card.removeClass('selected');
+            $card.find('.course-check').prop('checked', false);
+            $card.find('.section-input').val(1);
+            updateCourseSubtotalCard($card, cid, 1);
+        });
+        syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+        updateAddLoadPanel();
+    });
+
+    // Year Filter Button Handlers (Add Form)
+    $('.year-filter-btn').on('click', function() {
         var yearValue = $(this).data('year');
         setActiveFilter($('.year-filter-btn'), this);
-        loadCourses(addCourseList, $('.year-filter-btn'), yearValue, addSelectedIds, 'course_ids', 'add_course_', { value: false });
+        loadCourses(addCourseList, $('.year-filter-btn'), yearValue, addSelectedIds, addSectionMap, 'sections_', 'add_course_', function() {
+            syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+            updateAddLoadPanel();
+            applyCourseFilter($('#course-search-input').val(), addCourseList);
+        });
     });
 
-    $('.edit-year-filter-btn').on('click', function(){
+    // Year Filter Button Handlers (Edit Modal)
+    $('.edit-year-filter-btn').on('click', function() {
         var yearValue = $(this).data('year');
         setActiveFilter($('.edit-year-filter-btn'), this);
-        loadCourses(editCourseList, $('.edit-year-filter-btn'), yearValue, editSelectedIds, 'course_ids', 'edit_course_', { value: false });
+        loadCourses(editCourseList, $('.edit-year-filter-btn'), yearValue, editSelectedIds, editSectionMap, 'edit_sections_', 'edit_course_', function() {
+            syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+            updateEditLoadPanel();
+            applyCourseFilter($('#edit-course-search-input').val(), editCourseList);
+        });
     });
 
-    $('.edit-btn').on('click', function(){
+    // Course Search Filters
+    function applyCourseFilter(term, container) {
+        var q = (term || '').trim().toLowerCase();
+        var visibleCount = 0;
+        $(container).find('.course-card-item').each(function() {
+            var name = String($(this).data('name') || '');
+            var prog = String($(this).data('program') || '');
+            if (!q || name.indexOf(q) !== -1 || prog.indexOf(q) !== -1) {
+                $(this).show();
+                visibleCount++;
+            } else {
+                $(this).hide();
+            }
+        });
+        if (container === addCourseList) {
+            $('#visible-course-count').text('Showing ' + visibleCount + ' courses');
+        }
+    }
+
+    $('#course-search-input').on('input', function() {
+        var val = $(this).val();
+        $('#btn-clear-search').toggle(!!val);
+        applyCourseFilter(val, addCourseList);
+    });
+
+    $('#btn-clear-search').on('click', function() {
+        $('#course-search-input').val('');
+        $(this).hide();
+        applyCourseFilter('', addCourseList);
+    });
+
+    $('#edit-course-search-input').on('input', function() {
+        applyCourseFilter($(this).val(), editCourseList);
+    });
+
+    // Edit Modal Trigger Handler
+    $('.edit-btn').on('click', function() {
         var $t = $(this);
         var profId = $t.data('id');
         var firstName = $t.data('firstname');
         var lastName = $t.data('lastname');
         var department = $t.data('department');
+        var specialization = String($t.data('specialization') || '');
+        var minUnits = parseFloat($t.data('minunits')) || 0;
+        var maxUnits = parseFloat($t.data('maxunits')) || 24;
         var courseAttr = String($t.data('courses') || '');
-        var courseIds = courseAttr.split(',').map(function(s){ return s.trim(); });
+        var sectionAttr = String($t.data('sections') || '');
 
         $('#edit_firstname').val(firstName);
         $('#edit_lastname').val(lastName);
         $('#edit_department').val(department);
+        $('#edit_specialization').val(specialization);
+        $('#edit_min_units').val(minUnits);
+        $('#edit_max_units').val(maxUnits);
+
+        editProfLimits = {
+            prof_id: profId,
+            specialization: specialization,
+            min_units: minUnits,
+            max_units: maxUnits
+        };
 
         editSelectedIds.clear();
-        courseIds.forEach(function(cid){
-            if (cid) {
-                editSelectedIds.add(cid);
-            }
-        });
+        editSectionMap = {};
+
+        // Parse section pairs: "courseId:sections,courseId:sections"
+        if (sectionAttr) {
+            sectionAttr.split(',').forEach(function(pair) {
+                var parts = pair.split(':');
+                var cid = parts[0].trim();
+                var secs = parseInt(parts[1], 10) || 1;
+                if (cid) {
+                    editSelectedIds.add(cid);
+                    editSectionMap[cid] = secs;
+                }
+            });
+        } else if (courseAttr) {
+            courseAttr.split(',').forEach(function(cid) {
+                var c = cid.trim();
+                if (c) {
+                    editSelectedIds.add(c);
+                    editSectionMap[c] = 1;
+                }
+            });
+        }
 
         setActiveFilter($('.edit-year-filter-btn'), $('.edit-year-filter-btn[data-year="all"]'));
-        loadCourses(editCourseList, $('.edit-year-filter-btn'), 'all', editSelectedIds, 'course_ids', 'edit_course_', { value: false });
-
+        $('#edit-course-search-input').val('');
         $('#editForm').attr('action', '/update_prof_with_courses/' + profId);
+
+        loadCourses(editCourseList, $('.edit-year-filter-btn'), 'all', editSelectedIds, editSectionMap, 'edit_sections_', 'edit_course_', function() {
+            syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+            updateEditLoadPanel();
+        });
     });
+
+    // Real-time limit adjustment in Edit Modal
+    $('#edit_specialization, #edit_min_units, #edit_max_units').on('input change', function() {
+        if (!editProfLimits) return;
+        editProfLimits.specialization = $('#edit_specialization').val() || '';
+        editProfLimits.min_units = parseFloat($('#edit_min_units').val()) || 0;
+        editProfLimits.max_units = parseFloat($('#edit_max_units').val()) || 24;
+        updateEditLoadPanel();
+    });
+
+    // Helper to ensure all currently checked items in the visible DOM have their latest section inputs recorded
+    function ensureAllCheckedCoursesSynced(container, selectedIds, sectionMap) {
+        if (!container) return;
+        $(container).find('.course-card-item').each(function() {
+            var $card = $(this);
+            var cid = String($card.data('cid'));
+            var $chk = $card.find('.course-check');
+            var $sec = $card.find('.section-input');
+            if ($chk.is(':checked')) {
+                selectedIds.add(cid);
+                var val = parseInt($sec.val(), 10) || 1;
+                sectionMap[cid] = Math.max(1, Math.min(20, val));
+            }
+        });
+    }
+
+    // Form Submit Interceptors to ensure sync across year tabs
+    var addCourseForm = document.getElementById('assignCourseForm');
+    if (addCourseForm) {
+        addCourseForm.addEventListener('submit', function(e) {
+            ensureAllCheckedCoursesSynced(addCourseList, addSelectedIds, addSectionMap);
+            syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+            // Remove names from visible inputs so they don't produce duplicate keys in POST
+            addCourseList.querySelectorAll('input[type="checkbox"], input[type="number"]').forEach(function(input) {
+                input.removeAttribute('name');
+            });
+        });
+    }
+
+    var editForm = document.getElementById('editForm');
+    if (editForm) {
+        editForm.addEventListener('submit', function(e) {
+            ensureAllCheckedCoursesSynced(editCourseList, editSelectedIds, editSectionMap);
+            syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+            editCourseList.querySelectorAll('input[type="checkbox"], input[type="number"]').forEach(function(input) {
+                input.removeAttribute('name');
+            });
+        });
+    }
+
+    // Initial state setup
+    updateAddLoadPanel();
 });
 </script>
 {% endblock %}
