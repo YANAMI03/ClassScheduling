@@ -10,6 +10,16 @@
     </div>
 </div>
 
+<!-- Navigation Tabs -->
+<ul class="nav nav-pills mb-4 gap-2">
+    <li class="nav-item">
+        <a class="nav-link active btn btn-primary btn-sm px-3 text-white" href="/professors"><i class="bx bx-user me-1"></i>Professors</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link btn btn-outline-primary btn-sm px-3" href="/academic_ranking"><i class="bx bx-award me-1"></i>Academic Ranking</a>
+    </li>
+</ul>
+
 <div class="card-custom mb-4">
     <div class="card-custom__header">
         <h5 class="card-custom__title"><i class="bx bx-user-plus me-2"></i>Add New Professor</h5>
@@ -36,8 +46,25 @@
                 </select>
             </div>
             <div class="col-md-6">
-                <label class="form-label">Maximum Hours per Week</label>
-                <input type="number" name="max_hours" class="form-control" value="40" min="1" max="80" required>
+                <label class="form-label">Specialization</label>
+                <input type="text" name="specialization" class="form-control" placeholder="e.g. Web Development, Database">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Academic Ranking</label>
+                <select class="form-select" name="academic_ranking_id" id="add_ranking_select">
+                    <option value="">None / Unassigned</option>
+                    {% for r in academic_rankings %}
+                    <option value="{{ r.academic_ranking_id }}" data-units="{{ r.units_required }}">{{ r.name }} ({{ r.units_required }} units)</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Minimum Units</label>
+                <input type="number" name="min_units" class="form-control" placeholder="0" min="0" step="any" value="0">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Maximum Units</label>
+                <input type="number" name="max_units" class="form-control" placeholder="24" min="0" step="any" value="24">
             </div>
             <div class="col-12">
                 <button class="btn btn-primary" type="submit">
@@ -59,7 +86,10 @@
                 <tr>
                     <th>Name</th>
                     <th>Department</th>
-                    <th>Maximum Hours</th>
+                    <th>Specialization</th>
+                    <th>Academic Ranking</th>
+                    <th>Minimum Units</th>
+                    <th>Maximum Units</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
@@ -68,9 +98,26 @@
                 <tr>
                     <td><strong>{{ professor.first_name }} {{ professor.last_name }}</strong></td>
                     <td><span class="badge-custom badge-success">{{ professor.department }}</span></td>
-                    <td>{{ professor.max_hours or 40 }}</td>
+                    <td>{{ professor.specialization or '-' }}</td>
+                    <td>
+                        {% if professor.academic_ranking_name %}
+                        <span class="badge bg-light text-dark border"><i class="bx bx-award me-1 text-primary"></i>{{ professor.academic_ranking_name }}</span>
+                        {% else %}
+                        <span class="text-muted small">-</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ professor.min_units if professor.min_units is not none else 0 }}</td>
+                    <td>{{ professor.max_units if professor.max_units is not none else 24 }}</td>
                     <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{professor.prof_id}}" data-firstname="{{professor.first_name}}" data-lastname="{{professor.last_name}}" data-department="{{professor.department}}" data-maxhours="{{ professor.max_hours or 40 }}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal"
+                                data-id="{{professor.prof_id}}"
+                                data-firstname="{{professor.first_name}}"
+                                data-lastname="{{professor.last_name}}"
+                                data-department="{{professor.department}}"
+                                data-specialization="{{ professor.specialization or '' }}"
+                                data-rankingid="{{ professor.academic_ranking_id or '' }}"
+                                data-minunits="{{ professor.min_units if professor.min_units is not none else 0 }}"
+                                data-maxunits="{{ professor.max_units if professor.max_units is not none else 24 }}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_professor/{{ professor.prof_id }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this professor?">
@@ -80,7 +127,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4">
+                    <td colspan="7">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-user"></i></div>
                             <div class="empty-state__text">No professors added yet</div>
@@ -123,8 +170,27 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Maximum Hours per Week</label>
-                        <input type="number" name="max_hours" class="form-control" id="edit_maxhours" min="1" max="80" required>
+                        <label class="form-label">Specialization</label>
+                        <input type="text" name="specialization" class="form-control" id="edit_specialization" placeholder="e.g. Web Development, Database">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Academic Ranking</label>
+                        <select class="form-select" name="academic_ranking_id" id="edit_rankingid">
+                            <option value="">None / Unassigned</option>
+                            {% for r in academic_rankings %}
+                            <option value="{{ r.academic_ranking_id }}" data-units="{{ r.units_required }}">{{ r.name }} ({{ r.units_required }} units)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Minimum Units</label>
+                            <input type="number" name="min_units" class="form-control" id="edit_minunits" min="0" step="any">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Maximum Units</label>
+                            <input type="number" name="max_units" class="form-control" id="edit_maxunits" min="0" step="any">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -139,12 +205,15 @@
 <script>
 $(function(){
     $('#editModal').appendTo("body");
-    $('.edit-btn').on('click', function(){
+    $(document).on('click', '.edit-btn', function(){
         var $t = $(this);
         $('#edit_firstname').val($t.data('firstname'));
         $('#edit_lastname').val($t.data('lastname'));
         $('#edit_department').val($t.data('department'));
-        $('#edit_maxhours').val($t.data('maxhours'));
+        $('#edit_specialization').val($t.data('specialization') || '');
+        $('#edit_rankingid').val($t.data('rankingid') || '');
+        $('#edit_minunits').val($t.data('minunits') !== undefined ? $t.data('minunits') : 0);
+        $('#edit_maxunits').val($t.data('maxunits') !== undefined ? $t.data('maxunits') : 24);
         $('#editForm').attr('action', '/edit_professor/' + $t.data('id'));
     });
 
@@ -205,25 +274,27 @@ $(function(){
                     var p = result.data.professor;
                     var tbody = document.querySelector('table.table-custom tbody');
                     if (tbody) {
+                        var emptyRow = tbody.querySelector('.empty-state');
+                        if (emptyRow) {
+                            tbody.innerHTML = '';
+                        }
+
+                        var rankingHtml = p.academic_ranking_name
+                            ? '<span class="badge bg-light text-dark border"><i class="bx bx-award me-1 text-primary"></i>' + p.academic_ranking_name + '</span>'
+                            : '<span class="text-muted small">-</span>';
+
                         var tr = document.createElement('tr');
                         tr.innerHTML = '<td><strong>' + (p.first_name || '') + ' ' + (p.last_name || '') + '</strong></td>' +
                                        '<td><span class="badge-custom badge-success">' + (p.department || '') + '</span></td>' +
-                                       '<td>' + (p.max_hours || 40) + '</td>' +
+                                       '<td>' + (p.specialization || '-') + '</td>' +
+                                       '<td>' + rankingHtml + '</td>' +
+                                       '<td>' + (p.min_units !== undefined && p.min_units !== null ? p.min_units : 0) + '</td>' +
+                                       '<td>' + (p.max_units !== undefined && p.max_units !== null ? p.max_units : 24) + '</td>' +
                                        '<td class="text-end">' +
-                                           '<button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="' + (p.prof_id || '') + '" data-firstname="' + (p.first_name || '') + '" data-lastname="' + (p.last_name || '') + '" data-department="' + (p.department || '') + '" data-maxhours="' + (p.max_hours || 40) + '"><i class="bx bx-edit"></i> Edit</button> ' +
+                                           '<button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="' + (p.prof_id || '') + '" data-firstname="' + (p.first_name || '') + '" data-lastname="' + (p.last_name || '') + '" data-department="' + (p.department || '') + '" data-specialization="' + (p.specialization || '') + '" data-rankingid="' + (p.academic_ranking_id || '') + '" data-minunits="' + (p.min_units !== undefined ? p.min_units : 0) + '" data-maxunits="' + (p.max_units !== undefined ? p.max_units : 24) + '"><i class="bx bx-edit"></i> Edit</button> ' +
                                            '<a href="/delete_professor/' + (p.prof_id || '') + '" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this professor?"><i class="bx bx-trash"></i> Delete</a>' +
                                        '</td>';
                         tbody.appendChild(tr);
-                        // rebind edit button handler for new row
-                        tr.querySelector('.edit-btn').addEventListener('click', function(){
-                            var $t = $(this);
-                            $('#edit_firstname').val($t.data('firstname'));
-                            $('#edit_lastname').val($t.data('lastname'));
-                            $('#edit_department').val($t.data('department'));
-                            $('#edit_maxhours').val($t.data('maxhours'));
-                            $('#editForm').attr('action', '/edit_professor/' + $t.data('id'));
-                        });
-                        // update count badge
                         var badge = document.querySelector('.card-custom__header .badge-custom');
                         if (badge) {
                             var n = parseInt(badge.textContent) || 0; n += 1; badge.textContent = n + ' professors';
@@ -244,3 +315,4 @@ $(function(){
 });
 </script>
 {% endblock %}
+

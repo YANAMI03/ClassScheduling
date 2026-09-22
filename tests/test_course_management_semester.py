@@ -64,6 +64,7 @@ def test_add_course_inserts_semester(monkeypatch):
 
     response = client.post('/add_course', data={
         'course_name': 'CC-100',
+        'units': '3',
         'lecture_hours': '3',
         'lab_hours': '2',
         'ilp_hours': '1',
@@ -77,6 +78,7 @@ def test_add_course_inserts_semester(monkeypatch):
     assert response.headers['Location'].endswith('/courses')
     assert len(fake_supabase.table_obj.inserted) > 0
     assert fake_supabase.table_obj.inserted[0]['semester'] == '1st Semester'
+    assert fake_supabase.table_obj.inserted[0]['units'] == 3
 
 
 def test_edit_course_updates_semester(monkeypatch):
@@ -84,6 +86,7 @@ def test_edit_course_updates_semester(monkeypatch):
 
     response = client.post('/edit_course/7', data={
         'course_name': 'CC-100',
+        'units': '4',
         'lecture_hours': '3',
         'lab_hours': '2',
         'ilp_hours': '1',
@@ -97,6 +100,7 @@ def test_edit_course_updates_semester(monkeypatch):
     assert response.headers['Location'].endswith('/courses')
     assert len(fake_supabase.table_obj.updated) > 0
     assert fake_supabase.table_obj.updated[0]['semester'] == '2nd Semester'
+    assert fake_supabase.table_obj.updated[0]['units'] == 4
 
 
 def test_add_course_requires_semester(monkeypatch):
@@ -104,6 +108,7 @@ def test_add_course_requires_semester(monkeypatch):
 
     response = client.post('/add_course', data={
         'course_name': 'CC-100',
+        'units': '3',
         'lecture_hours': '3',
         'lab_hours': '2',
         'ilp_hours': '1',
@@ -127,3 +132,5 @@ def test_courses_page_renders_semester_filter_and_row_metadata(monkeypatch):
     assert 'id="semesterFilter"' in html
     assert 'value="1st Semester"' in html
     assert 'data-semester="1st Semester"' in html
+    assert 'name="units"' in html
+    assert '<th>Units</th>' in html

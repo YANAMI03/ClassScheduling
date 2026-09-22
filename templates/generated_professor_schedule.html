@@ -100,44 +100,35 @@
         </div>
     </div>
 
-    <!-- Card 3: Weekly Max Workload Cap -->
+    <!-- Card 3: Specialization -->
     <div class="col-md-4">
         <div class="card-custom h-100 p-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Weekly Workload Cap</span>
+                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Specialization</span>
                 <div class="stat-card__icon stat-card__icon--amber" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
-                    <i class="bx bx-briefcase-alt-2 fs-5"></i>
+                    <i class="bx bx-star fs-5"></i>
                 </div>
             </div>
-            <h3 class="fw-bold mb-1 text-dark" id="profMaxHours">
-                {{ workload.max_hours_display }} <span class="fs-6 text-muted fw-normal">hrs / week</span>
+            <h3 class="fw-bold mb-1 text-dark" id="profSpecialization">
+                {{ professor.specialization or 'General' }}
             </h3>
             <div class="d-flex align-items-center justify-content-between mt-2">
-                <span class="badge-custom {% if workload.is_overloaded %}badge-danger{% elif workload.workload_percentage >= 80 %}badge-warning{% else %}badge-primary{% endif %}">
-                    {{ workload.workload_percentage }}% utilized
-                </span>
-                <small class="text-muted">Configured limit</small>
+                <span class="badge-custom badge-primary">Faculty Profile</span>
+                <small class="text-muted">Field of expertise</small>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Utilization Progress Bar -->
+<!-- Assigned Workload Summary -->
 <div class="card-custom mb-4 p-3">
     <div class="d-flex justify-content-between align-items-center mb-2">
         <span class="fw-semibold small text-muted">
-            <i class="bx bx-chart me-1"></i>Weekly Workload Capacity
+            <i class="bx bx-chart me-1"></i>Weekly Assigned Workload
         </span>
-        <span class="fw-bold small {% if workload.is_overloaded %}text-danger{% elif workload.workload_percentage >= 80 %}text-warning{% else %}text-success{% endif %}">
-            {{ workload.total_scheduled_hours_display }} of {{ workload.max_hours_display }} hrs assigned ({{ workload.workload_percentage }}%)
+        <span class="fw-bold small text-success">
+            {{ workload.total_scheduled_hours_display }} hrs assigned
         </span>
-    </div>
-    <div class="progress" style="height: 10px; border-radius: 6px; background-color: #e9ecef; overflow: hidden;">
-        <div class="progress-bar {% if workload.is_overloaded %}bg-danger{% elif workload.workload_percentage >= 80 %}bg-warning{% else %}bg-success{% endif %}"
-             role="progressbar"
-             style="width: {{ [workload.workload_percentage, 100]|min }}%; transition: width 0.6s ease;"
-             aria-valuenow="{{ workload.workload_percentage }}" aria-valuemin="0" aria-valuemax="100">
-        </div>
     </div>
 </div>
 
