@@ -98,12 +98,12 @@ class MockSupabase:
     def __init__(self):
         self.tables = {
             'academic_ranking': MockTable('academic_ranking', [
-                {'academic_ranking_id': 1, 'name': 'Instructor I', 'units_required': 18, 'program': 'BSIT'},
-                {'academic_ranking_id': 2, 'name': 'Assistant Professor', 'units_required': 15, 'program': 'BSIT'},
-                {'academic_ranking_id': 3, 'name': 'Instructor I', 'units_required': 21, 'program': 'BSCS'},
+                {'academic_ranking_id': 1, 'name': 'Instructor I', 'program': 'BSIT', 'min_units': 12, 'max_units': 24, 'min_hours': 20, 'max_hours': 40},
+                {'academic_ranking_id': 2, 'name': 'Assistant Professor', 'program': 'BSIT', 'min_units': 10, 'max_units': 24, 'min_hours': 20, 'max_hours': 40},
+                {'academic_ranking_id': 3, 'name': 'Instructor I', 'program': 'BSCS', 'min_units': 12, 'max_units': 24, 'min_hours': 20, 'max_hours': 40},
             ]),
             'professor': MockTable('professor', [
-                {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CICT', 'specialization': 'Math', 'academic_ranking_id': 1, 'min_units': 12, 'max_units': 24},
+                {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CICT', 'specialization': 'Math', 'academic_ranking_id': 1},
             ]),
             'delete_requests': MockTable('delete_requests', []),
             'program_department': MockTable('program_department', [
@@ -145,6 +145,21 @@ def test_academic_ranking_page_renders_for_scheduler(mock_db):
     assert 'BSCS' not in html or 'BSCS' not in [r['program'] for r in [r for r in mock_db.table('academic_ranking').data if r['program'] == 'BSIT']]
 
 
+def test_professors_page_renders_ranking_when_ids_have_different_types(mock_db):
+    mock_db.table('professor').data[0]['academic_ranking_id'] = '1'
+    client = app_module.app.test_client()
+    with client.session_transaction() as session:
+        session['user_id'] = 10
+        session['username'] = 'sched_it'
+        session['role'] = 'Scheduler'
+        session['program'] = 'BSIT'
+
+    resp = client.get('/professors')
+
+    assert resp.status_code == 200
+    assert 'Instructor I' in resp.get_data(as_text=True)
+
+
 def test_add_academic_ranking_auto_assigns_program(mock_db):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
@@ -156,7 +171,6 @@ def test_add_academic_ranking_auto_assigns_program(mock_db):
     # Attempt to pass a different program 'BSCS' from form (should be ignored and forced to BSIT)
     resp = client.post('/add_academic_ranking', data={
         'name': 'Associate Professor 1',
-        'units_required': '12',
         'program': 'BSCS',
     }, follow_redirects=True)
 
@@ -165,7 +179,30 @@ def test_add_academic_ranking_auto_assigns_program(mock_db):
     assert len(inserted) > 0
     new_rank = [r for r in inserted if r['name'] == 'Associate Professor 1'][0]
     assert new_rank['program'] == 'BSIT'
-    assert new_rank['units_required'] == 12
+
+
+def test_add_academic_ranking_stores_load_constraints(mock_db):
+    client = app_module.app.test_client()
+    with client.session_transaction() as session:
+        session['user_id'] = 10
+        session['username'] = 'sched_it'
+        session['role'] = 'Scheduler'
+        session['program'] = 'BSIT'
+
+    resp = client.post('/add_academic_ranking', data={
+        'name': 'Professor II',
+        'min_units': '12',
+        'max_units': '24',
+        'min_hours': '20',
+        'max_hours': '40',
+    })
+
+    assert resp.status_code == 302
+    rank = [r for r in mock_db.table('academic_ranking').inserted if r['name'] == 'Professor II'][0]
+    assert rank['min_units'] == 12
+    assert rank['max_units'] == 24
+    assert rank['min_hours'] == 20
+    assert rank['max_hours'] == 40
 
 
 def test_add_academic_ranking_ajax(mock_db):
@@ -178,14 +215,12 @@ def test_add_academic_ranking_ajax(mock_db):
 
     resp = client.post('/add_academic_ranking', data={
         'name': 'Professor 1',
-        'units_required': '9',
     }, headers={'X-Requested-With': 'XMLHttpRequest'})
 
     assert resp.status_code == 200
     data = resp.get_json()
     assert data['message'] == 'Academic ranking added successfully.'
     assert data['ranking']['program'] == 'BSIT'
-    assert data['ranking']['units_required'] == 9
 
 
 def test_edit_academic_ranking_preserves_program(mock_db):
@@ -199,14 +234,12 @@ def test_edit_academic_ranking_preserves_program(mock_db):
     # Rank 1 is BSIT
     resp = client.post('/edit_academic_ranking/1', data={
         'name': 'Instructor I - Updated',
-        'units_required': '20',
         'program': 'HACK_PROGRAM',
     }, follow_redirects=True)
 
     assert resp.status_code == 200
     rank1 = [r for r in mock_db.table('academic_ranking').data if r['academic_ranking_id'] == 1][0]
     assert rank1['name'] == 'Instructor I - Updated'
-    assert rank1['units_required'] == 20
     assert rank1['program'] == 'BSIT'
 
 
@@ -255,9 +288,9 @@ def test_delete_academic_ranking_admin_direct(mock_db):
 
     resp = client.get('/delete_academic_ranking/1', follow_redirects=True)
     assert resp.status_code == 200
-    # Admin directly deletes
+    # Rankings assigned to professors cannot be deleted.
     deleted = mock_db.table('academic_ranking').deleted
-    assert any(r['academic_ranking_id'] == 1 for r in deleted)
+    assert not any(r['academic_ranking_id'] == 1 for r in deleted)
 
 
 def test_add_professor_with_academic_ranking(mock_db):
@@ -275,8 +308,6 @@ def test_add_professor_with_academic_ranking(mock_db):
         'department': 'CICT',
         'specialization': 'Compilers',
         'academic_ranking_id': '1',
-        'min_units': '12',
-        'max_units': '24',
     }, follow_redirects=True)
 
     assert resp.status_code == 200
@@ -301,8 +332,6 @@ def test_add_professor_rejects_mismatched_program_ranking(mock_db):
         'department': 'CICT',
         'specialization': 'Hardware',
         'academic_ranking_id': '3',
-        'min_units': '12',
-        'max_units': '24',
     }, follow_redirects=True)
 
     assert resp.status_code == 200

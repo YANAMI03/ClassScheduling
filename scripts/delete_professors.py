@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 delete_professors.py
-Deletes all regular professors and prof_course mappings from the database,
+Deletes all regular professors and professor_load mappings from the database,
 allowing you to test the fallback logic where all subjects get assigned to "Professor A".
 """
 import os
@@ -86,12 +86,12 @@ if auth_token:
 else:
     print("Warning: Could not obtain authenticated session token. RLS might restrict operations.")
 
-print("Clearing prof_course table...")
+print("Clearing professor_load table...")
 try:
-    res = sb.table("prof_course").delete().neq("prof_course_id", -999999).execute()
-    print(f"prof_course cleared. Rows affected: {len(res.data or [])}")
+    res = sb.table("professor_load").delete().neq("professor_load_id", -999999).execute()
+    print(f"professor_load cleared. Rows affected: {len(res.data or [])}")
 except Exception as e:
-    print(f"prof_course delete note: {e}")
+    print(f"professor_load delete note: {e}")
 
 print("Deleting regular professors (preserving Professor A)...")
 try:
@@ -124,13 +124,13 @@ except Exception as e:
 
 # Verify current state
 remaining_profs = sb.table("professor").select("prof_id, first_name, last_name, department").execute().data or []
-remaining_pc = sb.table("prof_course").select("prof_course_id").execute().data or []
+remaining_pc = sb.table("professor_load").select("professor_load_id").execute().data or []
 
 print("=" * 60)
 print(f"STATUS: Remaining professors in database: {len(remaining_profs)}")
 for p in remaining_profs:
     print(f"  - [{p.get('prof_id')}] {p.get('first_name')} {p.get('last_name')} ({p.get('department')})")
-print(f"STATUS: Remaining prof_course mappings: {len(remaining_pc)}")
+print(f"STATUS: Remaining professor_load mappings: {len(remaining_pc)}")
 print("=" * 60)
 print("SUCCESS: Regular professors removed.")
 print("The system will now assign 'Professor A' as fallback for all subjects!")

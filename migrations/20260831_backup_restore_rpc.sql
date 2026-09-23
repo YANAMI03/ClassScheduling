@@ -116,20 +116,23 @@ BEGIN
 
     -- 2.3 professor
     IF t_data ? 'professor' AND jsonb_array_length(t_data->'professor') > 0 THEN
-        INSERT INTO public.professor (prof_id, first_name, last_name, department, max_hours)
+            INSERT INTO public.professor (prof_id, first_name, last_name, department, academic_ranking_id)
         OVERRIDING SYSTEM VALUE
         SELECT
             (x->>'prof_id')::integer,
             (x->>'first_name')::varchar,
             x->>'last_name',
             (x->>'department')::varchar,
-            COALESCE((x->>'max_hours')::integer, 40)
+                COALESCE(
+                    (x->>'academic_ranking_id')::bigint,
+                    (SELECT academic_ranking_id FROM public.academic_ranking ORDER BY academic_ranking_id LIMIT 1)
+                )
         FROM jsonb_array_elements(t_data->'professor') AS x
         ON CONFLICT (prof_id) DO UPDATE
         SET first_name = EXCLUDED.first_name,
             last_name = EXCLUDED.last_name,
             department = EXCLUDED.department,
-            max_hours = EXCLUDED.max_hours;
+                academic_ranking_id = EXCLUDED.academic_ranking_id;
         GET DIAGNOSTICS inserted_count = ROW_COUNT;
         result := result || jsonb_build_object('professor', inserted_count);
         total_restored := total_restored + inserted_count;

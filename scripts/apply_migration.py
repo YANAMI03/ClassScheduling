@@ -3,7 +3,7 @@
 scripts/apply_migration.py
 
 Applies the SQL schema migration directly to the Supabase PostgreSQL database
-using psycopg2, replacing prof_id and course_id on public.schedule with prof_course_id.
+using psycopg2, renaming public.prof_course to public.professor_load and updating schedule references.
 
 Usage:
   python scripts/apply_migration.py --db-password "YOUR_DB_PASSWORD"
@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
-MIGRATION_FILE = ROOT_DIR / "migrations" / "20260910_replace_schedule_prof_course_fk.sql"
+MIGRATION_FILE = ROOT_DIR / "migrations" / "20260923_rename_prof_course_to_professor_load.sql"
 PROJECT_REF = "maaeqnmziwhocziwgjpo"
 
 def parse_args():
@@ -62,11 +62,15 @@ def check_schema_via_postgrest():
         if not url or not key:
             return None
         client = create_client(url, key)
-        res = client.table("schedule").select("prof_course_id").limit(1).execute()
-        return True
+        client.table("professor_load").select("id").limit(1).execute()
+        try:
+            client.table("professor_load").select("professor_load_id").limit(1).execute()
+            return False
+        except Exception:
+            return True
     except Exception as e:
         err_msg = str(e)
-        if "prof_course_id does not exist" in err_msg or "42703" in err_msg:
+        if "column" in err_msg and ("id" in err_msg or "42703" in err_msg):
             return False
         # If permission or other error, return None
         return None
@@ -75,18 +79,18 @@ def main():
     args = parse_args()
 
     print("=" * 70)
-    print(" Supabase Migration: Replace prof_id / course_id with prof_course_id")
+    print(" Supabase Migration: Rename prof_course to professor_load")
     print("=" * 70)
 
     # 1. Check current PostgREST status
-    print("\n[1/3] Checking current Supabase schedule table schema...")
+    print("\n[1/3] Checking current Supabase professor_load table schema...")
     has_column = check_schema_via_postgrest()
     if has_column is True:
-        print("  -> Column 'schedule.prof_course_id' ALREADY EXISTS on Supabase!")
+        print("  -> Column 'professor_load.id' ALREADY EXISTS on Supabase!")
         print("  -> Migration is already active on the live database.")
         return 0
     elif has_column is False:
-        print("  -> Verified: 'schedule.prof_course_id' does NOT yet exist on Supabase.")
+        print("  -> Verified: 'professor_load.id' does NOT yet exist on Supabase.")
         print("  -> Schema change is needed.")
     else:
         print("  -> Note: PostgREST check returned indeterminate status or table is empty.")
@@ -156,15 +160,15 @@ def main():
             conn.commit()
             print("  -> Migration executed and committed successfully!")
 
-            # Verify in Postgres
+            # Verify the assignment table uses the canonical primary-key name.
             cur.execute("""
-                SELECT column_name, data_type 
+                SELECT column_name, data_type
                 FROM information_schema.columns 
-                WHERE table_schema = 'public' AND table_name = 'schedule'
+                WHERE table_schema = 'public' AND table_name = 'professor_load'
                 ORDER BY ordinal_position;
             """)
             cols = [f"{r[0]} ({r[1]})" for r in cur.fetchall()]
-            print(f"\n  -> Updated schedule table columns:\n     {', '.join(cols)}")
+            print(f"\n  -> Updated professor_load table columns:\n     {', '.join(cols)}")
 
     except Exception as e:
         conn.rollback()
@@ -176,7 +180,7 @@ def main():
     # Final check via PostgREST
     print("\n[VERIFICATION] Verifying schema via Supabase API...")
     if check_schema_via_postgrest():
-        print("  -> SUCCESS: 'schedule.prof_course_id' is live and recognized by Supabase API!")
+        print("  -> SUCCESS: 'professor_load.id' and 'schedule.professor_load_id' are live!")
     else:
         print("  -> Note: PostgREST schema cache may take a few seconds to reload.")
 

@@ -15,6 +15,27 @@
     border-color: #cbd5e1;
     box-shadow: var(--shadow-sm);
 }
+.professor-picker-menu {
+    width: 100%;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 0.5rem;
+}
+.professor-picker-menu .professor-search-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #ffffff;
+    padding-bottom: 0.5rem;
+}
+.professor-picker-menu .professor-option {
+    white-space: normal;
+    border-radius: 4px;
+}
+.professor-picker-menu .professor-option:hover,
+.professor-picker-menu .professor-option:focus {
+    background: #eff6ff;
+}
 .course-catalog-container {
     max-height: 480px;
     overflow-y: auto;
@@ -109,7 +130,7 @@
             </div>
             <div>
                 <div class="text-muted small">With Assignments</div>
-                <div class="fw-bold fs-5">{{ prof_courses|groupby('prof_id')|list|length }}</div>
+                <div class="fw-bold fs-5">{{ professor_loads|groupby('prof_id')|list|length }}</div>
             </div>
         </div>
     </div>
@@ -132,7 +153,7 @@
             <div>
                 <div class="text-muted small">Total Sections</div>
                 <div class="fw-bold fs-5">
-                    {% set total_assigned_secs = prof_courses|map(attribute='sections')|sum if prof_courses else 0 %}
+                    {% set total_assigned_secs = professor_loads|map(attribute='sections')|sum if professor_loads else 0 %}
                     {{ total_assigned_secs }}
                 </div>
             </div>
@@ -146,7 +167,7 @@
         <h5 class="card-custom__title"><i class="bx bx-slider-alt me-2 text-primary"></i>Assign Courses & Manage Teaching Load</h5>
         <span class="text-muted small">Real-time calculations for Lecture, Lab, and ILP hours</span>
     </div>
-    <form action="/add_prof_course" method="POST" id="assignCourseForm">
+    <form action="/add_professor_load" method="POST" id="assignCourseForm">
         <div class="row g-4">
             <!-- Left Column: Professor Selection & Live Load Summary Panel -->
             <div class="col-lg-5 col-xl-4 d-flex flex-column">
@@ -154,7 +175,28 @@
                     <label class="form-label fw-semibold" for="prof_select">
                         <i class="bx bx-user me-1 text-primary"></i>Select Professor <span class="text-danger">*</span>
                     </label>
-                    <select class="form-select form-select-lg" name="prof_id" id="prof_select" required>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-outline-primary form-select-lg w-100 text-start d-flex justify-content-between align-items-center" id="prof-picker-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <span id="prof-picker-label">-- Select a Professor --</span>
+                            <i class="bx bx-chevron-down"></i>
+                        </button>
+                        <div class="dropdown-menu professor-picker-menu" aria-labelledby="prof-picker-toggle">
+                            <div class="professor-search-wrap">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bx bx-search"></i></span>
+                                    <input type="search" class="form-control border-start-0" id="prof-search-input" placeholder="Search name or department" autocomplete="off">
+                                </div>
+                            </div>
+                            <div id="professor-option-list">
+                                {% for prof in professors %}
+                                <button type="button" class="dropdown-item professor-option" data-value="{{ prof.prof_id }}">
+                                    {{ prof.first_name }} {{ prof.last_name }} <span class="text-muted">({{ prof.department or 'General' }})</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <select class="d-none" name="prof_id" id="prof_select" required>
                         <option value="" selected disabled>-- Select a Professor --</option>
                         {% for prof in professors %}
                         <option value="{{ prof.prof_id }}"
@@ -162,8 +204,10 @@
                                 data-name="{{ prof.first_name }} {{ prof.last_name }}"
                                 data-dept="{{ prof.department or 'N/A' }}"
                                 data-specialization="{{ prof.specialization or '' }}"
-                                data-min-units="{{ prof.min_units or 0 }}"
-                                data-max-units="{{ prof.max_units or 24 }}">
+                                data-min-units="{{ prof.min_units }}"
+                                data-max-units="{{ prof.max_units }}"
+                                data-min-hours="{{ prof.min_hours }}"
+                                data-max-hours="{{ prof.max_hours }}">
                             {{ prof.first_name }} {{ prof.last_name }} ({{ prof.department or 'General' }})
                         </option>
                         {% endfor %}
@@ -171,7 +215,7 @@
                     <div id="prof-info-banner" class="mt-2 text-muted small d-none">
                         <span class="badge bg-light text-dark border me-1"><i class="bx bx-building me-1"></i><span id="prof-banner-dept"></span></span>
                         <span class="badge bg-light text-dark border me-1"><i class="bx bx-star me-1"></i><span id="prof-banner-spec"></span></span>
-                        <span class="badge bg-light text-dark border"><i class="bx bx-bookmark me-1"></i><span id="prof-banner-units">0-24</span> units</span>
+                        <span class="badge bg-light text-dark border"><i class="bx bx-award me-1"></i><span id="prof-banner-ranking"></span></span>
                     </div>
                 </div>
 
@@ -362,7 +406,7 @@
             <h5 class="card-custom__title"><i class="bx bx-list-check me-2 text-primary"></i>Current Assignments & Load Status</h5>
             <span class="text-muted small">Summary of assigned courses, section counts, and capacity compliance</span>
         </div>
-        <span class="badge-custom badge-primary">{{ prof_courses|groupby('prof_id')|list|length }} professors assigned</span>
+        <span class="badge-custom badge-primary">{{ professor_loads|groupby('prof_id')|list|length }} professors assigned</span>
     </div>
     <div class="table-responsive">
         <table class="table-custom">
@@ -376,27 +420,20 @@
                 </tr>
             </thead>
             <tbody>
-                {% for prof_group in prof_courses|groupby('prof_id') %}
+                {% for prof_group in professor_loads|groupby('prof_id') %}
                 {% set p_first = prof_group.list[0].prof_first_name %}
                 {% set p_last = prof_group.list[0].prof_last_name %}
                 {% set p_dept = prof_group.list[0].prof_department or 'N/A' %}
                 {% set p_spec = prof_group.list[0].specialization or '-' %}
-                {% set p_min_units = prof_group.list[0].min_units or 0 %}
-                {% set p_max_units = prof_group.list[0].max_units or 24 %}
                 {% set total_prof_hours = prof_group.list|map(attribute='weekly_hours')|sum %}
                 {% set total_prof_units = prof_group.list|map(attribute='total_units')|sum %}
                 {% set total_prof_secs = prof_group.list|map(attribute='sections')|sum %}
-
-                {% set is_units_exceeded = total_prof_units > p_max_units %}
-                {% set is_exceeded = is_units_exceeded %}
-                {% set is_underload = not is_exceeded and p_min_units > 0 and total_prof_units < p_min_units %}
-                {% set is_near = not is_exceeded and not is_underload and (p_max_units > 0 and total_prof_units >= 0.8 * p_max_units) %}
 
                 <tr>
                     <td class="align-middle">
                         <div class="fw-bold text-dark">{{ p_first }} {{ p_last }}</div>
                         <div class="text-muted small" style="font-size: 0.78rem;">
-                            Spec: {{ p_spec }} &bull; {{ p_min_units }}-{{ p_max_units }} units
+                            Spec: {{ p_spec }}
                         </div>
                     </td>
                     <td class="align-middle">
@@ -425,20 +462,12 @@
                         </div>
                         <div class="mb-1 d-flex justify-content-between align-items-center">
                             <span class="small fw-semibold">Units:</span>
-                            <span class="small fw-bold {% if is_units_exceeded %}text-danger{% elif is_underload %}text-warning{% else %}text-dark{% endif %}">
-                                {{ total_prof_units }} / {{ p_max_units }} u
+                            <span class="small fw-bold text-dark">
+                                {{ total_prof_units }} u
                             </span>
                         </div>
                         <div class="mt-1">
-                            {% if is_exceeded %}
-                            <span class="badge bg-danger"><i class="bx bx-x-circle me-1"></i>Exceeded Limit</span>
-                            {% elif is_underload %}
-                            <span class="badge bg-warning text-dark"><i class="bx bx-info-circle me-1"></i>Underload (Min {{ p_min_units }})</span>
-                            {% elif is_near %}
-                            <span class="badge bg-warning text-dark"><i class="bx bx-time-five me-1"></i>Near Limit</span>
-                            {% else %}
                             <span class="badge bg-success"><i class="bx bx-check-circle me-1"></i>Balanced</span>
-                            {% endif %}
                         </div>
                     </td>
                     <td class="text-end align-middle">
@@ -450,13 +479,15 @@
                                 data-lastname="{{ p_last }}"
                                 data-department="{{ p_dept }}"
                                 data-specialization="{{ p_spec }}"
-                                data-minunits="{{ p_min_units }}"
-                                data-maxunits="{{ p_max_units }}"
+                                data-minunits="{{ prof_group.list[0].min_units }}"
+                                data-maxunits="{{ prof_group.list[0].max_units }}"
+                                data-minhours="{{ prof_group.list[0].min_hours }}"
+                                data-maxhours="{{ prof_group.list[0].max_hours }}"
                                 data-courses="{% for c in prof_group.list %}{{ c.course_id }}{% if not loop.last %},{% endif %}{% endfor %}"
                                 data-sections="{% for c in prof_group.list %}{{ c.course_id }}:{{ c.sections }}{% if not loop.last %},{% endif %}{% endfor %}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
-                        <a href="{{ url_for('delete_prof_course_all', prof_id=prof_group.grouper) }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to remove all course assignments for this professor?">
+                        <a href="{{ url_for('delete_professor_load_all', prof_id=prof_group.grouper) }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to remove all course assignments for this professor?">
                             <i class="bx bx-trash"></i> Delete
                         </a>
                     </td>
@@ -514,17 +545,9 @@
                                         <option value="CON">CON (College of Nursing)</option>
                                     </select>
                                 </div>
-                                <div class="col-4">
+                                <div class="col-12">
                                     <label class="form-label small fw-semibold">Specialization</label>
                                     <input type="text" name="specialization" id="edit_specialization" class="form-control form-control-sm" placeholder="e.g. Web Dev">
-                                </div>
-                                <div class="col-4">
-                                    <label class="form-label small fw-semibold">Min Units</label>
-                                    <input type="number" step="0.5" min="0" max="40" name="min_units" id="edit_min_units" class="form-control form-control-sm" value="0">
-                                </div>
-                                <div class="col-4">
-                                    <label class="form-label small fw-semibold">Max Units</label>
-                                    <input type="number" step="0.5" min="1" max="50" name="max_units" id="edit_max_units" class="form-control form-control-sm" value="24" required>
                                 </div>
                             </div>
 
@@ -645,8 +668,8 @@ $(function(){
         lab_hours: {{ c.lab_hours or 0 }},
         ilp_hours: {{ c.ilp_hours or 0 }},
         units: {{ c.units or 0 }},
-        program: {{ c.program|tojson if c.program else '""' }},
-        year_level: {{ c.year_level|tojson if c.year_level else '""' }}
+        program: {{ c.program|tojson if c.program else '""'|tojson }},
+        year_level: {{ c.year_level|tojson if c.year_level else '""'|tojson }}
     };
     {% endfor %}
 
@@ -656,27 +679,21 @@ $(function(){
         prof_id: {{ prof.prof_id|tojson }},
         first_name: {{ prof.first_name|tojson }},
         last_name: {{ prof.last_name|tojson }},
-        department: {{ prof.department|tojson if prof.department else '""' }},
-        specialization: {{ prof.specialization|tojson if prof.specialization else '""' }},
-        min_units: {{ prof.min_units or 0 }},
-        max_units: {{ prof.max_units or 24 }}
+        department: {{ prof.department|tojson if prof.department else '""'|tojson }},
+        specialization: {{ prof.specialization|tojson if prof.specialization else '""'|tojson }},
+        academic_ranking_name: {{ (prof.academic_ranking_name or '')|tojson }},
+        min_units: {{ prof.min_units|tojson }}, max_units: {{ prof.max_units|tojson }},
+        min_hours: {{ prof.min_hours|tojson }}, max_hours: {{ prof.max_hours|tojson }}
     };
     {% endfor %}
 
-    var existingProfAssignments = {
-        {% for prof_group in prof_courses|groupby('prof_id') %}
-        "{{ prof_group.grouper }}": [
-            {% for c in prof_group.list %}
-            { course_id: {{ c.course_id }}, sections: {{ c.sections or 1 }} }{% if not loop.last %},{% endif %}
-            {% endfor %}
-        ]{% if not loop.last %},{% endif %}
-        {% endfor %}
-    };
+    var existingProfAssignments = {{ existing_professor_assignments|tojson }};
 
     // Form states
     var addSelectedIds = new Set();
     var addSectionMap = {};
     var currentProfLimits = null;
+    var professorLoadRequestId = 0;
 
     var editSelectedIds = new Set();
     var editSectionMap = {};
@@ -792,6 +809,12 @@ $(function(){
     function handleAddSectionChange(cid, val, mode) {
         var current = parseInt(addSectionMap[cid], 10) || 1;
         var next = (mode === 'delta') ? Math.max(1, Math.min(20, current + val)) : Math.max(1, Math.min(20, val));
+        var candidateMap = Object.assign({}, addSectionMap, {});
+        candidateMap[cid] = next;
+        if (!isAddLoadWithinLimits(addSelectedIds, candidateMap)) {
+            updateAddLoadPanel();
+            return;
+        }
         addSectionMap[cid] = next;
 
         // Sync catalog card if present in current view
@@ -886,30 +909,50 @@ $(function(){
             });
         });
 
-        var minUnits = profLimits ? (parseFloat(profLimits.min_units) || 0) : 0;
-        var maxUnits = profLimits ? (parseFloat(profLimits.max_units) || 24) : 24;
-
-        var unitsExceeded = maxUnits > 0 && totalUnits > maxUnits;
-        var isExceeded = unitsExceeded;
-
-        var isNear = !isExceeded && maxUnits > 0 && (totalUnits >= 0.8 * maxUnits);
-        var isUnderload = !isExceeded && minUnits > 0 && (totalUnits < minUnits);
-        var isSafe = !isExceeded && !isNear && !isUnderload && courseCount > 0;
-
         return {
             totalHours: totalHours,
             totalUnits: totalUnits,
             courseCount: courseCount,
             sectionCount: sectionCount,
             items: items,
-            minUnits: minUnits,
-            maxUnits: maxUnits,
-            unitsExceeded: unitsExceeded,
-            isExceeded: isExceeded,
-            isNear: isNear,
-            isUnderload: isUnderload,
-            isSafe: isSafe
+            minUnits: profLimits ? Number(profLimits.min_units) : 0,
+            maxUnits: profLimits ? Number(profLimits.max_units) : 24,
+            minHours: profLimits ? Number(profLimits.min_hours) : 0,
+            maxHours: profLimits ? Number(profLimits.max_hours) : 40,
+            unitsExceeded: profLimits ? totalUnits > Number(profLimits.max_units) : false,
+            hoursExceeded: profLimits ? totalHours > Number(profLimits.max_hours) : false,
+            isUnderload: profLimits ? (totalUnits < Number(profLimits.min_units) && totalHours < Number(profLimits.min_hours)) : false,
+            isSafe: courseCount > 0
         };
+    }
+
+    function isAddLoadWithinLimits(selectedIds, sectionMap) {
+        if (!currentProfLimits) return false;
+        var result = calculateLoad(selectedIds, sectionMap, currentProfLimits);
+        return !result.hoursExceeded && !result.unitsExceeded;
+    }
+
+    function updateAddControlAvailability() {
+        $(addCourseList).find('.course-card-item').each(function() {
+            var $card = $(this);
+            var cid = String($card.data('cid'));
+            var $check = $card.find('.course-check');
+            var $plus = $card.find('.btn-sec-plus');
+            var isSelected = addSelectedIds.has(cid);
+            var currentSections = parseInt(addSectionMap[cid], 10) || 1;
+
+            var candidateIds = new Set(addSelectedIds);
+            candidateIds.add(cid);
+            var candidateMap = Object.assign({}, addSectionMap);
+            candidateMap[cid] = currentSections;
+            var canSelect = isAddLoadWithinLimits(candidateIds, candidateMap);
+
+            $check.prop('disabled', !isSelected && !canSelect);
+
+            var incrementMap = Object.assign({}, addSectionMap);
+            incrementMap[cid] = Math.min(20, currentSections + 1);
+            $plus.prop('disabled', currentSections >= 20 || !isAddLoadWithinLimits(candidateIds, incrementMap));
+        });
     }
 
     // Update Add Form Load Summary Panel
@@ -917,10 +960,7 @@ $(function(){
         var result = calculateLoad(addSelectedIds, addSectionMap, currentProfLimits);
 
         $('#lbl-total-hours').text(result.totalHours.toFixed(1));
-        $('#lbl-max-hours').text(result.maxHours.toFixed(1));
         $('#lbl-total-units').text(result.totalUnits.toFixed(1));
-        $('#lbl-max-units').text(result.maxUnits.toFixed(1));
-        $('#lbl-min-units').text(result.minUnits.toFixed(1));
 
         $('#lbl-selected-courses-count').text(result.courseCount);
         $('#lbl-selected-sections-count').text(result.sectionCount);
@@ -928,6 +968,9 @@ $(function(){
         var hoursPct = result.maxHours > 0 ? Math.min(100, Math.round((result.totalHours / result.maxHours) * 100)) : 0;
         var unitsPct = result.maxUnits > 0 ? Math.min(100, Math.round((result.totalUnits / result.maxUnits) * 100)) : 0;
 
+        $('#lbl-max-hours').text(result.maxHours.toFixed(1));
+        $('#lbl-max-units').text(result.maxUnits.toFixed(1));
+        $('#lbl-min-units').text(result.minUnits.toFixed(1));
         $('#lbl-hours-percent').text(hoursPct + '% of max');
         $('#lbl-units-percent').text(unitsPct + '% of max');
 
@@ -954,22 +997,14 @@ $(function(){
         }
 
         if (!currentProfLimits) {
-            if (result.courseCount > 0) {
-                $statusBadge.attr('class', 'badge bg-info text-dark').html('<i class="bx bx-loader-circle me-1"></i>Pending Professor');
-                $barHours.addClass('bg-primary');
-                $barUnits.addClass('bg-primary');
-                $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
-                      .html('<i class="bx bx-info-circle me-1"></i> Calculating load live: <strong>' + result.totalHours.toFixed(1) + ' hrs</strong>, <strong>' + result.totalUnits.toFixed(1) + ' units</strong> (' + result.sectionCount + ' sections). Select a professor to validate against limits.');
-                $btnHint.text('Select a professor to assign this workload');
-            } else {
-                $statusBadge.attr('class', 'badge bg-secondary').text('Awaiting Selection');
-                $barHours.addClass('bg-primary');
-                $barUnits.addClass('bg-primary');
-                $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
-                      .html('<i class="bx bx-info-circle me-1"></i> Select a professor and check courses to view real-time workload calculation.');
-                $btnHint.text('Select a professor and at least one course');
-            }
+            $statusBadge.attr('class', 'badge bg-secondary').text('Awaiting Selection');
+            $barHours.addClass('bg-primary');
+            $barUnits.addClass('bg-primary');
+            $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
+                  .html('<i class="bx bx-info-circle me-1"></i> Select a professor to view real-time teaching load calculations.');
             $submitBtn.prop('disabled', true);
+            $btnHint.text('Select a professor and at least one course');
+            updateAddControlAvailability();
             return;
         }
 
@@ -981,52 +1016,36 @@ $(function(){
                   .html('<i class="bx bx-info-circle me-1"></i> Check courses and set sections to build the professor\'s teaching load.');
             $submitBtn.prop('disabled', true);
             $btnHint.text('Select at least one course');
+            updateAddControlAvailability();
             return;
         }
 
-        if (result.isExceeded) {
+        else if (result.hoursExceeded || result.unitsExceeded) {
             $statusBadge.attr('class', 'badge bg-danger').html('<i class="bx bx-x-circle me-1"></i>Limit Exceeded');
-            if (result.hoursExceeded) $barHours.addClass('bg-danger'); else $barHours.addClass('bg-warning');
-            if (result.unitsExceeded) $barUnits.addClass('bg-danger'); else $barUnits.addClass('bg-warning');
-
-            var reason = '';
-            if (result.hoursExceeded && result.unitsExceeded) {
-                reason = 'Both weekly hours (' + result.totalHours.toFixed(1) + ' / ' + result.maxHours + ' hrs) and units (' + result.totalUnits.toFixed(1) + ' / ' + result.maxUnits + ' u) exceed allowable maximum limits.';
-            } else if (result.hoursExceeded) {
-                reason = 'Weekly hours (' + result.totalHours.toFixed(1) + ' hrs) exceed maximum allowable limit of ' + result.maxHours + ' hrs.';
-            } else {
-                reason = 'Total units (' + result.totalUnits.toFixed(1) + ' units) exceed maximum allowable limit of ' + result.maxUnits + ' units.';
-            }
-
+            $barHours.addClass(result.hoursExceeded ? 'bg-danger' : 'bg-success');
+            $barUnits.addClass(result.unitsExceeded ? 'bg-danger' : 'bg-success');
             $alert.attr('class', 'alert alert-danger py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-error-circle me-1"></i> <strong>Limit Exceeded:</strong> ' + reason + ' Submission blocked.');
+                  .html('<i class="bx bx-error-circle me-1"></i> Load exceeds the academic ranking limit.');
             $submitBtn.prop('disabled', true);
-            $btnHint.text('Submission blocked: Workload exceeds professor limits');
+            $btnHint.text('Reduce sections or choose another professor');
         } else if (result.isUnderload) {
-            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-info-circle me-1"></i>Below Min Target');
-            $barHours.addClass('bg-success');
-            $barUnits.addClass('bg-warning');
-            $alert.attr('class', 'alert alert-warning py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-info-circle me-1"></i> <strong>Underload Notice:</strong> Total units (' + result.totalUnits.toFixed(1) + ' u) is below target minimum (' + result.minUnits + ' u). You may still submit.');
-            $submitBtn.prop('disabled', false);
-            $btnHint.text('Ready to assign (underload target warning)');
-        } else if (result.isNear) {
-            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-time-five me-1"></i>Near Limit (80%+)');
+            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-error-circle me-1"></i>Below Minimum');
             $barHours.addClass('bg-warning');
             $barUnits.addClass('bg-warning');
             $alert.attr('class', 'alert alert-warning py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-time me-1"></i> <strong>Approaching Capacity:</strong> Workload is near maximum limit (' + result.totalHours.toFixed(1) + ' hrs, ' + result.totalUnits.toFixed(1) + ' units).');
+                  .html('<i class="bx bx-info-circle me-1"></i> Load is below this academic ranking\'s minimum target.');
             $submitBtn.prop('disabled', false);
-            $btnHint.text('Ready to assign');
+            $btnHint.text('Ready to assign; minimum target not reached');
         } else {
-            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Safe Range');
+            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Ready');
             $barHours.addClass('bg-success');
             $barUnits.addClass('bg-success');
             $alert.attr('class', 'alert alert-success py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-check-circle me-1"></i> <strong>Load Balanced:</strong> Hours (' + result.totalHours.toFixed(1) + ' hrs) and units (' + result.totalUnits.toFixed(1) + ' u) are within safe parameters.');
+                  .html('<i class="bx bx-check-circle me-1"></i> <strong>Load calculated:</strong> Hours (' + result.totalHours.toFixed(1) + ' hrs) and units (' + result.totalUnits.toFixed(1) + ' u).');
             $submitBtn.prop('disabled', false);
             $btnHint.text('Ready to assign');
         }
+        updateAddControlAvailability();
     }
 
     // Update Edit Modal Load Summary Panel
@@ -1034,10 +1053,7 @@ $(function(){
         var result = calculateLoad(editSelectedIds, editSectionMap, editProfLimits);
 
         $('#edit-lbl-hours').text(result.totalHours.toFixed(1));
-        $('#edit-lbl-max-hours').text(result.maxHours.toFixed(1));
         $('#edit-lbl-units').text(result.totalUnits.toFixed(1));
-        $('#edit-lbl-max-units').text(result.maxUnits.toFixed(1));
-        $('#edit-lbl-min-units').text(result.minUnits.toFixed(1));
 
         $('#edit-lbl-courses-count').text(result.courseCount);
         $('#edit-lbl-sections-count').text(result.sectionCount);
@@ -1045,6 +1061,9 @@ $(function(){
         var hoursPct = result.maxHours > 0 ? Math.min(100, Math.round((result.totalHours / result.maxHours) * 100)) : 0;
         var unitsPct = result.maxUnits > 0 ? Math.min(100, Math.round((result.totalUnits / result.maxUnits) * 100)) : 0;
 
+        $('#edit-lbl-max-hours').text(result.maxHours.toFixed(1));
+        $('#edit-lbl-max-units').text(result.maxUnits.toFixed(1));
+        $('#edit-lbl-min-units').text(result.minUnits.toFixed(1));
         $('#edit-lbl-units-percent').text(unitsPct + '%');
 
         var $barHours = $('#edit-bar-hours');
@@ -1078,35 +1097,17 @@ $(function(){
             return;
         }
 
-        if (result.isExceeded) {
+        else if (result.hoursExceeded || result.unitsExceeded) {
             $statusBadge.attr('class', 'badge bg-danger').html('<i class="bx bx-x-circle me-1"></i>Exceeded');
-            if (result.hoursExceeded) $barHours.addClass('bg-danger'); else $barHours.addClass('bg-warning');
-            if (result.unitsExceeded) $barUnits.addClass('bg-danger'); else $barUnits.addClass('bg-warning');
-
-            var msg = result.hoursExceeded ? 'Hours (' + result.totalHours.toFixed(1) + ' hrs) exceed max ' + result.maxHours + 'h.' : 'Units (' + result.totalUnits.toFixed(1) + ' u) exceed max ' + result.maxUnits + 'u.';
             $alert.attr('class', 'alert alert-danger py-2 px-2 mb-0 small')
-                  .html('<i class="bx bx-error-circle me-1"></i> <strong>Exceeded:</strong> ' + msg + ' Save disabled.');
+                  .html('<i class="bx bx-error-circle me-1"></i> Load exceeds the academic ranking limit. Save disabled.');
             $submitBtn.prop('disabled', true);
-        } else if (result.isUnderload) {
-            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-info-circle me-1"></i>Underload');
-            $barHours.addClass('bg-success');
-            $barUnits.addClass('bg-warning');
-            $alert.attr('class', 'alert alert-warning py-2 px-2 mb-0 small')
-                  .html('<i class="bx bx-info-circle me-1"></i> Units (' + result.totalUnits.toFixed(1) + ' u) below min target of ' + result.minUnits + ' u.');
-            $submitBtn.prop('disabled', false);
-        } else if (result.isNear) {
-            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-time-five me-1"></i>Near Limit');
-            $barHours.addClass('bg-warning');
-            $barUnits.addClass('bg-warning');
-            $alert.attr('class', 'alert alert-warning py-2 px-2 mb-0 small')
-                  .html('<i class="bx bx-time me-1"></i> Near capacity (' + result.totalHours.toFixed(1) + 'h / ' + result.totalUnits.toFixed(1) + 'u).');
-            $submitBtn.prop('disabled', false);
         } else {
-            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Safe Range');
+            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Ready');
             $barHours.addClass('bg-success');
             $barUnits.addClass('bg-success');
             $alert.attr('class', 'alert alert-success py-2 px-2 mb-0 small')
-                  .html('<i class="bx bx-check-circle me-1"></i> Workload balanced (' + result.totalHours.toFixed(1) + 'h, ' + result.totalUnits.toFixed(1) + 'u).');
+                  .html('<i class="bx bx-check-circle me-1"></i> Load calculated (' + result.totalHours.toFixed(1) + 'h, ' + result.totalUnits.toFixed(1) + 'u).');
             $submitBtn.prop('disabled', false);
         }
     }
@@ -1236,6 +1237,15 @@ $(function(){
             var isChecked = $chk.is(':checked');
 
             if (isChecked) {
+                var candidateIds = new Set(selectedIds);
+                candidateIds.add(cid);
+                var candidateMap = Object.assign({}, sectionMap);
+                candidateMap[cid] = parseInt($secInput.val(), 10) || 1;
+                if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
+                    $chk.prop('checked', false);
+                    updateAddLoadPanel();
+                    return;
+                }
                 selectedIds.add(cid);
                 if (!sectionMap[cid]) sectionMap[cid] = parseInt($secInput.val(), 10) || 1;
                 $card.addClass('selected');
@@ -1299,6 +1309,15 @@ $(function(){
             var current = parseInt(sectionMap[cid], 10) || parseInt($secInput.val(), 10) || 1;
             var next = Math.min(20, current + 1);
 
+            var candidateIds = new Set(selectedIds);
+            candidateIds.add(cid);
+            var candidateMap = Object.assign({}, sectionMap);
+            candidateMap[cid] = next;
+            if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
+                updateAddLoadPanel();
+                return;
+            }
+
             sectionMap[cid] = next;
             $secInput.val(next);
 
@@ -1322,6 +1341,15 @@ $(function(){
             var val = parseInt(raw, 10);
             if (!isNaN(val) && val >= 1) {
                 val = Math.min(20, val);
+                var candidateIds = new Set(selectedIds);
+                candidateIds.add(cid);
+                var candidateMap = Object.assign({}, sectionMap);
+                candidateMap[cid] = val;
+                if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
+                    $input.val(sectionMap[cid] || 1);
+                    updateAddLoadPanel();
+                    return;
+                }
                 sectionMap[cid] = val;
                 var $chk = $card.find('.course-check');
                 if (!$chk.is(':checked')) {
@@ -1342,6 +1370,16 @@ $(function(){
             var val = parseInt($input.val(), 10);
             if (isNaN(val) || val < 1) val = 1;
             if (val > 20) val = 20;
+
+            var candidateIds = new Set(selectedIds);
+            candidateIds.add(cid);
+            var candidateMap = Object.assign({}, sectionMap);
+            candidateMap[cid] = val;
+            if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
+                $input.val(sectionMap[cid] || 1);
+                updateAddLoadPanel();
+                return;
+            }
 
             sectionMap[cid] = val;
             $input.val(val);
@@ -1390,46 +1428,15 @@ $(function(){
         updateEditLoadPanel();
     });
 
-    // Professor Selector Change Handler
-    $('#prof_select').on('change', function() {
-        var profId = $(this).val();
-        var prof = profDataMap[String(profId)];
-        if (!prof) return;
+    function applyProfessorAssignments(assignments) {
+        addSelectedIds.clear();
+        addSectionMap = {};
+        (assignments || []).forEach(function(item) {
+            var cidStr = String(item.course_id);
+            addSelectedIds.add(cidStr);
+            addSectionMap[cidStr] = Number(item.sections) || 1;
+        });
 
-        currentProfLimits = {
-            prof_id: profId,
-            specialization: prof.specialization || '',
-            min_units: parseFloat(prof.min_units) || 0,
-            max_units: parseFloat(prof.max_units) || 24
-        };
-
-        // Update Info Banner
-        $('#prof-banner-dept').text(prof.department || 'General');
-        $('#prof-banner-spec').text(prof.specialization || 'None');
-        $('#prof-banner-units').text((prof.min_units || 0) + ' - ' + (prof.max_units || 24));
-        $('#prof-info-banner').removeClass('d-none');
-
-        // Pre-populate existing assignments from DB for this prof
-        var existingList = existingProfAssignments[profId] || [];
-        if (existingList.length > 0 && addSelectedIds.size === 0) {
-            // No user selections yet: load existing assignments
-            existingList.forEach(function(item) {
-                var cidStr = String(item.course_id);
-                addSelectedIds.add(cidStr);
-                addSectionMap[cidStr] = item.sections || 1;
-            });
-        } else if (existingList.length > 0) {
-            // Merge existing assignments with user's current selections
-            existingList.forEach(function(item) {
-                var cidStr = String(item.course_id);
-                if (!addSelectedIds.has(cidStr)) {
-                    addSelectedIds.add(cidStr);
-                    addSectionMap[cidStr] = item.sections || 1;
-                }
-            });
-        }
-
-        // Update visible checkboxes & inputs in addCourseList
         $(addCourseList).find('.course-card-item').each(function() {
             var $card = $(this);
             var cid = String($card.data('cid'));
@@ -1444,10 +1451,137 @@ $(function(){
 
         syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
         updateAddLoadPanel();
+    }
+
+    $('#prof-search-input').on('click', function(e) {
+        e.stopPropagation();
+    });
+
+    $('#prof-search-input').on('input', function() {
+        var query = String($(this).val() || '').trim().toLowerCase();
+        $('#professor-option-list .professor-option').each(function() {
+            var $option = $(this);
+            $option.toggle($option.text().toLowerCase().indexOf(query) !== -1);
+        });
+    });
+
+    $(document).on('click', '.professor-option', function() {
+        var value = String($(this).data('value'));
+        $('#prof_select').val(value).trigger('change');
+        $('#prof-picker-label').text($(this).text().trim());
+        $('#prof-search-input').val('');
+        $('#professor-option-list .professor-option').show();
+        bootstrap.Dropdown.getOrCreateInstance(document.getElementById('prof-picker-toggle')).hide();
+    });
+
+    // Fetch the selected professor's current assignments immediately.
+    $(document).on('change', '#prof_select', function() {
+        var profId = $(this).val();
+        if (profId) {
+            $('#prof-picker-label').text($(this).find('option:selected').text().trim());
+        }
+        if (!profId) {
+            currentProfLimits = null;
+            $('#prof-info-banner').addClass('d-none');
+            applyProfessorAssignments([]);
+            return;
+        }
+        var selectedOption = $(this).find('option:selected');
+        var prof = profDataMap[String(profId)] || {
+            prof_id: profId,
+            department: selectedOption.data('dept') || '',
+            specialization: selectedOption.data('specialization') || '',
+            academic_ranking_name: '',
+            min_units: selectedOption.data('min-units'),
+            max_units: selectedOption.data('max-units'),
+            min_hours: selectedOption.data('min-hours'),
+            max_hours: selectedOption.data('max-hours')
+        };
+        if (!prof) return;
+
+        currentProfLimits = {
+            prof_id: profId,
+            specialization: prof.specialization || '',
+            min_units: Number(prof.min_units) || 0,
+            max_units: Number(prof.max_units) || 24,
+            min_hours: Number(prof.min_hours) || 0,
+            max_hours: Number(prof.max_hours) || 40
+        };
+
+        // Update Info Banner
+        $('#prof-banner-dept').text(prof.department || 'General');
+        $('#prof-banner-spec').text(prof.specialization || 'None');
+        $('#prof-banner-ranking').text(prof.academic_ranking_name || 'Academic Ranking');
+        $('#prof-info-banner').removeClass('d-none');
+
+        // Immediately populate preloaded assignments from page load if available
+        var preloaded = existingProfAssignments && existingProfAssignments[String(profId)];
+        var hasPreloaded = Array.isArray(preloaded) && preloaded.length > 0;
+        if (hasPreloaded) {
+            applyProfessorAssignments(preloaded);
+        } else {
+            applyProfessorAssignments([]);
+        }
+
+        var requestId = ++professorLoadRequestId;
+        if (!hasPreloaded) {
+            $('#load-status-badge').attr('class', 'badge bg-secondary').text('Loading...');
+            $('#load-feedback-alert').attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
+                .html('<i class="bx bx-loader-alt bx-spin me-1"></i> Fetching this professor\'s current load...');
+        }
+
+        var loadUrl = '/api/professor_load/' + encodeURIComponent(profId);
+        console.debug('Fetching professor load', { profId: profId, url: loadUrl });
+        fetch(loadUrl)
+            .then(function(response) {
+                return response.text().then(function(body) {
+                    var data;
+                    try {
+                        data = body ? JSON.parse(body) : {};
+                    } catch (parseError) {
+                        throw new Error('Invalid professor load response (' + response.status + ').');
+                    }
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Unable to fetch professor load (' + response.status + ').');
+                    }
+                    return data;
+                });
+            })
+            .then(function(data) {
+                if (requestId !== professorLoadRequestId) return;
+                if (!Array.isArray(data.assignments)) {
+                    throw new Error('Professor load response is missing the assignments array.');
+                }
+                var assignments = data.assignments.length > 0 || !hasPreloaded
+                    ? data.assignments
+                    : preloaded;
+                if (existingProfAssignments && assignments !== preloaded) {
+                    existingProfAssignments[String(profId)] = assignments;
+                }
+                applyProfessorAssignments(assignments);
+            })
+            .catch(function(error) {
+                if (requestId !== professorLoadRequestId) return;
+                console.error('Professor load fetch failed', { profId: profId, url: loadUrl, error: error });
+                if (hasPreloaded) {
+                    $('#load-feedback-alert').attr('class', 'alert alert-warning py-2 px-3 mt-auto mb-0 small')
+                        .html('<i class="bx bx-error-circle me-1"></i> Showing cached load (sync failed: ' + $('<div>').text(error.message).html() + ')');
+                } else {
+                    $('#load-status-badge').attr('class', 'badge bg-danger').text('Load Unavailable');
+                    $('#load-feedback-alert').attr('class', 'alert alert-danger py-2 px-3 mt-auto mb-0 small')
+                        .html('<i class="bx bx-error-circle me-1"></i> Unable to fetch this professor\'s current load: ' + $('<div>').text(error.message).html());
+                }
+            });
     });
 
     // Reset / Clear Selection button
     $('#btn-clear-selection').on('click', function() {
+        $('#prof_select').val('');
+        $('#prof-picker-label').text('-- Select a Professor --');
+        $('#prof-search-input').val('');
+        $('#professor-option-list .professor-option').show();
+        currentProfLimits = null;
+        $('#prof-info-banner').addClass('d-none');
         addSelectedIds.clear();
         addSectionMap = {};
         $(addCourseList).find('.course-card-item').each(function() {
@@ -1527,8 +1661,10 @@ $(function(){
         var lastName = $t.data('lastname');
         var department = $t.data('department');
         var specialization = String($t.data('specialization') || '');
-        var minUnits = parseFloat($t.data('minunits')) || 0;
-        var maxUnits = parseFloat($t.data('maxunits')) || 24;
+        var minUnits = Number($t.data('minunits')) || 0;
+        var maxUnits = Number($t.data('maxunits')) || 24;
+        var minHours = Number($t.data('minhours')) || 0;
+        var maxHours = Number($t.data('maxhours')) || 40;
         var courseAttr = String($t.data('courses') || '');
         var sectionAttr = String($t.data('sections') || '');
 
@@ -1536,14 +1672,13 @@ $(function(){
         $('#edit_lastname').val(lastName);
         $('#edit_department').val(department);
         $('#edit_specialization').val(specialization);
-        $('#edit_min_units').val(minUnits);
-        $('#edit_max_units').val(maxUnits);
-
         editProfLimits = {
             prof_id: profId,
             specialization: specialization,
             min_units: minUnits,
-            max_units: maxUnits
+            max_units: maxUnits,
+            min_hours: minHours,
+            max_hours: maxHours
         };
 
         editSelectedIds.clear();
@@ -1580,12 +1715,10 @@ $(function(){
         });
     });
 
-    // Real-time limit adjustment in Edit Modal
-    $('#edit_specialization, #edit_min_units, #edit_max_units').on('input change', function() {
+    // Keep the load preview synchronized with professor details.
+    $('#edit_specialization').on('input change', function() {
         if (!editProfLimits) return;
         editProfLimits.specialization = $('#edit_specialization').val() || '';
-        editProfLimits.min_units = parseFloat($('#edit_min_units').val()) || 0;
-        editProfLimits.max_units = parseFloat($('#edit_max_units').val()) || 24;
         updateEditLoadPanel();
     });
 
@@ -1631,6 +1764,9 @@ $(function(){
 
     // Initial state setup
     updateAddLoadPanel();
+    if ($('#prof_select').val()) {
+        $('#prof_select').trigger('change');
+    }
 });
 </script>
 {% endblock %}

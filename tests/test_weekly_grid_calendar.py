@@ -267,7 +267,7 @@ def test_api_availability_endpoints(monkeypatch):
         def execute(self):
             if self.table_name == 'professor':
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CS', 'max_hours': 30}]})()
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': []})()
             elif self.table_name == 'timeslot':
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
@@ -328,8 +328,8 @@ def test_section_schedule_page_renders_weekly_grid(monkeypatch):
                         'semester': '1st Semester',
                         'major': 'CS',
                         'section': '1A',
-                        'prof_course': {
-                            'prof_course_id': 1,
+                        'professor_load': {
+                            'professor_load_id': 1,
                             'course': {'course_name': 'CC-102'},
                             'professor': {'first_name': 'Bernadette', 'last_name': 'Aquino'},
                         },
@@ -340,7 +340,7 @@ def test_section_schedule_page_renders_weekly_grid(monkeypatch):
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
             elif self.table_name == 'room':
                 return type('Resp', (), {'data': [{'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture'}]})()
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': []})()
             return type('Resp', (), {'data': []})()
 
@@ -394,15 +394,15 @@ def test_professor_schedule_page_renders_weekly_grid(monkeypatch):
         def execute(self):
             if self.table_name == 'professor':
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Nicole', 'last_name': 'Domingo', 'department': 'IT', 'max_hours': 30}]})()
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': [
-                    {'prof_course_id': 10, 'course_id': 5, 'course': {'course_name': 'IT-PF02'}}
+                    {'professor_load_id': 10, 'course_id': 5, 'course': {'course_name': 'IT-PF02'}}
                 ]})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': [
                     {
                         'schedule_id': 100,
-                        'prof_course_id': 10,
+                        'professor_load_id': 10,
                         'room_id': 1,
                         'day': 'Wednesday',
                         'class_start': '13:00:00',
@@ -411,8 +411,8 @@ def test_professor_schedule_page_renders_weekly_grid(monkeypatch):
                         'semester': '1st Semester',
                         'major': 'IT',
                         'session_type': 'Lecture',
-                        'prof_course': {
-                            'prof_course_id': 10,
+                        'professor_load': {
+                            'professor_load_id': 10,
                             'course': {'course_name': 'IT-PF02'}
                         },
                         'room': {'room_name': 'CL 1'}
@@ -480,8 +480,8 @@ def test_section_schedule_cleanup_and_consolidated_view(monkeypatch):
                         'semester': '1st Semester',
                         'major': 'CS',
                         'section': '1A',
-                        'prof_course': {
-                            'prof_course_id': 1,
+                        'professor_load': {
+                            'professor_load_id': 1,
                             'course': {'course_name': 'CC-102'},
                             'professor': {'first_name': 'Bernadette', 'last_name': 'Aquino'},
                         },
@@ -492,7 +492,7 @@ def test_section_schedule_cleanup_and_consolidated_view(monkeypatch):
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
             elif self.table_name == 'room':
                 return type('Resp', (), {'data': [{'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture'}]})()
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': []})()
             return type('Resp', (), {'data': []})()
 
@@ -554,15 +554,15 @@ def test_professor_schedule_cleanup_and_consolidated_view(monkeypatch):
         def execute(self):
             if self.table_name == 'professor':
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Nicole', 'last_name': 'Domingo', 'department': 'IT', 'max_hours': 30}]})()
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': [
-                    {'prof_course_id': 10, 'course_id': 5, 'course': {'course_name': 'IT-PF02'}}
+                    {'professor_load_id': 10, 'course_id': 5, 'course': {'course_name': 'IT-PF02'}}
                 ]})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': [
                     {
                         'schedule_id': 100,
-                        'prof_course_id': 10,
+                        'professor_load_id': 10,
                         'room_id': 1,
                         'day': 'Wednesday',
                         'class_start': '13:00:00',
@@ -571,8 +571,8 @@ def test_professor_schedule_cleanup_and_consolidated_view(monkeypatch):
                         'semester': '1st Semester',
                         'major': 'IT',
                         'session_type': 'Lecture',
-                        'prof_course': {
-                            'prof_course_id': 10,
+                        'professor_load': {
+                            'professor_load_id': 10,
                             'course': {'course_name': 'IT-PF02'}
                         },
                         'room': {'room_name': 'CL 1'}

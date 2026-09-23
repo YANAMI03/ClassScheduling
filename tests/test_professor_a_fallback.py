@@ -88,7 +88,10 @@ class FakeQuery:
 
 
 def test_ensure_fallback_professor_creation(monkeypatch):
-    store = {'professor': []}
+    store = {
+        'professor': [],
+        'academic_ranking': [{'academic_ranking_id': 1, 'name': 'General', 'program': 'General', 'max_hours': 40, 'max_units': 24, 'min_hours': 0, 'min_units': 0}],
+    }
 
     class MockSupabase:
         def table(self, table_name):
@@ -138,10 +141,11 @@ def test_sequential_fallback_professors_zero_conflict(monkeypatch):
     ]
 
     store = {
+        'academic_ranking': [{'academic_ranking_id': 1, 'name': 'General', 'program': 'General', 'max_hours': 40, 'max_units': 24, 'min_hours': 0, 'min_units': 0}],
         'course': courses,
         'room': rooms,
         'professor': professors,
-        'prof_course': [],
+        'professor_load': [],
         'timeslot': timeslots,
         'schedule': [],
     }
@@ -211,10 +215,11 @@ def test_multi_year_fallback_scheduling(monkeypatch):
     ]
 
     store = {
+        'academic_ranking': [{'academic_ranking_id': 1, 'name': 'General', 'program': 'General', 'max_hours': 40, 'max_units': 24, 'min_hours': 0, 'min_units': 0}],
         'course': courses,
         'room': rooms,
         'professor': professors,
-        'prof_course': [],
+        'professor_load': [],
         'timeslot': timeslots,
         'schedule': [],
     }
@@ -285,8 +290,9 @@ def test_subject_oriented_fallback_across_sections(monkeypatch):
     store = {
         'course': courses,
         'room': rooms,
+        'academic_ranking': [{'academic_ranking_id': 1, 'name': 'General', 'program': 'General', 'max_hours': 40, 'max_units': 24, 'min_hours': 0, 'min_units': 0}],
         'professor': [],
-        'prof_course': [],
+        'professor_load': [],
         'timeslot': timeslots,
         'schedule': [],
     }

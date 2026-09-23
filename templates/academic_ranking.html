@@ -30,15 +30,15 @@
                 <label class="form-label fw-semibold">Rank Name <span class="text-danger">*</span></label>
                 <input type="text" name="name" class="form-control" placeholder="e.g., Instructor I, Assistant Professor" required>
             </div>
-            <div class="col-md-3">
-                <label class="form-label fw-semibold">Units Required <span class="text-danger">*</span></label>
-                <input type="number" name="units_required" class="form-control" placeholder="e.g., 18" min="0" step="any" required>
-            </div>
-            <div class="col-md-4">
+            <div class="col-md-7">
                 <label class="form-label fw-semibold">Program <span class="text-muted">(Auto-assigned)</span></label>
                 <input type="text" class="form-control bg-light" value="{{ program or 'All Programs' }}" disabled readonly title="Program is automatically assigned to your active session">
                 <input type="hidden" name="program" value="{{ program }}">
             </div>
+            <div class="col-md-3"><label class="form-label fw-semibold">Min Units</label><input type="number" name="min_units" class="form-control" min="0" step="any" value="0" required></div>
+            <div class="col-md-3"><label class="form-label fw-semibold">Max Units</label><input type="number" name="max_units" class="form-control" min="0.01" step="any" value="24" required></div>
+            <div class="col-md-3"><label class="form-label fw-semibold">Min Hours</label><input type="number" name="min_hours" class="form-control" min="0" step="any" value="0" required></div>
+            <div class="col-md-3"><label class="form-label fw-semibold">Max Hours</label><input type="number" name="max_hours" class="form-control" min="0.01" step="any" value="40" required></div>
             <div class="col-12">
                 <button class="btn btn-primary" type="submit">
                     <i class="bx bx-plus"></i> Add Academic Ranking
@@ -63,8 +63,9 @@
             <thead>
                 <tr>
                     <th>Rank Name</th>
-                    <th>Units Required</th>
                     <th>Program</th>
+                    <th>Units</th>
+                    <th>Hours</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
@@ -72,16 +73,20 @@
                 {% for r in rankings %}
                 <tr>
                     <td><strong><i class="bx bx-award me-1 text-primary"></i>{{ r.name }}</strong></td>
-                    <td><span class="badge bg-light text-dark border">{{ r.units_required }} units</span></td>
                     <td><span class="badge-custom badge-success">{{ r.program or 'General' }}</span></td>
+                    <td>{{ r.min_units }} - {{ r.max_units }}</td>
+                    <td>{{ r.min_hours }} - {{ r.max_hours }}</td>
                     <td class="text-end">
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-ranking-btn"
                                 data-bs-toggle="modal"
                                 data-bs-target="#editRankingModal"
                                 data-id="{{ r.academic_ranking_id }}"
                                 data-name="{{ r.name }}"
-                                data-units="{{ r.units_required }}"
-                                data-program="{{ r.program }}">
+                                data-program="{{ r.program }}"
+                                data-minunits="{{ r.min_units }}"
+                                data-maxunits="{{ r.max_units }}"
+                                data-minhours="{{ r.min_hours }}"
+                                data-maxhours="{{ r.max_hours }}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_academic_ranking/{{ r.academic_ranking_id }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this academic ranking?">
@@ -91,7 +96,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4">
+                    <td colspan="5">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-award"></i></div>
                             <div class="empty-state__text">No academic rankings found for this program</div>
@@ -116,13 +121,15 @@
             </div>
             <form id="editRankingForm" method="POST">
                 <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><label class="form-label fw-semibold">Min Units</label><input type="number" name="min_units" id="edit_ranking_min_units" class="form-control" min="0" step="any" required></div>
+                        <div class="col-6"><label class="form-label fw-semibold">Max Units</label><input type="number" name="max_units" id="edit_ranking_max_units" class="form-control" min="0.01" step="any" required></div>
+                        <div class="col-6"><label class="form-label fw-semibold">Min Hours</label><input type="number" name="min_hours" id="edit_ranking_min_hours" class="form-control" min="0" step="any" required></div>
+                        <div class="col-6"><label class="form-label fw-semibold">Max Hours</label><input type="number" name="max_hours" id="edit_ranking_max_hours" class="form-control" min="0.01" step="any" required></div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Rank Name <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control" id="edit_ranking_name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Units Required <span class="text-danger">*</span></label>
-                        <input type="number" name="units_required" class="form-control" id="edit_ranking_units" min="0" step="any" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Program <span class="text-muted">(Read-only)</span></label>
@@ -147,11 +154,13 @@ $(function(){
         var $t = $(this);
         var id = $t.data('id');
         var name = $t.data('name');
-        var units = $t.data('units');
         var prog = $t.data('program') || '{{ program or "" }}';
 
         $('#edit_ranking_name').val(name);
-        $('#edit_ranking_units').val(units);
+        $('#edit_ranking_min_units').val($t.data('minunits'));
+        $('#edit_ranking_max_units').val($t.data('maxunits'));
+        $('#edit_ranking_min_hours').val($t.data('minhours'));
+        $('#edit_ranking_max_hours').val($t.data('maxhours'));
         $('#edit_ranking_program_disp').val(prog);
         $('#editRankingForm').attr('action', '/edit_academic_ranking/' + id);
     });
@@ -215,10 +224,9 @@ $(function(){
 
                     var tr = document.createElement('tr');
                     tr.innerHTML = '<td><strong><i class="bx bx-award me-1 text-primary"></i>' + (r.name || '') + '</strong></td>' +
-                                   '<td><span class="badge bg-light text-dark border">' + (r.units_required !== undefined ? r.units_required : 0) + ' units</span></td>' +
                                    '<td><span class="badge-custom badge-success">' + (r.program || '') + '</span></td>' +
                                    '<td class="text-end">' +
-                                       '<button type="button" class="btn btn-outline-secondary btn-sm edit-ranking-btn" data-bs-toggle="modal" data-bs-target="#editRankingModal" data-id="' + (r.academic_ranking_id || '') + '" data-name="' + (r.name || '') + '" data-units="' + (r.units_required !== undefined ? r.units_required : 0) + '" data-program="' + (r.program || '') + '"><i class="bx bx-edit"></i> Edit</button> ' +
+                                       '<button type="button" class="btn btn-outline-secondary btn-sm edit-ranking-btn" data-bs-toggle="modal" data-bs-target="#editRankingModal" data-id="' + (r.academic_ranking_id || '') + '" data-name="' + (r.name || '') + '" data-program="' + (r.program || '') + '" data-minunits="' + (r.min_units || 0) + '" data-maxunits="' + (r.max_units || 24) + '" data-minhours="' + (r.min_hours || 0) + '" data-maxhours="' + (r.max_hours || 40) + '"><i class="bx bx-edit"></i> Edit</button> ' +
                                        '<a href="/delete_academic_ranking/' + (r.academic_ranking_id || '') + '" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this academic ranking?"><i class="bx bx-trash"></i> Delete</a>' +
                                    '</td>';
                     tbody.appendChild(tr);

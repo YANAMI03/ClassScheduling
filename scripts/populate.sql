@@ -1,6 +1,6 @@
-DELETE FROM prof_course;
+DELETE FROM professor_load;
 
-INSERT INTO prof_course (prof_id, course_id) VALUES
+INSERT INTO professor_load (prof_id, course_id) VALUES
 (49, 1),
 (49, 2),
 (49, 10),

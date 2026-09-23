@@ -67,11 +67,11 @@ class MockTable:
 
 
 class MockSupabase:
-    def __init__(self, professors=None, courses=None, prof_courses=None):
+    def __init__(self, professors=None, courses=None, professor_loads=None):
         self.tables = {
             'professor': MockTable('professor', professors or []),
             'course': MockTable('course', courses or []),
-            'prof_course': MockTable('prof_course', prof_courses or []),
+            'professor_load': MockTable('professor_load', professor_loads or []),
         }
 
     def table(self, name):
@@ -155,7 +155,7 @@ def test_setup(monkeypatch):
     return client, db
 
 
-def test_add_prof_course_with_multiple_sections(test_setup):
+def test_add_professor_load_with_multiple_sections(test_setup):
     """Test assigning courses to a professor with section counts."""
     client, db = test_setup
 
@@ -163,7 +163,7 @@ def test_add_prof_course_with_multiple_sections(test_setup):
     # Course 102: lec=3, lab=0, ilp=0 (sum=3 hrs, 3 units). Sections=1 -> 3 hrs, 3 units.
     # Total = 15 hrs, 9 units. Prof 1 max_units=15, min_units=6.
     # This is safe and within limits.
-    response = client.post('/add_prof_course', data={
+    response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['101', '102'],
         'sections_101': '2',
@@ -171,68 +171,65 @@ def test_add_prof_course_with_multiple_sections(test_setup):
     }, follow_redirects=True)
 
     assert response.status_code == 200
-    # Check that rows were inserted into prof_course with section counts
-    inserted = db.table('prof_course').inserted
+    # Check that rows were inserted into professor_load with section counts
+    inserted = db.table('professor_load').inserted
     assert len(inserted) == 2
     inserted_by_cid = {row['course_id']: row for row in inserted}
     assert inserted_by_cid[101]['sections'] == 2
     assert inserted_by_cid[102]['sections'] == 1
 
 
-def test_add_prof_course_allows_high_hours_without_max_hours_cap(test_setup):
+def test_add_professor_load_allows_high_hours_without_max_hours_cap(test_setup):
     """Test that assignment is NOT blocked by weekly hours since max_hours constraint was removed."""
     client, db = test_setup
 
     # Course 101: 6 hrs/sec. With 2 sections = 12 hrs, 6 units. Prof 1 max_units = 15.
-    response = client.post('/add_prof_course', data={
+    response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['101'],
         'sections_101': '2',
     }, follow_redirects=True)
 
     assert response.status_code == 200
-    assert len(db.table('prof_course').inserted) > 0
+    assert len(db.table('professor_load').inserted) > 0
 
 
-def test_add_prof_course_blocks_when_units_exceed_max(test_setup):
-    """Test that assignment is blocked if total_units > max_units."""
+def test_add_professor_load_allows_any_course_units(test_setup):
+    """Course units are reported but are not checked against a professor limit."""
     client, db = test_setup
 
-    # Course 103: 20 units. Prof 1 max_units = 15.
-    response = client.post('/add_prof_course', data={
+    # Course 103 has more units than the old per-professor limit.
+    response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['103'],
         'sections_103': '1',
     }, follow_redirects=True)
 
     assert response.status_code == 200
-    assert b'Cannot assign courses: Total units' in response.data
-    assert b'exceed professor maximum limit' in response.data
-    assert len(db.table('prof_course').inserted) == 0
+    assert len(db.table('professor_load').inserted) == 1
 
 
-def test_add_prof_course_warns_when_units_below_min(test_setup):
-    """Test that assignment succeeds with a warning when total_units < min_units."""
+def test_add_professor_load_does_not_warn_about_min_units(test_setup):
+    """There is no per-professor minimum-unit target."""
     client, db = test_setup
 
-    # Course 102: 3 units, 1 section. Prof 1 has min_units = 6.
-    # Total units = 3 < 6. Should allow assignment with warning note.
-    response = client.post('/add_prof_course', data={
+    # Course 102: 3 units, 1 section.
+    response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['102'],
         'sections_102': '1',
     }, follow_redirects=True)
 
     assert response.status_code == 200
-    assert b'below minimum target' in response.data
-    assert len(db.table('prof_course').inserted) == 1
+    assert b'below minimum target' not in response.data
+    assert len(db.table('professor_load').inserted) == 1
 
 
-def test_update_prof_with_courses_enforces_limits(test_setup):
-    """Test that update_prof_with_courses enforces max limits."""
+def test_update_prof_with_courses_does_not_enforce_unit_limits(test_setup):
+    """Updating assignments does not enforce removed professor unit limits."""
     client, db = test_setup
 
-    # Updating prof 1 with course 103 (20 units > 15 max_units)
+    # Updating prof 1 with course 103 succeeds regardless of its units.
     response = client.post('/update_prof_with_courses/1', data={
         'first_name': 'Alan',
         'last_name': 'Turing',
@@ -245,7 +242,7 @@ def test_update_prof_with_courses_enforces_limits(test_setup):
     }, follow_redirects=True)
 
     assert response.status_code == 200
-    assert b'Total units' in response.data
+    assert b'Updated assignments successfully' in response.data
 
 
 def test_example_cc101_multiple_sections(test_setup):
@@ -274,14 +271,14 @@ def test_example_cc101_multiple_sections(test_setup):
     }
     db.table('course').data.append(cc101)
 
-    response = client.post('/add_prof_course', data={
+    response = client.post('/add_professor_load', data={
         'prof_id': '2',
         'course_ids': ['201'],
         'sections_201': '3',
     }, follow_redirects=True)
 
     assert response.status_code == 200
-    inserted = db.table('prof_course').inserted
+    inserted = db.table('professor_load').inserted
     assert len(inserted) == 1
     assert inserted[0]['prof_id'] == 2
     assert inserted[0]['course_id'] == 201
@@ -290,11 +287,11 @@ def test_example_cc101_multiple_sections(test_setup):
     assert b'15.0 hrs, 9.0 units' in response.data
 
 
-def test_prof_course_page_renders_load_components(test_setup):
-    """Test that prof_course.html renders the Teaching Load Summary Panel, Number of Sections, and live breakdown."""
+def test_professor_load_page_renders_load_components(test_setup):
+    """Test that professor_load.html renders the Teaching Load Summary Panel, Number of Sections, and live breakdown."""
     client, db = test_setup
 
-    response = client.get('/prof_course')
+    response = client.get('/professor_load')
     assert response.status_code == 200
     html = response.data.decode('utf-8')
 
@@ -321,5 +318,43 @@ def test_prof_course_page_renders_load_components(test_setup):
     assert 'btn-remove-breakdown' in html
     assert 'handleAddSectionChange' in html
     assert 'handleAddRemove' in html
-    assert 'Pending Professor' in html
+    assert 'Pending Professor' not in html
+    assert 'Limit Exceeded' in html
+
+
+def test_api_professor_load_returns_assignments(test_setup):
+    client, db = test_setup
+    db.table('professor_load').data.append({
+        'prof_id': 1,
+        'course_id': 101,
+        'sections': 2,
+    })
+
+    response = client.get('/api/professor_load/1')
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        'prof_id': 1,
+        'assignments': [{'course_id': 101, 'sections': 2}],
+    }
+
+
+def test_professor_load_template_contains_existing_assignments(test_setup):
+    """Verify that existing professor assignments are embedded in the template for instant preloading."""
+    client, db = test_setup
+    db.table('professor_load').data.append({
+        'prof_id': 1,
+        'course_id': 101,
+        'sections': 3,
+    })
+
+    response = client.get('/professor_load')
+    assert response.status_code == 200
+    html = response.data.decode('utf-8')
+    assert 'existingProfAssignments' in html
+    assert '"1": [{"course_id": 101, "sections": 3}]' in html or '"1": [{"course_id": 101' in html
+    assert 'applyProfessorAssignments(preloaded)' in html
+    assert 'academic_ranking_name' in html
+    assert '&#34;&#34;' not in html
+
 

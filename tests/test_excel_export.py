@@ -206,7 +206,7 @@ def test_routes_export_room_excel(monkeypatch):
                 return type('Resp', (), {'data': [
                     {
                         'schedule_id': 1,
-                        'prof_course_id': 1,
+                        'professor_load_id': 1,
                         'room_id': 10,
                         'day': 'Monday',
                         'class_start': '08:00:00',
@@ -215,7 +215,7 @@ def test_routes_export_room_excel(monkeypatch):
                         'semester': '1st Semester',
                         'major': None,
                         'session_type': 'Laboratory',
-                        'prof_course': {
+                        'professor_load': {
                             'course': {'course_id': 1, 'course_name': 'IT101 - Intro to Computing'},
                             'professor': {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}
                         },
@@ -271,7 +271,7 @@ def test_routes_export_section_excel(monkeypatch):
                         'session_type': 'Lecture',
                         'semester': '1st Semester',
                         'major': 'General',
-                        'prof_course': {
+                        'professor_load': {
                             'course': {'course_id': 2, 'course_name': 'CC-102 Programming'},
                             'professor': {'prof_id': 2, 'first_name': 'Grace', 'last_name': 'Hopper'}
                         },
@@ -319,13 +319,13 @@ def test_routes_export_professor_excel(monkeypatch):
         def execute(self):
             if self.table_name == 'professor':
                 return type('Resp', (), {'data': [{'prof_id': 5, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CS', 'max_hours': 30}]})()
-            elif self.table_name == 'prof_course':
-                return type('Resp', (), {'data': [{'prof_course_id': 10, 'course_id': 1, 'course': {'course_name': 'IT101'}}]})()
+            elif self.table_name == 'professor_load':
+                return type('Resp', (), {'data': [{'professor_load_id': 10, 'course_id': 1, 'course': {'course_name': 'IT101'}}]})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': [
                     {
                         'schedule_id': 3,
-                        'prof_course_id': 10,
+                        'professor_load_id': 10,
                         'room_id': 1,
                         'day': 'Friday',
                         'class_start': '14:00:00',
@@ -334,7 +334,7 @@ def test_routes_export_professor_excel(monkeypatch):
                         'semester': '1st Semester',
                         'major': None,
                         'session_type': 'Lecture',
-                        'prof_course': {'course': {'course_name': 'IT101'}},
+                        'professor_load': {'course': {'course_name': 'IT101'}},
                         'room': {'room_name': 'Room 105'}
                     }
                 ]})()
@@ -384,7 +384,7 @@ def test_ui_templates_contain_export_to_excel_buttons(monkeypatch):
                 return type('Resp', (), {'data': [{'room_id': 1, 'room_name': '101', 'room_type': 'Lecture'}]})()
             elif self.table_name == 'professor':
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CS', 'max_hours': 30}]})()
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': []})()
             elif self.table_name == 'timeslot':
                 return type('Resp', (), {'data': []})()
@@ -616,7 +616,7 @@ def test_export_routes_use_assigned_section_themes(tmp_path, monkeypatch):
                         'session_type': 'Lecture',
                         'semester': '1st Semester',
                         'major': None,
-                        'prof_course': {
+                        'professor_load': {
                             'course': {'course_name': 'CS101 Intro'},
                             'professor': {'first_name': 'Alan', 'last_name': 'Turing'}
                         },

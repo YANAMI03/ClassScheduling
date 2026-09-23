@@ -56,15 +56,15 @@ class FakeQuery:
                 {'course_id': 3, 'course_name': 'IT301 - Web Systems', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT'},
                 {'course_id': 4, 'course_name': 'IT401 - Capstone Project 1', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
             ])
-        elif self.table_name == 'prof_course':
+        elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
             data = [
-                {'prof_course_id': 101, 'course_id': 1, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}, 'course': {'course_name': 'IT101 - Intro to Computing', 'course_code': 'IT101'}},
-                {'prof_course_id': 102, 'course_id': 2, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}, 'course': {'course_name': 'IT201 - Data Structures', 'course_code': 'IT201'}},
-                {'prof_course_id': 103, 'course_id': 3, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}, 'course': {'course_name': 'IT301 - Web Systems', 'course_code': 'IT301'}},
-                {'prof_course_id': 104, 'course_id': 4, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}, 'course': {'course_name': 'IT401 - Capstone Project 1', 'course_code': 'IT401'}},
+                {'professor_load_id': 101, 'course_id': 1, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}, 'course': {'course_name': 'IT101 - Intro to Computing', 'course_code': 'IT101'}, 'sections': 2},
+                {'professor_load_id': 102, 'course_id': 2, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}, 'course': {'course_name': 'IT201 - Data Structures', 'course_code': 'IT201'}, 'sections': 1},
+                {'professor_load_id': 103, 'course_id': 3, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}, 'course': {'course_name': 'IT301 - Web Systems', 'course_code': 'IT301'}, 'sections': 1},
+                {'professor_load_id': 104, 'course_id': 4, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}, 'course': {'course_name': 'IT401 - Capstone Project 1', 'course_code': 'IT401'}, 'sections': 1},
             ]
-            if 'prof_course_id' in self.filters:
-                data = [d for d in data if str(d.get('prof_course_id')) == str(self.filters['prof_course_id'])]
+            if 'professor_load_id' in self.filters:
+                data = [d for d in data if str(d.get('professor_load_id')) == str(self.filters['professor_load_id'])]
             if 'course_id' in self.filters:
                 data = [d for d in data if str(d.get('course_id')) == str(self.filters['course_id'])]
             if 'prof_id' in self.filters:
@@ -230,13 +230,13 @@ def test_generate_schedule_second_semester_with_major_sections(monkeypatch):
                     {'course_id': 31, 'course_name': 'IT303 - Web Frameworks', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Development'},
                     {'course_id': 32, 'course_name': 'IT304 - Network Admin', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking'},
                 ])
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
-                    {'course_id': 10, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
-                    {'course_id': 20, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
-                    {'course_id': 30, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}},
-                    {'course_id': 31, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}},
-                    {'course_id': 32, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'professor_load_id': 201, 'course_id': 10, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'professor_load_id': 202, 'course_id': 20, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                    {'professor_load_id': 203, 'course_id': 30, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}},
+                    {'professor_load_id': 204, 'course_id': 31, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}},
+                    {'professor_load_id': 205, 'course_id': 32, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
                 ])
             return super().execute()
 
@@ -302,14 +302,14 @@ def test_generate_schedule_first_semester_with_4th_year_major_sections(monkeypat
                     {'course_id': 41, 'course_name': 'IT402 - Enterprise Web Apps', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Development'},
                     {'course_id': 42, 'course_name': 'IT403 - Enterprise Networking', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking'},
                 ])
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
-                    {'course_id': 10, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
-                    {'course_id': 20, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
-                    {'course_id': 30, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}},
-                    {'course_id': 40, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}},
-                    {'course_id': 41, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
-                    {'course_id': 42, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                    {'professor_load_id': 211, 'course_id': 10, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'professor_load_id': 212, 'course_id': 20, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                    {'professor_load_id': 213, 'course_id': 30, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}},
+                    {'professor_load_id': 214, 'course_id': 40, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}},
+                    {'professor_load_id': 215, 'course_id': 41, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'professor_load_id': 216, 'course_id': 42, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
                 ])
             return super().execute()
 
@@ -750,7 +750,7 @@ def test_edit_preview_entry_blocks_cross_type_room_assignment(monkeypatch):
     # Attempt to assign room_id=1 (Lab 101 - Laboratory) to Lecture class
     resp = client.post('/edit_preview_entry', json={
         'id': 1,
-        'prof_course_id': 101,
+        'professor_load_id': 101,
         'section': '1A',
         'room_id': 1, # Lab 101
         'day': 'Monday',
@@ -797,7 +797,7 @@ def test_confirm_preview_blocks_on_room_type_mismatch(monkeypatch):
     assert '/generate_schedule' in resp.headers.get('Location', '')
 
 
-def test_generate_schedule_sets_prof_course_id(monkeypatch):
+def test_generate_schedule_sets_professor_load_id(monkeypatch):
     client = app_module.app.test_client()
 
     with client.session_transaction() as session:
@@ -820,13 +820,13 @@ def test_generate_schedule_sets_prof_course_id(monkeypatch):
         preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
         assert preview is not None
         assert len(preview) > 0
-        # Every generated session with an assigned professor should have prof_course_id populated
+        # Every generated session with an assigned professor should have professor_load_id populated
         for entry in preview:
             if entry.get('prof_id'):
-                assert entry.get('prof_course_id') is not None
+                assert entry.get('professor_load_id') is not None
 
 
-def test_edit_preview_entry_with_prof_course_id(monkeypatch):
+def test_edit_preview_entry_with_professor_load_id(monkeypatch):
     client = app_module.app.test_client()
 
     with client.session_transaction() as session:
@@ -838,7 +838,7 @@ def test_edit_preview_entry_with_prof_course_id(monkeypatch):
         session['schedule_preview'] = [
             {
                 'id': 1,
-                'prof_course_id': 101,
+                'professor_load_id': 101,
                 'course_id': 1,
                 'course_name': 'IT101 - Intro to Computing',
                 'section': '1A',
@@ -859,10 +859,10 @@ def test_edit_preview_entry_with_prof_course_id(monkeypatch):
     monkeypatch.setattr(app_module, 'supabase', FakeSupabase())
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
 
-    # Edit entry to use prof_course_id 102
+    # Edit entry to use professor_load_id 102
     resp = client.post('/edit_preview_entry', json={
         'id': 1,
-        'prof_course_id': 102,
+        'professor_load_id': 102,
         'section': '1A',
         'room_id': 2,
         'day': 'Monday',
@@ -873,19 +873,19 @@ def test_edit_preview_entry_with_prof_course_id(monkeypatch):
     json_data = resp.get_json()
     assert json_data.get('success') is True
     assert json_data.get('entry') is not None
-    assert json_data['entry']['prof_course_id'] == 102
+    assert json_data['entry']['professor_load_id'] == 102
     assert json_data['entry']['course_name'] == 'IT201 - Data Structures'
     assert json_data['entry']['professor_name'] == 'Grace Hopper'
 
     with client.session_transaction() as session:
         preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
         target = preview[0]
-        assert target['prof_course_id'] == 102
+        assert target['professor_load_id'] == 102
         assert target['course_name'] == 'IT201 - Data Structures'
         assert target['professor_name'] == 'Grace Hopper'
 
 
-def test_edit_preview_entry_rejects_missing_prof_course_id(monkeypatch):
+def test_edit_preview_entry_rejects_missing_professor_load_id(monkeypatch):
     client = app_module.app.test_client()
 
     with client.session_transaction() as session:
@@ -896,7 +896,7 @@ def test_edit_preview_entry_rejects_missing_prof_course_id(monkeypatch):
         session['preview_id'] = 'prev_no_pcid'
         session['schedule_preview'] = [{
             'id': 1,
-            'prof_course_id': 101,
+            'professor_load_id': 101,
             'section': '1A',
             'day': 'Monday',
             'start': '8:00 AM',
@@ -930,7 +930,7 @@ def test_edit_preview_entry_detects_conflicts(monkeypatch):
         session['schedule_preview'] = [
             {
                 'id': 1,
-                'prof_course_id': 101,
+                'professor_load_id': 101,
                 'prof_id': 1,
                 'section': '1A',
                 'room_id': 2,
@@ -942,7 +942,7 @@ def test_edit_preview_entry_detects_conflicts(monkeypatch):
             },
             {
                 'id': 2,
-                'prof_course_id': 102,
+                'professor_load_id': 102,
                 'prof_id': 2,
                 'section': '1B',
                 'room_id': 3,
@@ -960,7 +960,7 @@ def test_edit_preview_entry_detects_conflicts(monkeypatch):
     # 1. Section collision: changing entry 2's section to '1A' creates collision with entry 1
     resp_sec = client.post('/edit_preview_entry', json={
         'id': 2,
-        'prof_course_id': 102,
+        'professor_load_id': 102,
         'section': '1A',
         'room_id': 3,
         'day': 'Monday',
@@ -973,7 +973,7 @@ def test_edit_preview_entry_detects_conflicts(monkeypatch):
     # 2. Room collision: changing entry 2's room to room 2 (Room 201) overlaps with entry 1
     resp_room = client.post('/edit_preview_entry', json={
         'id': 2,
-        'prof_course_id': 102,
+        'professor_load_id': 102,
         'section': '1B',
         'room_id': 2,
         'day': 'Monday',
@@ -983,10 +983,10 @@ def test_edit_preview_entry_detects_conflicts(monkeypatch):
     assert resp_room.status_code == 400
     assert 'Room conflict' in resp_room.get_json().get('error', '')
 
-    # 3. Professor collision: changing entry 2's prof_course_id to 101 (Alan Turing, prof_id=1) overlaps with entry 1
+    # 3. Professor collision: changing entry 2's professor_load_id to 101 (Alan Turing, prof_id=1) overlaps with entry 1
     resp_prof = client.post('/edit_preview_entry', json={
         'id': 2,
-        'prof_course_id': 101,
+        'professor_load_id': 101,
         'section': '1B',
         'room_id': 3,
         'day': 'Monday',
@@ -1007,7 +1007,7 @@ def test_api_preview_entries_endpoint(monkeypatch):
         session['role'] = 'Scheduler'
         session['preview_id'] = 'prev_api_test'
         session['schedule_preview'] = [
-            {'id': 1, 'prof_course_id': 101, 'section': '1A'}
+            {'id': 1, 'professor_load_id': 101, 'section': '1A'}
         ]
 
     resp = client.get('/api/preview_entries')
@@ -1015,11 +1015,11 @@ def test_api_preview_entries_endpoint(monkeypatch):
     data = resp.get_json()
     assert data.get('success') is True
     assert len(data.get('entries', [])) == 1
-    assert data['entries'][0]['prof_course_id'] == 101
+    assert data['entries'][0]['professor_load_id'] == 101
 
 
 
-def test_confirm_preview_passes_prof_course_id_to_rpc(monkeypatch):
+def test_confirm_preview_passes_professor_load_id_to_rpc(monkeypatch):
     client = app_module.app.test_client()
 
     with client.session_transaction() as session:
@@ -1030,7 +1030,7 @@ def test_confirm_preview_passes_prof_course_id_to_rpc(monkeypatch):
         session['preview_id'] = 'prev_rpc_check'
         session['schedule_preview'] = [
             {
-                'prof_course_id': 101,
+                'professor_load_id': 101,
                 'course_id': 1,
                 'course_name': 'IT101',
                 'section': '1A',
@@ -1066,12 +1066,12 @@ def test_confirm_preview_passes_prof_course_id_to_rpc(monkeypatch):
     assert captured_rpc.get('func') == 'confirm_schedule_transaction'
     rows = captured_rpc.get('params', {}).get('p_rows', [])
     assert len(rows) == 1
-    assert rows[0].get('prof_course_id') == 101
+    assert rows[0].get('professor_load_id') == 101
     assert 'course_id' not in rows[0]
     assert 'prof_id' not in rows[0]
 
 
-def test_edit_schedule_entry_with_prof_course_id(monkeypatch):
+def test_edit_schedule_entry_with_professor_load_id(monkeypatch):
     client = app_module.app.test_client()
 
     with client.session_transaction() as session:
@@ -1092,7 +1092,7 @@ def test_edit_schedule_entry_with_prof_course_id(monkeypatch):
                     if self.table_name == 'schedule':
                         return FakeResponse([{
                             'schedule_id': 10,
-                            'prof_course_id': 101,
+                            'professor_load_id': 101,
                             'room_id': 1,
                             'day': 'Monday',
                             'class_start': '08:00:00',
@@ -1102,8 +1102,8 @@ def test_edit_schedule_entry_with_prof_course_id(monkeypatch):
                             'semester': '1st Semester',
                             'major': None,
                             'program': 'BSIT',
-                            'prof_course': {
-                                'prof_course_id': 101,
+                            'professor_load': {
+                                'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
                                 'course': {'course_name': 'IT101 - Intro to Computing'},
@@ -1121,7 +1121,7 @@ def test_edit_schedule_entry_with_prof_course_id(monkeypatch):
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
     resp = client.post('/edit_schedule_entry/10', json={
-        'prof_course_id': 102,
+        'professor_load_id': 102,
         'room_id': 2,
         'timeslot': 'Tuesday | 09:00 AM - 12:00 PM',
         'session_type': 'Laboratory'
@@ -1130,7 +1130,7 @@ def test_edit_schedule_entry_with_prof_course_id(monkeypatch):
     assert resp.status_code == 200
     res_json = resp.get_json()
     assert res_json.get('success') is True
-    assert updated_data.get('prof_course_id') == 102
+    assert updated_data.get('professor_load_id') == 102
     assert updated_data.get('room_id') == 2
     assert updated_data.get('day') == 'Tuesday'
     assert updated_data.get('session_type') == 'Laboratory'
@@ -1155,7 +1155,7 @@ def test_view_schedule_renders_without_foreign_key_errors(monkeypatch):
                     if self.table_name == 'schedule':
                         return FakeResponse([{
                             'schedule_id': 10,
-                            'prof_course_id': 101,
+                            'professor_load_id': 101,
                             'room_id': 1,
                             'day': 'Monday',
                             'class_start': '08:00:00',
@@ -1165,8 +1165,8 @@ def test_view_schedule_renders_without_foreign_key_errors(monkeypatch):
                             'semester': '1st Semester',
                             'major': None,
                             'program': 'BSIT',
-                            'prof_course': {
-                                'prof_course_id': 101,
+                            'professor_load': {
+                                'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
                                 'course': {'course_id': 1, 'course_name': 'IT101 - Intro to Computing'},
@@ -1300,11 +1300,11 @@ def test_view_professor_schedule_calculates_workload(monkeypatch):
                     def execute(self):
                         return FakeResponse([
                             {
-                                'schedule_id': 1, 'prof_course_id': 101, 'room_id': 1,
+                                'schedule_id': 1, 'professor_load_id': 101, 'room_id': 1,
                                 'day': 'Monday', 'class_start': '08:00:00', 'class_end': '11:00:00',
                                 'section': '1A', 'semester': '1st Semester', 'major': 'General',
                                 'session_type': 'Lecture', 'program': 'BSIT',
-                                'prof_course': {'prof_course_id': 101, 'prof_id': 1, 'course_id': 1, 'course': {'course_id': 1, 'course_name': 'IT101'}},
+                                'professor_load': {'professor_load_id': 101, 'prof_id': 1, 'course_id': 1, 'course': {'course_id': 1, 'course_name': 'IT101'}},
                                 'room': {'room_name': 'Room 101'}
                             }
                         ])
@@ -1335,7 +1335,7 @@ def test_view_professor_schedule_preview_mode(monkeypatch):
     preview_data = [
         {
             'id': 1,
-            'prof_course_id': 101,
+            'professor_load_id': 101,
             'prof_id': 1,
             'professor_name': 'Alan Turing',
             'course_id': 1,
@@ -1354,7 +1354,7 @@ def test_view_professor_schedule_preview_mode(monkeypatch):
         },
         {
             'id': 2,
-            'prof_course_id': 101,
+            'professor_load_id': 101,
             'prof_id': 1,
             'professor_name': 'Alan Turing',
             'course_id': 1,
@@ -1396,7 +1396,7 @@ def test_api_professor_workload_endpoint(monkeypatch):
     preview_data = [
         {
             'id': 1,
-            'prof_course_id': 101,
+            'professor_load_id': 101,
             'prof_id': 1,
             'day': 'Monday',
             'start': '08:00 AM',
@@ -1431,11 +1431,11 @@ def test_professor_schedule_list_displays_hours(monkeypatch):
                     def execute(self):
                         return FakeResponse([
                             {
-                                'schedule_id': 1, 'prof_course_id': 101, 'room_id': 1,
+                                'schedule_id': 1, 'professor_load_id': 101, 'room_id': 1,
                                 'day': 'Monday', 'class_start': '08:00:00', 'class_end': '12:00:00',
                                 'section': '1A', 'semester': '1st Semester', 'major': 'General',
                                 'session_type': 'Lecture', 'program': 'BSIT',
-                                'prof_course': {'prof_id': 1}
+                                'professor_load': {'prof_id': 1}
                             }
                         ])
                 return SchedQuery(table_name)
@@ -1464,10 +1464,10 @@ def test_generate_schedule_workload_balanced_across_faculty(monkeypatch):
                 return FakeResponse([
                     {'course_id': 10, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
-                    {'prof_course_id': 201, 'course_id': 10, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
-                    {'prof_course_id': 202, 'course_id': 10, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                    {'professor_load_id': 201, 'course_id': 10, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'professor_load_id': 202, 'course_id': 10, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
                 ])
             elif self.table_name == 'professor':
                 return FakeResponse([
@@ -1529,10 +1529,10 @@ def test_generate_schedule_rotates_course_sections(monkeypatch):
                 return FakeResponse([
                     {'course_id': 20, 'course_name': 'IT102 - Computer Programming', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
-                    {'prof_course_id': 211, 'course_id': 20, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
-                    {'prof_course_id': 212, 'course_id': 20, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                    {'professor_load_id': 211, 'course_id': 20, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'professor_load_id': 212, 'course_id': 20, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
                 ])
             elif self.table_name == 'professor':
                 return FakeResponse([
@@ -1584,17 +1584,17 @@ def test_generate_schedule_respects_max_hours_cap(monkeypatch):
                 return FakeResponse([
                     {'course_id': 30, 'course_name': 'IT103 - Discrete Structures', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
                     # Prof 1 has max_hours = 3 (can only take 1 section)
-                    {'prof_course_id': 221, 'course_id': 30, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 3}},
+                    {'professor_load_id': 221, 'course_id': 30, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'academic_ranking_id': 1, 'academic_ranking': {'max_hours': 3}}},
                     # Prof 2 has max_hours = 40 (can take more)
-                    {'prof_course_id': 222, 'course_id': 30, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}},
+                    {'professor_load_id': 222, 'course_id': 30, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'academic_ranking_id': 2, 'academic_ranking': {'max_hours': 40}}},
                 ])
             elif self.table_name == 'professor':
                 return FakeResponse([
-                    {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 3, 'department': 'CICT'},
-                    {'prof_id': 2, 'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40, 'department': 'CICT'},
+                        {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'academic_ranking_id': 1, 'academic_ranking': {'max_hours': 3}, 'department': 'CICT'},
+                        {'prof_id': 2, 'first_name': 'Grace', 'last_name': 'Hopper', 'academic_ranking_id': 2, 'academic_ranking': {'max_hours': 40}, 'department': 'CICT'},
                 ])
             elif self.table_name == 'room':
                 return FakeResponse([
@@ -1647,9 +1647,9 @@ def test_generate_schedule_spreads_faculty_days(monkeypatch):
                 return FakeResponse([
                     {'course_id': 40, 'course_name': 'IT104 - Web Development', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
-                    {'prof_course_id': 231, 'course_id': 40, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
+                    {'professor_load_id': 231, 'course_id': 40, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}},
                 ])
             elif self.table_name == 'professor':
                 return FakeResponse([
@@ -1700,11 +1700,11 @@ def test_generate_schedule_fallback_when_all_faculty_reach_cap(monkeypatch):
                 return FakeResponse([
                     {'course_id': 50, 'course_name': 'IT105 - Systems Analysis', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
-            elif self.table_name == 'prof_course':
+            elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
                     # Both professors only have max_hours = 3 (1 section capacity each)
-                    {'prof_course_id': 241, 'course_id': 50, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 3}},
-                    {'prof_course_id': 242, 'course_id': 50, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 3}},
+                    {'professor_load_id': 241, 'course_id': 50, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 3}},
+                    {'professor_load_id': 242, 'course_id': 50, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 3}},
                 ])
             elif self.table_name == 'professor':
                 return FakeResponse([
@@ -1869,7 +1869,7 @@ def test_view_room_schedule_preview_mode(monkeypatch):
             'course_name': 'IT101 - Intro to Computing',
             'course_code': 'IT101',
             'professor_name': 'Alan Turing',
-            'prof_course_id': 101,
+            'professor_load_id': 101,
             'section': '1A',
             'semester': '1st Semester',
             'session_type': 'Lecture',
@@ -1959,7 +1959,7 @@ def test_edit_preview_entry_blocks_lunch_time_overlap(monkeypatch):
     preview_entries = [
         {
             'id': 1,
-            'prof_course_id': 101,
+            'professor_load_id': 101,
             'course_id': 1,
             'course_name': 'IT101 - Intro to Computing',
             'prof_id': 1,
@@ -1991,7 +1991,7 @@ def test_edit_preview_entry_blocks_lunch_time_overlap(monkeypatch):
     # Attempt to move class into 12:00 PM - 01:00 PM (lunch break)
     resp = client.post('/edit_preview_entry', json={
         'id': 1,
-        'prof_course_id': 101,
+        'professor_load_id': 101,
         'room_id': 2,
         'day': 'Monday',
         'timeslot': 'Monday | 12:00 PM - 01:00 PM',
@@ -2020,7 +2020,7 @@ def test_edit_schedule_entry_blocks_lunch_time_overlap(monkeypatch):
                     if self.table_name == 'schedule':
                         return FakeResponse([{
                             'schedule_id': 10,
-                            'prof_course_id': 101,
+                            'professor_load_id': 101,
                             'room_id': 1,
                             'day': 'Monday',
                             'class_start': '08:00:00',
@@ -2030,8 +2030,8 @@ def test_edit_schedule_entry_blocks_lunch_time_overlap(monkeypatch):
                             'semester': '1st Semester',
                             'major': None,
                             'program': 'BSIT',
-                            'prof_course': {
-                                'prof_course_id': 101,
+                            'professor_load': {
+                                'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
                                 'course': {'course_name': 'IT101 - Intro to Computing'},
@@ -2054,7 +2054,7 @@ def test_edit_schedule_entry_blocks_lunch_time_overlap(monkeypatch):
 
     # Attempt to edit entry into 12:00 PM - 01:00 PM
     resp = client.post('/edit_schedule_entry/10', json={
-        'prof_course_id': 101,
+        'professor_load_id': 101,
         'room_id': 1,
         'timeslot': 'Monday | 12:00 PM - 01:00 PM',
         'session_type': 'Lecture'
@@ -2064,6 +2064,35 @@ def test_edit_schedule_entry_blocks_lunch_time_overlap(monkeypatch):
     res_json = resp.get_json()
     assert res_json.get('success') is False
     assert 'Lunch break conflict' in res_json.get('message', '')
+
+
+def test_room_schedule_conflict_detects_partial_overlap_and_excludes_self(monkeypatch):
+    rows = [
+        {'schedule_id': 10, 'room_id': 1, 'day': 'Monday', 'class_start': '09:00:00', 'class_end': '10:00:00', 'section': '1A'},
+        {'schedule_id': 11, 'room_id': 1, 'day': 'Monday', 'class_start': '09:30:00', 'class_end': '10:30:00', 'section': '1B'},
+    ]
+
+    class RoomConflictQuery:
+        def select(self, *args, **kwargs):
+            return self
+
+        def eq(self, *args, **kwargs):
+            return self
+
+        def execute(self):
+            return FakeResponse(rows)
+
+    class RoomConflictSupabase:
+        def table(self, table_name):
+            return RoomConflictQuery()
+
+    monkeypatch.setattr(app_module, 'supabase', RoomConflictSupabase())
+
+    conflict = app_module._find_room_schedule_conflict(1, 'Monday', '09:45:00', '10:15:00', exclude_schedule_id=10)
+    assert conflict['schedule_id'] == 11
+
+    rows.pop()
+    assert app_module._find_room_schedule_conflict(1, 'Monday', '09:00:00', '10:00:00', exclude_schedule_id=10) is None
 
 
 def test_calculate_room_availability_calendar_blocks_single_render():
@@ -2160,7 +2189,7 @@ def test_view_room_schedule_renders_true_calendar_view(monkeypatch):
                     elif self.table_name == 'schedule':
                         return FakeResponse([{
                             'schedule_id': 10,
-                            'prof_course_id': 101,
+                            'professor_load_id': 101,
                             'room_id': 1,
                             'day': 'Monday',
                             'class_start': '13:00:00',
@@ -2170,8 +2199,8 @@ def test_view_room_schedule_renders_true_calendar_view(monkeypatch):
                             'semester': '1st Semester',
                             'major': None,
                             'program': 'BSIT',
-                            'prof_course': {
-                                'prof_course_id': 101,
+                            'professor_load': {
+                                'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
                                 'course': {'course_name': 'IT101 - Intro to Computing'},

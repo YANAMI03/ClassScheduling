@@ -810,597 +810,597 @@
   ],
   "assignments": [
     {
-      "prof_course_id": 297,
+      "professor_load_id": 297,
       "prof_id": 19,
       "course_id": 46
     },
     {
-      "prof_course_id": 298,
+      "professor_load_id": 298,
       "prof_id": 20,
       "course_id": 45
     },
     {
-      "prof_course_id": 299,
+      "professor_load_id": 299,
       "prof_id": 25,
       "course_id": 61
     },
     {
-      "prof_course_id": 300,
+      "professor_load_id": 300,
       "prof_id": 34,
       "course_id": 61
     },
     {
-      "prof_course_id": 301,
+      "professor_load_id": 301,
       "prof_id": 21,
       "course_id": 44
     },
     {
-      "prof_course_id": 302,
+      "professor_load_id": 302,
       "prof_id": 29,
       "course_id": 68
     },
     {
-      "prof_course_id": 303,
+      "professor_load_id": 303,
       "prof_id": 38,
       "course_id": 68
     },
     {
-      "prof_course_id": 304,
+      "professor_load_id": 304,
       "prof_id": 1,
       "course_id": 46
     },
     {
-      "prof_course_id": 305,
+      "professor_load_id": 305,
       "prof_id": 1,
       "course_id": 50
     },
     {
-      "prof_course_id": 306,
+      "professor_load_id": 306,
       "prof_id": 5,
       "course_id": 50
     },
     {
-      "prof_course_id": 308,
+      "professor_load_id": 308,
       "prof_id": 2,
       "course_id": 46
     },
     {
-      "prof_course_id": 309,
+      "professor_load_id": 309,
       "prof_id": 5,
       "course_id": 64
     },
     {
-      "prof_course_id": 311,
+      "professor_load_id": 311,
       "prof_id": 54,
       "course_id": 64
     },
     {
-      "prof_course_id": 312,
+      "professor_load_id": 312,
       "prof_id": 29,
       "course_id": 64
     },
     {
-      "prof_course_id": 166,
+      "professor_load_id": 166,
       "prof_id": 49,
       "course_id": 1
     },
     {
-      "prof_course_id": 167,
+      "professor_load_id": 167,
       "prof_id": 49,
       "course_id": 2
     },
     {
-      "prof_course_id": 168,
+      "professor_load_id": 168,
       "prof_id": 49,
       "course_id": 10
     },
     {
-      "prof_course_id": 169,
+      "professor_load_id": 169,
       "prof_id": 32,
       "course_id": 2
     },
     {
-      "prof_course_id": 170,
+      "professor_load_id": 170,
       "prof_id": 32,
       "course_id": 10
     },
     {
-      "prof_course_id": 171,
+      "professor_load_id": 171,
       "prof_id": 32,
       "course_id": 18
     },
     {
-      "prof_course_id": 172,
+      "professor_load_id": 172,
       "prof_id": 37,
       "course_id": 10
     },
     {
-      "prof_course_id": 173,
+      "professor_load_id": 173,
       "prof_id": 37,
       "course_id": 18
     },
     {
-      "prof_course_id": 174,
+      "professor_load_id": 174,
       "prof_id": 37,
       "course_id": 26
     },
     {
-      "prof_course_id": 175,
+      "professor_load_id": 175,
       "prof_id": 35,
       "course_id": 18
     },
     {
-      "prof_course_id": 176,
+      "professor_load_id": 176,
       "prof_id": 35,
       "course_id": 26
     },
     {
-      "prof_course_id": 177,
+      "professor_load_id": 177,
       "prof_id": 35,
       "course_id": 27
     },
     {
-      "prof_course_id": 178,
+      "professor_load_id": 178,
       "prof_id": 24,
       "course_id": 26
     },
     {
-      "prof_course_id": 179,
+      "professor_load_id": 179,
       "prof_id": 24,
       "course_id": 27
     },
     {
-      "prof_course_id": 180,
+      "professor_load_id": 180,
       "prof_id": 24,
       "course_id": 19
     },
     {
-      "prof_course_id": 181,
+      "professor_load_id": 181,
       "prof_id": 18,
       "course_id": 27
     },
     {
-      "prof_course_id": 182,
+      "professor_load_id": 182,
       "prof_id": 18,
       "course_id": 19
     },
     {
-      "prof_course_id": 183,
+      "professor_load_id": 183,
       "prof_id": 18,
       "course_id": 28
     },
     {
-      "prof_course_id": 184,
+      "professor_load_id": 184,
       "prof_id": 51,
       "course_id": 19
     },
     {
-      "prof_course_id": 185,
+      "professor_load_id": 185,
       "prof_id": 51,
       "course_id": 28
     },
     {
-      "prof_course_id": 186,
+      "professor_load_id": 186,
       "prof_id": 51,
       "course_id": 1
     },
     {
-      "prof_course_id": 187,
+      "professor_load_id": 187,
       "prof_id": 44,
       "course_id": 28
     },
     {
-      "prof_course_id": 188,
+      "professor_load_id": 188,
       "prof_id": 44,
       "course_id": 1
     },
     {
-      "prof_course_id": 189,
+      "professor_load_id": 189,
       "prof_id": 44,
       "course_id": 2
     },
     {
-      "prof_course_id": 190,
+      "professor_load_id": 190,
       "prof_id": 47,
       "course_id": 3
     },
     {
-      "prof_course_id": 191,
+      "professor_load_id": 191,
       "prof_id": 47,
       "course_id": 11
     },
     {
-      "prof_course_id": 192,
+      "professor_load_id": 192,
       "prof_id": 47,
       "course_id": 58
     },
     {
-      "prof_course_id": 196,
+      "professor_load_id": 196,
       "prof_id": 25,
       "course_id": 58
     },
     {
-      "prof_course_id": 197,
+      "professor_load_id": 197,
       "prof_id": 25,
       "course_id": 59
     },
     {
-      "prof_course_id": 198,
+      "professor_load_id": 198,
       "prof_id": 25,
       "course_id": 60
     },
     {
-      "prof_course_id": 199,
+      "professor_load_id": 199,
       "prof_id": 19,
       "course_id": 59
     },
     {
-      "prof_course_id": 200,
+      "professor_load_id": 200,
       "prof_id": 19,
       "course_id": 60
     },
     {
-      "prof_course_id": 201,
+      "professor_load_id": 201,
       "prof_id": 19,
       "course_id": 69
     },
     {
-      "prof_course_id": 205,
+      "professor_load_id": 205,
       "prof_id": 48,
       "course_id": 69
     },
     {
-      "prof_course_id": 206,
+      "professor_load_id": 206,
       "prof_id": 48,
       "course_id": 70
     },
     {
-      "prof_course_id": 207,
+      "professor_load_id": 207,
       "prof_id": 48,
       "course_id": 3
     },
     {
-      "prof_course_id": 208,
+      "professor_load_id": 208,
       "prof_id": 30,
       "course_id": 70
     },
     {
-      "prof_course_id": 209,
+      "professor_load_id": 209,
       "prof_id": 30,
       "course_id": 3
     },
     {
-      "prof_course_id": 210,
+      "professor_load_id": 210,
       "prof_id": 30,
       "course_id": 11
     },
     {
-      "prof_course_id": 211,
+      "professor_load_id": 211,
       "prof_id": 52,
       "course_id": 12
     },
     {
-      "prof_course_id": 212,
+      "professor_load_id": 212,
       "prof_id": 52,
       "course_id": 20
     },
     {
-      "prof_course_id": 213,
+      "professor_load_id": 213,
       "prof_id": 52,
       "course_id": 48
     },
     {
-      "prof_course_id": 214,
+      "professor_load_id": 214,
       "prof_id": 40,
       "course_id": 20
     },
     {
-      "prof_course_id": 215,
+      "professor_load_id": 215,
       "prof_id": 40,
       "course_id": 48
     },
     {
-      "prof_course_id": 216,
+      "professor_load_id": 216,
       "prof_id": 40,
       "course_id": 52
     },
     {
-      "prof_course_id": 217,
+      "professor_load_id": 217,
       "prof_id": 20,
       "course_id": 48
     },
     {
-      "prof_course_id": 218,
+      "professor_load_id": 218,
       "prof_id": 20,
       "course_id": 52
     },
     {
-      "prof_course_id": 219,
+      "professor_load_id": 219,
       "prof_id": 20,
       "course_id": 53
     },
     {
-      "prof_course_id": 220,
+      "professor_load_id": 220,
       "prof_id": 38,
       "course_id": 52
     },
     {
-      "prof_course_id": 221,
+      "professor_load_id": 221,
       "prof_id": 38,
       "course_id": 53
     },
     {
-      "prof_course_id": 222,
+      "professor_load_id": 222,
       "prof_id": 38,
       "course_id": 54
     },
     {
-      "prof_course_id": 223,
+      "professor_load_id": 223,
       "prof_id": 54,
       "course_id": 53
     },
     {
-      "prof_course_id": 224,
+      "professor_load_id": 224,
       "prof_id": 54,
       "course_id": 54
     },
     {
-      "prof_course_id": 225,
+      "professor_load_id": 225,
       "prof_id": 54,
       "course_id": 65
     },
     {
-      "prof_course_id": 226,
+      "professor_load_id": 226,
       "prof_id": 34,
       "course_id": 54
     },
     {
-      "prof_course_id": 227,
+      "professor_load_id": 227,
       "prof_id": 34,
       "course_id": 65
     },
     {
-      "prof_course_id": 228,
+      "professor_load_id": 228,
       "prof_id": 34,
       "course_id": 66
     },
     {
-      "prof_course_id": 229,
+      "professor_load_id": 229,
       "prof_id": 53,
       "course_id": 65
     },
     {
-      "prof_course_id": 230,
+      "professor_load_id": 230,
       "prof_id": 53,
       "course_id": 66
     },
     {
-      "prof_course_id": 231,
+      "professor_load_id": 231,
       "prof_id": 53,
       "course_id": 12
     },
     {
-      "prof_course_id": 232,
+      "professor_load_id": 232,
       "prof_id": 39,
       "course_id": 66
     },
     {
-      "prof_course_id": 233,
+      "professor_load_id": 233,
       "prof_id": 39,
       "course_id": 12
     },
     {
-      "prof_course_id": 234,
+      "professor_load_id": 234,
       "prof_id": 39,
       "course_id": 20
     },
     {
-      "prof_course_id": 235,
+      "professor_load_id": 235,
       "prof_id": 45,
       "course_id": 21
     },
     {
-      "prof_course_id": 236,
+      "professor_load_id": 236,
       "prof_id": 45,
       "course_id": 30
     },
     {
-      "prof_course_id": 237,
+      "professor_load_id": 237,
       "prof_id": 45,
       "course_id": 47
     },
     {
-      "prof_course_id": 241,
+      "professor_load_id": 241,
       "prof_id": 26,
       "course_id": 47
     },
     {
-      "prof_course_id": 242,
+      "professor_load_id": 242,
       "prof_id": 26,
       "course_id": 50
     },
     {
-      "prof_course_id": 243,
+      "professor_load_id": 243,
       "prof_id": 26,
       "course_id": 45
     },
     {
-      "prof_course_id": 244,
+      "professor_load_id": 244,
       "prof_id": 23,
       "course_id": 50
     },
     {
-      "prof_course_id": 245,
+      "professor_load_id": 245,
       "prof_id": 23,
       "course_id": 45
     },
     {
-      "prof_course_id": 246,
+      "professor_load_id": 246,
       "prof_id": 23,
       "course_id": 72
     },
     {
-      "prof_course_id": 247,
+      "professor_load_id": 247,
       "prof_id": 17,
       "course_id": 45
     },
     {
-      "prof_course_id": 248,
+      "professor_load_id": 248,
       "prof_id": 17,
       "course_id": 72
     },
     {
-      "prof_course_id": 249,
+      "professor_load_id": 249,
       "prof_id": 17,
       "course_id": 46
     },
     {
-      "prof_course_id": 253,
+      "professor_load_id": 253,
       "prof_id": 41,
       "course_id": 46
     },
     {
-      "prof_course_id": 254,
+      "professor_load_id": 254,
       "prof_id": 41,
       "course_id": 21
     },
     {
-      "prof_course_id": 255,
+      "professor_load_id": 255,
       "prof_id": 41,
       "course_id": 30
     },
     {
-      "prof_course_id": 256,
+      "professor_load_id": 256,
       "prof_id": 50,
       "course_id": 29
     },
     {
-      "prof_course_id": 257,
+      "professor_load_id": 257,
       "prof_id": 50,
       "course_id": 51
     },
     {
-      "prof_course_id": 258,
+      "professor_load_id": 258,
       "prof_id": 50,
       "course_id": 63
     },
     {
-      "prof_course_id": 259,
+      "professor_load_id": 259,
       "prof_id": 46,
       "course_id": 51
     },
     {
-      "prof_course_id": 260,
+      "professor_load_id": 260,
       "prof_id": 46,
       "course_id": 63
     },
     {
-      "prof_course_id": 261,
+      "professor_load_id": 261,
       "prof_id": 46,
       "course_id": 61
     },
     {
-      "prof_course_id": 265,
+      "professor_load_id": 265,
       "prof_id": 36,
       "course_id": 61
     },
     {
-      "prof_course_id": 266,
+      "professor_load_id": 266,
       "prof_id": 36,
       "course_id": 62
     },
     {
-      "prof_course_id": 267,
+      "professor_load_id": 267,
       "prof_id": 36,
       "course_id": 64
     },
     {
-      "prof_course_id": 268,
+      "professor_load_id": 268,
       "prof_id": 31,
       "course_id": 62
     },
     {
-      "prof_course_id": 269,
+      "professor_load_id": 269,
       "prof_id": 31,
       "course_id": 64
     },
     {
-      "prof_course_id": 270,
+      "professor_load_id": 270,
       "prof_id": 31,
       "course_id": 29
     },
     {
-      "prof_course_id": 271,
+      "professor_load_id": 271,
       "prof_id": 21,
       "course_id": 64
     },
     {
-      "prof_course_id": 272,
+      "professor_load_id": 272,
       "prof_id": 21,
       "course_id": 29
     },
     {
-      "prof_course_id": 273,
+      "professor_load_id": 273,
       "prof_id": 21,
       "course_id": 51
     },
     {
-      "prof_course_id": 274,
+      "professor_load_id": 274,
       "prof_id": 42,
       "course_id": 44
     },
     {
-      "prof_course_id": 275,
+      "professor_load_id": 275,
       "prof_id": 42,
       "course_id": 55
     },
     {
-      "prof_course_id": 276,
+      "professor_load_id": 276,
       "prof_id": 42,
       "course_id": 56
     },
     {
-      "prof_course_id": 280,
+      "professor_load_id": 280,
       "prof_id": 43,
       "course_id": 56
     },
     {
-      "prof_course_id": 281,
+      "professor_load_id": 281,
       "prof_id": 43,
       "course_id": 57
     },
     {
-      "prof_course_id": 282,
+      "professor_load_id": 282,
       "prof_id": 43,
       "course_id": 67
     },
     {
-      "prof_course_id": 283,
+      "professor_load_id": 283,
       "prof_id": 22,
       "course_id": 57
     },
     {
-      "prof_course_id": 284,
+      "professor_load_id": 284,
       "prof_id": 22,
       "course_id": 67
     },
     {
-      "prof_course_id": 285,
+      "professor_load_id": 285,
       "prof_id": 22,
       "course_id": 68
     },
     {
-      "prof_course_id": 286,
+      "professor_load_id": 286,
       "prof_id": 33,
       "course_id": 67
     },
     {
-      "prof_course_id": 287,
+      "professor_load_id": 287,
       "prof_id": 33,
       "course_id": 68
     },
     {
-      "prof_course_id": 288,
+      "professor_load_id": 288,
       "prof_id": 33,
       "course_id": 44
     }

@@ -193,7 +193,7 @@
                                 data-professor="{{ block.professor }}"
                                 data-section="{{ block.section or section.section_name or section.section }}"
                                 data-room="{{ block.room_name or 'TBA' }}" data-room-id="{{ block.room_id or '' }}"
-                                data-prof-course-id="{{ block.prof_course_id or '' }}"
+                                data-professor-load-id="{{ block.professor_load_id or '' }}"
                                 data-timeslot="{{ day ~ ' | ' ~ block.time_range }}" data-day="{{ day }}"
                                 data-time="{{ block.time_range }}" data-session="{{ block.session_type }}"
                                 data-semester="{{ block.semester or section.semester or '' }}"
@@ -364,11 +364,11 @@
                 <form id="edit-entry-form">
                     <input type="hidden" id="edit-entry-id">
                     <div class="mb-3">
-                        <label class="form-label" for="edit-entry-prof-course">Professor & Course</label>
-                        <select class="form-select" id="edit-entry-prof-course">
+                        <label class="form-label" for="edit-entry-professor-load">Professor & Course</label>
+                        <select class="form-select" id="edit-entry-professor-load">
                             <option value="">Select Professor - Course</option>
-                            {% for pc in all_prof_courses %}
-                            <option value="{{ pc.prof_course_id }}" data-prof-id="{{ pc.prof_id }}"
+                            {% for pc in all_professor_loads %}
+                            <option value="{{ pc.professor_load_id }}" data-prof-id="{{ pc.prof_id }}"
                                 data-course-id="{{ pc.course_id }}">{{ pc.label }}</option>
                             {% endfor %}
                         </select>
@@ -414,7 +414,7 @@
         var scheduleDetailModal = new bootstrap.Modal(document.getElementById('scheduleDetailModal'));
         var editEntryModal = new bootstrap.Modal(document.getElementById('editEntryModal'));
         var editEntryId = document.getElementById('edit-entry-id');
-        var editEntryProfCourse = document.getElementById('edit-entry-prof-course');
+        var editEntryProfessorLoad = document.getElementById('edit-entry-professor-load');
         var editEntryRoomSelect = document.getElementById('edit-entry-room-select');
         var editEntryTimeslot = document.getElementById('edit-entry-timeslot');
         var editEntrySession = document.getElementById('edit-entry-session');
@@ -427,6 +427,44 @@
             }
         }
 
+        function parseClientTime(value) {
+            var match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+            if (!match) return null;
+            var hour = parseInt(match[1], 10);
+            var minute = parseInt(match[2], 10);
+            var meridiem = match[3].toUpperCase();
+            if (hour < 1 || hour > 12 || minute > 59) return null;
+            if (meridiem === 'AM' && hour === 12) hour = 0;
+            if (meridiem === 'PM' && hour !== 12) hour += 12;
+            return hour * 60 + minute;
+        }
+
+        function findClientRoomConflict(entryId, roomId, timeslot) {
+            if (!roomId || !timeslot || timeslot.indexOf('|') === -1) return null;
+            var parts = timeslot.split('|', 2);
+            var day = parts[0].trim();
+            var timeParts = parts[1].split('-', 2);
+            if (timeParts.length !== 2) return null;
+            var start = parseClientTime(timeParts[0]);
+            var end = parseClientTime(timeParts[1]);
+            if (start === null || end === null || end <= start) return null;
+
+            var conflict = null;
+            $('.schedule-row').each(function () {
+                var $row = $(this);
+                if (String($row.data('entry-id')) === String(entryId) || String($row.data('room-id')) !== String(roomId)) return;
+                if (String($row.data('day')) !== day) return;
+                var existingParts = String($row.data('time') || '').split('-', 2);
+                var existingStart = parseClientTime(existingParts[0]);
+                var existingEnd = parseClientTime(existingParts[1]);
+                if (existingStart !== null && existingEnd !== null && start < existingEnd && existingStart < end) {
+                    conflict = $row;
+                    return false;
+                }
+            });
+            return conflict;
+        }
+
         $('.schedule-row').on('click', function (e) {
             if ($(e.target).closest('.stop-prop, button, a, input').length) {
                 e.stopPropagation();
@@ -435,7 +473,7 @@
             var $t = $(this);
             currentEntryData = {
                 id: $t.data('entry-id') || '',
-                profCourseId: $t.data('prof-course-id') || '',
+                professorLoadId: $t.data('professor-load-id') || '',
                 roomId: $t.data('room-id') || '',
                 timeslot: $t.data('timeslot') || ($t.data('day') + ' | ' + $t.data('time')),
                 session: $t.data('session') || 'Lecture'
@@ -467,7 +505,7 @@
         $('#modalEditBtn').on('click', function () {
             scheduleDetailModal.hide();
             editEntryId.value = currentEntryData.id || '';
-            editEntryProfCourse.value = currentEntryData.profCourseId ? String(currentEntryData.profCourseId) : '';
+            editEntryProfessorLoad.value = currentEntryData.professorLoadId ? String(currentEntryData.professorLoadId) : '';
             editEntryRoomSelect.value = currentEntryData.roomId ? String(currentEntryData.roomId) : '';
             editEntryTimeslot.value = currentEntryData.timeslot || '';
             editEntrySession.value = currentEntryData.session || 'Lecture';
@@ -482,11 +520,23 @@
                 saveEntryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
                 var payload = {
-                    prof_course_id: editEntryProfCourse.value ? parseInt(editEntryProfCourse.value, 10) : null,
+                    professor_load_id: editEntryProfessorLoad.value ? parseInt(editEntryProfessorLoad.value, 10) : null,
                     room_id: editEntryRoomSelect.value ? parseInt(editEntryRoomSelect.value, 10) : null,
                     timeslot: editEntryTimeslot.value,
                     session_type: editEntrySession.value
                 };
+
+                var clientConflict = findClientRoomConflict(editEntryId.value, payload.room_id, payload.timeslot);
+                if (clientConflict) {
+                    saveEntryBtn.disabled = false;
+                    saveEntryBtn.innerHTML = 'Save Changes';
+                    showToast(
+                        'Room conflict: ' + (clientConflict.data('room') || 'The selected room') +
+                        ' is already booked by Section ' + (clientConflict.data('section') || 'another section') + '.',
+                        'error'
+                    );
+                    return;
+                }
 
                 fetch('/edit_schedule_entry/' + encodeURIComponent(editEntryId.value), {
                     method: 'POST',

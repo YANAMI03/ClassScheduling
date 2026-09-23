@@ -1,5 +1,5 @@
 import json
-from scripts.populate_prof_course import distribute_courses_with_multi_prof
+from scripts.populate_professor_load import distribute_courses_with_multi_prof
 
 # 42 professors
 profs = [
@@ -113,7 +113,7 @@ for cid, info in sorted(course_summary.items()):
 
 print("=" * 80)
 sql_values = [f"({a['prof_id']}, {a['course_id']})" for a in assignments]
-sql = f"INSERT INTO prof_course (prof_id, course_id) VALUES\n" + ",\n".join(sql_values) + ";"
+sql = f"INSERT INTO professor_load (prof_id, course_id) VALUES\n" + ",\n".join(sql_values) + ";"
 with open("scripts/populate.sql", "w") as f:
-    f.write("DELETE FROM prof_course;\n\n" + sql + "\n")
+    f.write("DELETE FROM professor_load;\n\n" + sql + "\n")
 print(f"Saved {len(assignments)} assignments to scripts/populate.sql")

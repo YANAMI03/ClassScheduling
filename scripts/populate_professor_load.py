@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-populate_prof_course.py
+populate_professor_load.py
 
-Distributes courses/subjects as evenly as possible among all professors in prof_course.
+Distributes courses/subjects as evenly as possible among all professors in professor_load.
 Constraints:
 - Each subject is taught by at least 3 professors (default: 3 professors per subject).
 - Each professor is assigned no more than 3 subjects (ideally exactly 3).

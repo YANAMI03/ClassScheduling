@@ -129,7 +129,7 @@
                                                 <td class="text-end align-middle">
                                                     <button type="button" class="btn btn-outline-secondary btn-sm edit-preview-entry-btn" 
                                                         data-entry-id="{{ entry.id }}"
-                                                        data-prof-course-id="{{ entry.prof_course_id or '' }}"
+                                                         data-professor-load-id="{{ entry.professor_load_id or '' }}"
                                                         data-section="{{ entry.section or '' }}"
                                                         data-room-id="{{ entry.room_id or '' }}"
                                                         data-day="{{ entry.day or '' }}"
@@ -252,11 +252,11 @@
                 <form id="edit-preview-entry-form">
                     <input type="hidden" id="edit-preview-entry-id" name="id">
                     <div class="mb-3">
-                        <label class="form-label" for="edit-preview-prof-course">Professor & Course</label>
-                        <select class="form-select" id="edit-preview-prof-course" name="prof_course_id">
+                        <label class="form-label" for="edit-preview-professor-load">Professor & Course</label>
+                        <select class="form-select" id="edit-preview-professor-load" name="professor_load_id">
                             <option value="">Select Professor - Course</option>
-                            {% for pc in all_prof_courses %}
-                            <option value="{{ pc.prof_course_id }}" data-prof-id="{{ pc.prof_id }}" data-course-id="{{ pc.course_id }}">{{ pc.label }}</option>
+                            {% for pc in all_professor_loads %}
+                            <option value="{{ pc.professor_load_id }}" data-prof-id="{{ pc.prof_id }}" data-course-id="{{ pc.course_id }}">{{ pc.label }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -347,7 +347,7 @@ $(function(){
 
     var editPreviewEntryModal = new bootstrap.Modal(document.getElementById('editPreviewEntryModal'));
     var editEntryId = document.getElementById('edit-preview-entry-id');
-    var editProfCourse = document.getElementById('edit-preview-prof-course');
+    var editProfessorLoad = document.getElementById('edit-preview-professor-load');
     var editSection = document.getElementById('edit-preview-section');
     var editRoom = document.getElementById('edit-preview-room');
     var editDay = document.getElementById('edit-preview-day');
@@ -356,7 +356,7 @@ $(function(){
     var savePreviewEntryBtn = document.getElementById('save-preview-entry-btn');
 
     function clearEditValidation() {
-        [editProfCourse, editSection, editRoom, editDay, editStart, editEnd].forEach(function(el){
+        [editProfessorLoad, editSection, editRoom, editDay, editStart, editEnd].forEach(function(el){
             if (el) el.classList.remove('is-invalid');
         });
     }
@@ -366,8 +366,8 @@ $(function(){
         e.stopPropagation();
         var $btn = $(this);
         editEntryId.value = $btn.data('entry-id') || $btn.attr('data-entry-id') || '';
-        var pcid = $btn.data('prof-course-id') || $btn.attr('data-prof-course-id') || '';
-        editProfCourse.value = pcid ? String(pcid) : '';
+        var professorLoadId = $btn.data('professor-load-id') || $btn.attr('data-professor-load-id') || '';
+        editProfessorLoad.value = professorLoadId ? String(professorLoadId) : '';
         editSection.value = $btn.data('section') || $btn.attr('data-section') || '';
         editRoom.value = $btn.data('room-id') || $btn.attr('data-room-id') || '';
         editDay.value = $btn.data('day') || $btn.attr('data-day') || 'Monday';
@@ -378,8 +378,8 @@ $(function(){
     });
 
     savePreviewEntryBtn.addEventListener('click', function(){
-        if (!editProfCourse.value) {
-            editProfCourse.classList.add('is-invalid');
+        if (!editProfessorLoad.value) {
+            editProfessorLoad.classList.add('is-invalid');
             showToast('Please select a Professor & Course.', 'warning');
             return;
         }
@@ -389,7 +389,7 @@ $(function(){
 
         var payload = {
             id: editEntryId.value,
-            prof_course_id: parseInt(editProfCourse.value, 10),
+            professor_load_id: parseInt(editProfessorLoad.value, 10),
             section: (editSection.value || '').trim(),
             room_id: editRoom.value ? parseInt(editRoom.value, 10) : null,
             day: editDay.value,
@@ -417,7 +417,7 @@ $(function(){
                 var $row = $btn.closest('tr.schedule-row');
 
                 // Update button data attributes for future modal edits
-                $btn.attr('data-prof-course-id', entry.prof_course_id || '').data('prof-course-id', entry.prof_course_id || '');
+                $btn.attr('data-professor-load-id', entry.professor_load_id || '').data('professor-load-id', entry.professor_load_id || '');
                 $btn.attr('data-section', entry.section || '').data('section', entry.section || '');
                 $btn.attr('data-room-id', entry.room_id || '').data('room-id', entry.room_id || '');
                 $btn.attr('data-day', entry.day || '').data('day', entry.day || '');

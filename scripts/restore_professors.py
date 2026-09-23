@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 restore_professors.py
-Restores all professors, courses, and prof_course mappings from scripts/professors_backup.json.
+Restores all professors, courses, and professor_load mappings from scripts/professors_backup.json.
 """
 import os
 import re
@@ -104,7 +104,7 @@ try:
     for fp in fallback_profs:
         f_pid = fp["prof_id"]
         try:
-            sb.table("prof_course").delete().eq("prof_id", f_pid).execute()
+            sb.table("professor_load").delete().eq("prof_id", f_pid).execute()
         except Exception:
             pass
         try:
@@ -134,12 +134,12 @@ for p in profs:
     sb.table("professor").upsert(p_payload, on_conflict="prof_id").execute()
     print(f"  Restored: {p['first_name']} {p['last_name']} (ID: {p['prof_id']})")
 
-print(f"Restoring {len(assignments)} prof_course assignments...")
-# Clear existing prof_course before re-inserting to avoid duplicate constraints
+print(f"Restoring {len(assignments)} professor_load assignments...")
+# Clear existing professor_load before re-inserting to avoid duplicate constraints
 try:
-    sb.table("prof_course").delete().neq("prof_course_id", -999999).execute()
+    sb.table("professor_load").delete().neq("professor_load_id", -999999).execute()
 except Exception as e:
-    print(f"Error clearing prof_course: {e}")
+    print(f"Error clearing professor_load: {e}")
 
 chunk_size = 50
 for i in range(0, len(assignments), chunk_size):
@@ -150,10 +150,10 @@ for i in range(0, len(assignments), chunk_size):
             "prof_id": a["prof_id"],
             "course_id": a["course_id"]
         }
-        if "prof_course_id" in a:
-            item["prof_course_id"] = a["prof_course_id"]
+        if "professor_load_id" in a:
+            item["professor_load_id"] = a["professor_load_id"]
         cleaned_chunk.append(item)
-    sb.table("prof_course").upsert(cleaned_chunk, on_conflict="prof_course_id").execute()
+    sb.table("professor_load").upsert(cleaned_chunk, on_conflict="professor_load_id").execute()
 
 print("=" * 60)
 print(f"SUCCESS: Restored {len(profs)} authentic professors and {len(assignments)} assignments.")

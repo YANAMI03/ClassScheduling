@@ -255,7 +255,7 @@ def test_6_multiple_sections_global_distribution(monkeypatch):
         {'prof_id': 4, 'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40, 'department': 'CICT'},
     ]
 
-    prof_course = [
+    professor_load = [
         {'course_id': 1, 'prof_id': 1, 'professor': profs[0]},
         {'course_id': 2, 'prof_id': 2, 'professor': profs[1]},
         {'course_id': 3, 'prof_id': 3, 'professor': profs[2]},
@@ -270,7 +270,7 @@ def test_6_multiple_sections_global_distribution(monkeypatch):
         'course': courses,
         'room': rooms,
         'professor': profs,
-        'prof_course': prof_course,
+        'professor_load': professor_load,
         'timeslot': timeslots,
         'schedule': [],
     }
@@ -338,7 +338,7 @@ def test_7_existing_schedule_no_conflicts(monkeypatch):
         {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40, 'department': 'CICT'},
     ]
 
-    prof_course = [
+    professor_load = [
         {'course_id': 1, 'prof_id': 1, 'professor': profs[0]},
     ]
 
@@ -365,7 +365,7 @@ def test_7_existing_schedule_no_conflicts(monkeypatch):
         'course': courses,
         'room': rooms,
         'professor': profs,
-        'prof_course': prof_course,
+        'professor_load': professor_load,
         'timeslot': timeslots,
         'schedule': existing_schedule,
     }
@@ -414,7 +414,7 @@ def test_preview_context_contains_room_utilization(monkeypatch):
             {'room_id': 102, 'room_name': 'Room 102', 'room_type': 'Lecture'},
             {'room_id': 103, 'room_name': 'Room 103', 'room_type': 'Lecture'},
         ],
-        'prof_course': []
+        'professor_load': []
     }
 
     monkeypatch.setattr(app_module, 'supabase', FakeSupabase(table_data))

@@ -1,6 +1,6 @@
 import math
 import pytest
-from scripts.populate_prof_course import (
+from scripts.populate_professor_load import (
     distribute_courses_with_multi_prof,
     group_courses_by_domain,
     get_course_domain_key,
