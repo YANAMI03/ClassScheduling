@@ -20,6 +20,10 @@
     </li>
 </ul>
 
+{% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set is_scheduler = (user_role_lower == 'scheduler') %}
+
+{% if not is_scheduler %}
 <div class="card-custom mb-4">
     <div class="card-custom__header">
         <h5 class="card-custom__title"><i class="bx bx-user-plus me-2"></i>Add New Professor</h5>
@@ -35,15 +39,12 @@
                 <input type="text" name="last_name" class="form-control" placeholder="Enter last name" required>
             </div>
             <div class="col-md-6">
-                <label class="form-label">Department</label>
-                <select class="form-select" name="department" required>
-                    <option value="" selected disabled>Select Department</option>
-                    <option value="CICT">CICT (College of Information and Communications Technology)</option>
-                    <option value="CBA">CBA (College of Business Administration)</option>
-                    <option value="CEA">CEA (College of Engineering and Architecture)</option>
-                    <option value="CAS">CAS (College of Arts and Sciences)</option>
-                    <option value="CON">CON (College of Nursing)</option>
+                <label class="form-label">Days on Campus (Time Designation)</label>
+                <select class="form-select" name="time_designation" required>
+                    <option value="5" selected>5 Days / Week (Full-time on campus)</option>
+                    <option value="4">4 Days / Week (4-day schedule preference)</option>
                 </select>
+                <small class="text-muted">Scheduler attempts to fit assigned classes within this limit.</small>
             </div>
             <div class="col-md-6">
                 <label class="form-label">Specialization</label>
@@ -66,6 +67,12 @@
         </div>
     </form>
 </div>
+{% else %}
+<div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+    <i class="bx bx-info-circle fs-4 me-2"></i>
+    <div>You are viewing the faculty roster in read-only mode. Faculty roster management is restricted to Dean/Chair.</div>
+</div>
+{% endif %}
 
 <div class="card-custom">
     <div class="card-custom__header">
@@ -77,19 +84,25 @@
             <thead>
                 <tr>
                     <th>Name</th>
-                    <th>Department</th>
+                    <th>Days on Campus</th>
                     <th>Specialization</th>
                     <th>Academic Ranking</th>
                     <th>Total Assigned Units</th>
                     <th>Total Assigned Hours</th>
+                    {% if not is_scheduler %}
                     <th class="text-end">Actions</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for professor in professors %}
                 <tr>
                     <td><strong>{{ professor.first_name }} {{ professor.last_name }}</strong></td>
-                    <td><span class="badge-custom badge-success">{{ professor.department }}</span></td>
+                    <td>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle">
+                            <i class="bx bx-calendar me-1"></i>{{ professor.time_designation or 5 }} Days / Wk
+                        </span>
+                    </td>
                     <td>{{ professor.specialization or '-' }}</td>
                     <td>
                         {% if professor.academic_ranking_name %}
@@ -100,12 +113,13 @@
                     </td>
                     <td>{{ professor.total_assigned_units }}</td>
                     <td>{{ professor.total_assigned_hours }}</td>
+                    {% if not is_scheduler %}
                     <td class="text-end">
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal"
                                 data-id="{{professor.prof_id}}"
                                 data-firstname="{{professor.first_name}}"
                                 data-lastname="{{professor.last_name}}"
-                                data-department="{{professor.department}}"
+                                data-timedesignation="{{professor.time_designation or 5}}"
                                 data-specialization="{{ professor.specialization or '' }}"
                                 data-rankingid="{{ professor.academic_ranking_id or '' }}">
                             <i class="bx bx-edit"></i> Edit
@@ -114,10 +128,11 @@
                             <i class="bx bx-trash"></i> Delete
                         </a>
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8">
+                    <td colspan="{{ 7 if not is_scheduler else 6 }}">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-user"></i></div>
                             <div class="empty-state__text">No professors added yet</div>
@@ -132,6 +147,8 @@
 {% endblock %}
 
 {% block scripts %}
+{% set is_scheduler = ((session.get('role', '') or '') | lower == 'scheduler') %}
+{% if not is_scheduler %}
 <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -150,13 +167,10 @@
                         <input type="text" name="last_name" class="form-control" id="edit_lastname" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Department</label>
-                        <select class="form-select" name="department" id="edit_department" required>
-                            <option value="CICT">CICT (College of Information and Communications Technology)</option>
-                            <option value="CBA">CBA (College of Business Administration)</option>
-                            <option value="CEA">CEA (College of Engineering and Architecture)</option>
-                            <option value="CAS">CAS (College of Arts and Sciences)</option>
-                            <option value="CON">CON (College of Nursing)</option>
+                        <label class="form-label">Days on Campus (Time Designation)</label>
+                        <select class="form-select" name="time_designation" id="edit_timedesignation" required>
+                            <option value="5">5 Days / Week (Full-time on campus)</option>
+                            <option value="4">4 Days / Week (4-day schedule preference)</option>
                         </select>
                     </div>
                     <div class="mb-3">
@@ -181,19 +195,22 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
 $(function(){
+    {% if not is_scheduler %}
     $('#editModal').appendTo("body");
     $(document).on('click', '.edit-btn', function(){
         var $t = $(this);
         $('#edit_firstname').val($t.data('firstname'));
         $('#edit_lastname').val($t.data('lastname'));
-        $('#edit_department').val($t.data('department'));
+        $('#edit_timedesignation').val($t.data('timedesignation') || 5);
         $('#edit_specialization').val($t.data('specialization') || '');
         $('#edit_rankingid').val($t.data('rankingid') || '');
         $('#editForm').attr('action', '/edit_professor/' + $t.data('id'));
     });
+    {% endif %}
 
     function showToast(message, type){
         if (typeof window.showToast === 'function') {
@@ -231,6 +248,7 @@ $(function(){
         });
     }
 
+    {% if not is_scheduler %}
     // AJAX Add Professor: prevent duplicates server-side and show toast notifications
     var addForm = document.getElementById('addProfessorForm');
     if (addForm) {
@@ -289,6 +307,7 @@ $(function(){
                 });
         });
     }
+    {% endif %}
 
 });
 </script>

@@ -20,6 +20,10 @@
     </li>
 </ul>
 
+{% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set is_scheduler = (user_role_lower == 'scheduler') %}
+
+{% if not is_scheduler %}
 <div class="card-custom mb-4">
     <div class="card-custom__header">
         <h5 class="card-custom__title"><i class="bx bx-award me-2"></i>Add Academic Ranking</h5>
@@ -47,6 +51,12 @@
         </div>
     </form>
 </div>
+{% else %}
+<div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+    <i class="bx bx-info-circle fs-4 me-2"></i>
+    <div>You are viewing academic rankings in read-only mode. Ranking management is restricted to Dean/Chair.</div>
+</div>
+{% endif %}
 
 <div class="card-custom">
     <div class="card-custom__header d-flex justify-content-between align-items-center">
@@ -66,7 +76,9 @@
                     <th>Program</th>
                     <th>Units</th>
                     <th>Hours</th>
+                    {% if not is_scheduler %}
                     <th class="text-end">Actions</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -76,6 +88,7 @@
                     <td><span class="badge-custom badge-success">{{ r.program or 'General' }}</span></td>
                     <td>{{ r.min_units }} - {{ r.max_units }}</td>
                     <td>{{ r.min_hours }} - {{ r.max_hours }}</td>
+                    {% if not is_scheduler %}
                     <td class="text-end">
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-ranking-btn"
                                 data-bs-toggle="modal"
@@ -93,10 +106,11 @@
                             <i class="bx bx-trash"></i> Delete
                         </a>
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5">
+                    <td colspan="{{ 5 if not is_scheduler else 4 }}">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-award"></i></div>
                             <div class="empty-state__text">No academic rankings found for this program</div>
@@ -111,7 +125,9 @@
 {% endblock %}
 
 {% block scripts %}
+{% set is_scheduler = ((session.get('role', '') or '') | lower == 'scheduler') %}
 <!-- Edit Academic Ranking Modal -->
+{% if not is_scheduler %}
 <div class="modal fade" id="editRankingModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -144,9 +160,11 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
 $(function(){
+    {% if not is_scheduler %}
     $('#editRankingModal').appendTo("body");
 
     // Populate Edit Modal
@@ -164,6 +182,7 @@ $(function(){
         $('#edit_ranking_program_disp').val(prog);
         $('#editRankingForm').attr('action', '/edit_academic_ranking/' + id);
     });
+    {% endif %}
 
     function showToast(message, type){
         if (typeof window.showToast === 'function') {
@@ -193,6 +212,7 @@ $(function(){
     }
 
     // AJAX Add Ranking Form Submission
+    {% if not is_scheduler %}
     var addForm = document.getElementById('addRankingForm');
     if (addForm) {
         addForm.addEventListener('submit', function(ev){
@@ -247,6 +267,7 @@ $(function(){
             });
         });
     }
+    {% endif %}
 });
 </script>
 {% endblock %}

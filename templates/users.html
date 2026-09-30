@@ -92,18 +92,28 @@
         text-transform: uppercase;
     }
     
+    .badge-super_admin {
+        background: #dc3545;
+        color: white;
+    }
+    
     .badge-admin {
         background: #dc3545;
         color: white;
     }
     
-    .badge-scheduler {
-        background: #0d6efd;
+    .badge-dean {
+        background: #6f42c1;
         color: white;
     }
     
-    .badge-viewer {
-        background: #198754;
+    .badge-chair {
+        background: #6f42c1;
+        color: white;
+    }
+    
+    .badge-scheduler {
+        background: #0d6efd;
         color: white;
     }
     
@@ -229,14 +239,24 @@
                 <td>{{ user.last_name or '—' }}</td>
                 <td>{{ user.email or '—' }}</td>
                 <td>
-                    {% if user.role and user.role.lower() == 'admin' %}
+                    {% if user.role and user.role.lower() in ['admin', 'super_admin'] %}
                     <span class="text-muted fst-italic">Global / All Programs</span>
                     {% else %}
                     {{ user.program or '—' }}
                     {% endif %}
                 </td>
                 <td>
-                    <span class="badge-custom badge-{{ (user.role or 'viewer').lower() }}">{{ user.role or 'Viewer' }}</span>
+                    <span class="badge-custom badge-{{ (user.role or 'scheduler').lower() }}">
+                        {% if (user.role or '').lower() in ['dean', 'chair'] %}
+                            Dean / Chair
+                        {% elif (user.role or '').lower() == 'super_admin' %}
+                            Super Admin
+                        {% elif (user.role or '').lower() == 'admin' %}
+                            Admin
+                        {% else %}
+                            {{ user.role or 'Scheduler' }}
+                        {% endif %}
+                    </span>
                 </td>
                 <td class="text-end">
                     <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.last_name }}', '{{ user.email }}', '{{ user.program or '' }}', '{{ user.role }}')">
@@ -287,19 +307,25 @@
                     <div class="mb-3">
                         <label for="createRole" class="form-label">Role</label>
                         <select class="form-control" id="createRole" onchange="toggleProgramRole('createRole', 'createProgram')" required>
-                            <option value="Viewer">Viewer</option>
-                            <option value="Scheduler">Scheduler</option>
-                            <option value="admin">Admin</option>
+                            <option value="scheduler">Scheduler</option>
+                            <option value="dean">Dean / Chair</option>
+                            <option value="super_admin">Super Admin</option>
                         </select>
                     </div>
                     <div class="mb-3" id="createProgramGroup">
                         <label for="createProgram" class="form-label">Program</label>
                         <select class="form-control" id="createProgram" required>
                             <option value="">Select Program</option>
-                            <option value="BSIT">BSIT</option>
-                            <option value="BSBA">BSBA</option>
+                            {% if programs %}
+                                {% for p in programs %}
+                                <option value="{{ p.program_name }}">{{ p.program_name }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="BSIT">BSIT</option>
+                                <option value="BSBA">BSBA</option>
+                            {% endif %}
                         </select>
-                        <small class="text-muted d-none" id="createProgramHelp">Admin has global access across all programs.</small>
+                        <small class="text-muted d-none" id="createProgramHelp">Super Admin has global access across all programs.</small>
                     </div>
                 </form>
             </div>
@@ -337,19 +363,26 @@
                     <div class="mb-3">
                         <label for="editRole" class="form-label">Role</label>
                         <select class="form-control" id="editRole" onchange="toggleProgramRole('editRole', 'editProgram')" required>
-                            <option value="admin">Admin</option>
-                            <option value="Scheduler">Scheduler</option>
-                            <option value="Viewer">Viewer</option>
+                            <option value="scheduler">Scheduler</option>
+                            <option value="dean">Dean / Chair</option>
+                            <option value="super_admin">Super Admin</option>
+                            <option value="admin">Admin (Legacy)</option>
                         </select>
                     </div>
                     <div class="mb-3" id="editProgramGroup">
                         <label for="editProgram" class="form-label">Program</label>
                         <select class="form-control" id="editProgram" required>
                             <option value="">Select Program</option>
-                            <option value="BSIT">BSIT</option>
-                            <option value="BSBA">BSBA</option>
+                            {% if programs %}
+                                {% for p in programs %}
+                                <option value="{{ p.program_name }}">{{ p.program_name }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="BSIT">BSIT</option>
+                                <option value="BSBA">BSBA</option>
+                            {% endif %}
                         </select>
-                        <small class="text-muted d-none" id="editProgramHelp">Admin has global access across all programs.</small>
+                        <small class="text-muted d-none" id="editProgramHelp">Super Admin has global access across all programs.</small>
                     </div>
                 </form>
             </div>
@@ -371,8 +404,9 @@ function toggleProgramRole(roleSelectId, programSelectId) {
     const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
     const progSelect = document.getElementById(programSelectId);
     const helpText = document.getElementById(roleSelectId === 'createRole' ? 'createProgramHelp' : 'editProgramHelp');
+    const isGlobal = ['admin', 'super_admin'].includes(roleVal);
     
-    if (roleVal === 'admin') {
+    if (isGlobal) {
         progSelect.value = '';
         progSelect.disabled = true;
         progSelect.required = false;
@@ -403,7 +437,7 @@ function openCreateModal() {
     document.getElementById('createEmail').value = '';
     document.getElementById('createPassword').value = '';
     document.getElementById('createProgram').value = '';
-    document.getElementById('createRole').value = 'Viewer';
+    document.getElementById('createRole').value = 'scheduler';
     toggleProgramRole('createRole', 'createProgram');
     
     const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
@@ -417,14 +451,15 @@ function createUser() {
     const password = document.getElementById('createPassword').value;
     const role = document.getElementById('createRole').value;
     const program = document.getElementById('createProgram').value;
+    const isGlobal = ['admin', 'super_admin'].includes((role || '').toLowerCase());
     
     if (!firstName || !lastName || !email || !password || !role) {
         alert('Please fill in all required fields.');
         return;
     }
     
-    if (role.toLowerCase() !== 'admin' && !program) {
-        alert('Please select a program for Scheduler or Viewer.');
+    if (!isGlobal && !program) {
+        alert('Please select a program for Dean or Scheduler.');
         return;
     }
     
@@ -433,7 +468,7 @@ function createUser() {
     formData.append('last_name', lastName);
     formData.append('email', email);
     formData.append('password', password);
-    formData.append('program', role.toLowerCase() === 'admin' ? '' : program);
+    formData.append('program', isGlobal ? '' : program);
     formData.append('role', role);
     
     fetch('/create_user', {
@@ -458,7 +493,20 @@ function openEditModal(userId, firstName, lastName, email, program, role) {
     document.getElementById('editFirstName').value = firstName;
     document.getElementById('editLastName').value = lastName;
     document.getElementById('editEmail').value = email;
-    document.getElementById('editRole').value = role;
+    
+    const roleSelect = document.getElementById('editRole');
+    let matchedRole = false;
+    for (let opt of roleSelect.options) {
+        if (opt.value.toLowerCase() === (role || '').toLowerCase()) {
+            roleSelect.value = opt.value;
+            matchedRole = true;
+            break;
+        }
+    }
+    if (!matchedRole) {
+        roleSelect.value = role;
+    }
+    
     document.getElementById('editProgram').value = program;
     toggleProgramRole('editRole', 'editProgram');
     
@@ -473,14 +521,15 @@ function saveUser() {
     const email = document.getElementById('editEmail').value.trim();
     const role = document.getElementById('editRole').value;
     const program = document.getElementById('editProgram').value;
+    const isGlobal = ['admin', 'super_admin'].includes((role || '').toLowerCase());
     
     if (!firstName || !lastName || !email || !role) {
         showToast('Please fill in all required fields.', 'warning');
         return;
     }
     
-    if (role.toLowerCase() !== 'admin' && !program) {
-        showToast('Please select a program for Scheduler or Viewer.', 'warning');
+    if (!isGlobal && !program) {
+        showToast('Please select a program for Dean or Scheduler.', 'warning');
         return;
     }
     
@@ -488,7 +537,7 @@ function saveUser() {
     formData.append('first_name', firstName);
     formData.append('last_name', lastName);
     formData.append('email', email);
-    formData.append('program', role.toLowerCase() === 'admin' ? '' : program);
+    formData.append('program', isGlobal ? '' : program);
     formData.append('role', role);
     
     fetch(`/edit_user/${userId}`, {

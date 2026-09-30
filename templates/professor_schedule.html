@@ -3,101 +3,123 @@
 {% block header_title %}<h5 class="header__title">Professor Schedule</h5>{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header d-flex align-items-center justify-content-between mb-4">
     <div>
         <h1 class="page-title">Professor Schedule</h1>
-        <p class="page-subtitle">View and manage professor schedules based on existing Section Schedule</p>
+        <p class="page-subtitle">Read-only view of teaching schedules grouped by professor for the active semester</p>
     </div>
-    {% if user_role != 'Viewer' %}
-    <div class="d-flex gap-2">
-        <a href="/" class="btn btn-primary">
-            <i class="bx bx-plus-circle"></i> Generate New Schedule
-        </a>
-    </div>
+    {% if active_semester %}
+    <span class="badge bg-primary fs-6 px-3 py-2">
+        <i class="bx bx-calendar me-1"></i> Active Semester: S.Y. {{ active_semester.school_year }} — {{ active_semester.term }}
+    </span>
     {% endif %}
 </div>
 
-<div class="card-custom mb-4">
-    <form method="get" class="row g-3 align-items-end">
-        <div class="col-md-3" style="width: 15%">
-            <label class="form-label" for="yearFilter">Year Level</label>
-            <select id="yearFilter" name="year" class="form-select">
+<!-- Filter Controls -->
+<div class="card-custom mb-4 p-3 bg-light-subtle">
+    <form method="get" class="row g-2 align-items-end" id="profScheduleFilterForm">
+        <!-- Professor Selector -->
+        <div class="col-md-3">
+            <label class="form-label small fw-bold text-muted mb-1" for="profFilter">Professor</label>
+            <select id="profFilter" name="prof_id" class="form-select form-select-sm">
+                <option value="">All Professors</option>
+                {% for p in all_prof_options %}
+                <option value="{{ p.prof_id }}" {% if selected_prof_id == p.prof_id|string or selected_prof_id == p.prof_id %}selected{% endif %}>
+                    {{ p.first_name }} {{ p.last_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Day Filter -->
+        <div class="col-md-2">
+            <label class="form-label small fw-bold text-muted mb-1" for="dayFilter">Day of Week</label>
+            <select id="dayFilter" name="day" class="form-select form-select-sm">
+                <option value="">All Days</option>
+                {% for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] %}
+                <option value="{{ d }}" {% if selected_day == d %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Year Level Filter -->
+        <div class="col-md-2">
+            <label class="form-label small fw-bold text-muted mb-1" for="yearFilter">Year Level</label>
+            <select id="yearFilter" name="year" class="form-select form-select-sm">
                 <option value="">All Years</option>
                 {% for year in year_options %}
                 <option value="{{ year }}" {% if year == year_filter %}selected{% endif %}>{{ year }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3" style="width: 15%">
-            <label class="form-label" for="semesterFilter">Semester</label>
-            <select id="semesterFilter" name="semester" class="form-select">
-                <option value="">All Semesters</option>
-                {% for sem in semester_options %}
-                <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3" style="width: 15%">
-            <label class="form-label" for="majorFilter">Major</label>
-            <select id="majorFilter" name="major" class="form-select">
+
+        <!-- Major Filter -->
+        <div class="col-md-2">
+            <label class="form-label small fw-bold text-muted mb-1" for="majorFilter">Major</label>
+            <select id="majorFilter" name="major" class="form-select form-select-sm">
                 <option value="">All Majors</option>
                 {% for m in major_options %}
-                <option value="{{ m }}" {% if m == major_filter %}selected{% endif %}">{{ m }}</option>
+                <option value="{{ m }}" {% if m == major_filter %}selected{% endif %}>{{ m }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3" style="width: 15%">
-            <button type="submit" class="btn btn-primary w-100">
+
+        <!-- Submit & Clear -->
+        <div class="col-md-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
                 <i class="bx bx-filter"></i> Apply Filters
             </button>
+            {% if selected_prof_id or selected_day or year_filter or major_filter %}
+            <a href="/professor_schedule" class="btn btn-outline-secondary btn-sm" title="Clear all filters">
+                <i class="bx bx-x"></i>
+            </a>
+            {% endif %}
         </div>
     </form>
 </div>
 
-{% if no_professor_match %}
-<div class="card-custom">
-    <div class="empty-state">
-        <div class="empty-state__icon"><i class="bx bx-user-x"></i></div>
-        <div class="empty-state__text">Your account is not linked to a professor profile. Please contact the Scheduler/Admin.</div>
-    </div>
-</div>
-{% elif professors %}
+{% if professors %}
 <div class="d-grid gap-3">
     {% for professor in professors %}
-    <div class="section-card" data-href="/professor_schedule/{{ professor.professor_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}" tabindex="0" role="button" aria-label="View schedule for Professor {{ professor.professor_name }}">
-        <div class="section-card__info">
-            <h5 class="mb-1">
-                {{ professor.professor_name }}
-                {% if professor.department %}
-                <span class="badge-custom badge-primary ms-2">{{ professor.department }}</span>
-                {% endif %}
-            </h5>
-            <div class="section-card__meta d-flex align-items-center gap-3 flex-wrap">
-                <span><i class="bx bx-book-open me-1"></i>{{ professor.class_count }} class{{ 'es' if professor.class_count != 1 else '' }} assigned</span>
-                {% if professor.total_hours is defined %}
-                <span><i class="bx bx-time-five me-1"></i><strong>{{ professor.total_hours }} hrs</strong> assigned</span>
-                {% endif %}
-                {% if professor.specialization %}
-                <span><i class="bx bx-star me-1"></i>{{ professor.specialization }}</span>
-                {% endif %}
+    <div class="section-card card-custom p-3 transition" data-href="/professor_schedule/{{ professor.professor_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}" tabindex="0" role="button" aria-label="View schedule for Professor {{ professor.professor_name }}" style="cursor: pointer;">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="section-card__info">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <h5 class="mb-0 fw-bold text-dark">{{ professor.professor_name }}</h5>
+                    {% if professor.time_designation %}
+                    <span class="badge bg-info-subtle text-info border border-info-subtle" title="Days on campus">{{ professor.time_designation }} Days / Wk</span>
+                    {% endif %}
+                    {% if professor.ranking_name %}
+                    <span class="badge bg-secondary-subtle text-secondary">{{ professor.ranking_name }}</span>
+                    {% endif %}
+                </div>
+                <div class="section-card__meta d-flex align-items-center gap-3 flex-wrap text-muted small">
+                    <span><i class="bx bx-book-open me-1 text-primary"></i><strong>{{ professor.class_count }}</strong> class{{ 'es' if professor.class_count != 1 else '' }} assigned</span>
+                    {% if professor.total_hours is defined %}
+                    <span><i class="bx bx-time-five me-1 text-primary"></i><strong>{{ professor.total_hours }} hrs</strong> assigned</span>
+                    {% endif %}
+                    {% if professor.specialization %}
+                    <span><i class="bx bx-star me-1 text-warning"></i>{{ professor.specialization }}</span>
+                    {% endif %}
+                </div>
             </div>
-        </div>
-        <div class="d-flex align-items-center gap-3">
-            <span class="view-hint">
-                View Schedule <i class="bx bx-chevron-right fs-5"></i>
-            </span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1">
+                    View Timetable <i class="bx bx-chevron-right"></i>
+                </span>
+            </div>
         </div>
     </div>
     {% endfor %}
 </div>
 {% else %}
 <div class="card-custom">
-    <div class="empty-state">
-        <div class="empty-state__icon"><i class="bx bx-user"></i></div>
-        <div class="empty-state__text">No professors with assigned schedules found</div>
-        {% if user_role != 'Viewer' %}
-        <a href="/" class="btn btn-primary mt-3">
-            <i class="bx bx-plus-circle"></i> Generate Schedule
+    <div class="empty-state text-center py-5">
+        <div class="empty-state__icon fs-1 text-muted mb-2"><i class="bx bx-user-x"></i></div>
+        <div class="empty-state__text text-muted mb-3">No professor schedules match the active criteria.</div>
+        {% if selected_prof_id or selected_day or year_filter or major_filter %}
+        <a href="/professor_schedule" class="btn btn-outline-secondary btn-sm">
+            <i class="bx bx-x me-1"></i> Reset Filters
         </a>
         {% endif %}
     </div>
@@ -121,10 +143,6 @@ $(function(){
             var href = $(this).data('href');
             if (href) window.location.href = href;
         }
-    });
-
-    $('.stop-prop').on('click', function(e){
-        e.stopPropagation();
     });
 });
 </script>

@@ -165,7 +165,7 @@ def test_add_academic_ranking_auto_assigns_program(mock_db):
     with client.session_transaction() as session:
         session['user_id'] = 10
         session['username'] = 'sched_it'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Dean'
         session['program'] = 'BSIT'
 
     # Attempt to pass a different program 'BSCS' from form (should be ignored and forced to BSIT)
@@ -186,7 +186,7 @@ def test_add_academic_ranking_stores_load_constraints(mock_db):
     with client.session_transaction() as session:
         session['user_id'] = 10
         session['username'] = 'sched_it'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Dean'
         session['program'] = 'BSIT'
 
     resp = client.post('/add_academic_ranking', data={
@@ -210,7 +210,7 @@ def test_add_academic_ranking_ajax(mock_db):
     with client.session_transaction() as session:
         session['user_id'] = 10
         session['username'] = 'sched_it'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Dean'
         session['program'] = 'BSIT'
 
     resp = client.post('/add_academic_ranking', data={
@@ -228,7 +228,7 @@ def test_edit_academic_ranking_preserves_program(mock_db):
     with client.session_transaction() as session:
         session['user_id'] = 10
         session['username'] = 'sched_it'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Dean'
         session['program'] = 'BSIT'
 
     # Rank 1 is BSIT
@@ -298,7 +298,7 @@ def test_add_professor_with_academic_ranking(mock_db):
     with client.session_transaction() as session:
         session['user_id'] = 10
         session['username'] = 'sched_it'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Dean'
         session['program'] = 'BSIT'
 
     # Rank 1 is BSIT (allowed)
@@ -322,7 +322,7 @@ def test_add_professor_rejects_mismatched_program_ranking(mock_db):
     with client.session_transaction() as session:
         session['user_id'] = 10
         session['username'] = 'sched_it'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Dean'
         session['program'] = 'BSIT'
 
     # Rank 3 is BSCS, scheduler is BSIT (mismatch)

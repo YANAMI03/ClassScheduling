@@ -3,51 +3,103 @@
 {% block header_title %}<h5 class="header__title">Timeslot Configuration</h5>{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header d-flex align-items-center justify-content-between mb-4">
     <div>
-        <h1 class="page-title">Timeslots</h1>
-        <p class="page-subtitle">Configure scheduling time windows and lunch breaks</p>
+        <h1 class="page-title">Daily Operating Windows & Timeslots</h1>
+        <p class="page-subtitle">Configure operating hours and lunch breaks per day of the week for the active semester</p>
     </div>
+    {% if semester %}
+    <span class="badge bg-primary fs-6 px-3 py-2">
+        <i class="bx bx-calendar me-1"></i> S.Y. {{ semester.school_year }} — {{ semester.term }}
+    </span>
+    {% endif %}
 </div>
 
+{% if semesters and semesters|length > 1 %}
+<div class="card-custom mb-4 p-3 bg-light-subtle">
+    <form method="get" class="row g-2 align-items-center">
+        <div class="col-auto">
+            <label class="form-label fw-bold mb-0">Select Semester:</label>
+        </div>
+        <div class="col-auto">
+            <select name="semester_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for s in semesters %}
+                <option value="{{ s.id }}" {% if semester and semester.id == s.id %}selected{% endif %}>
+                    S.Y. {{ s.school_year }} - {{ s.term }} {% if s.is_active %}(Active){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+{% if not semester %}
+<div class="card-custom text-center py-5">
+    <i class="bx bx-calendar-x fs-1 text-muted mb-2"></i>
+    <h5>No Active Semester Selected</h5>
+    <p class="text-muted">Please configure a semester before setting up daily timeslots.</p>
+    <a href="/semesters" class="btn btn-primary mt-2"><i class="bx bx-plus-circle me-1"></i> Go to Semesters</a>
+</div>
+{% else %}
 <div class="card-custom">
-    <div class="card-custom__header">
-        <h5 class="card-custom__title">Active Timeslot Configurations</h5>
-        <span class="badge-custom badge-primary">{{ timeslot|length }} slot(s)</span>
+    <div class="card-custom__header d-flex align-items-center justify-content-between">
+        <div>
+            <h5 class="card-custom__title mb-0"><i class="bx bx-time-five me-2"></i>Daily Schedule Windows</h5>
+            <small class="text-muted">Schedule generation and conflict detection enforce these exact windows and lunch periods.</small>
+        </div>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1">{{ timeslots|length }} Active Days</span>
     </div>
     <div class="table-responsive">
-        <table class="table-custom">
-            <thead>
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
                 <tr>
-                    <th>Start Day</th>
-                    <th>End Day</th>
-                    <th>Start Time</th>
-                    <th>Lunch Time</th>
-                    <th>End Time</th>
-                    <th class="text-end">Actions</th>
+                    <th style="width: 25%;">Day of Week</th>
+                    <th style="width: 25%;">Operating Window (Start - End)</th>
+                    <th style="width: 25%;">Lunch Break Window</th>
+                    <th class="text-end" style="width: 25%;">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for time in timeslot %}
+                {% for ts in timeslots %}
                 <tr>
-                    <td><span class="badge-custom badge-success">{{time.start_day}}</span></td>
-                    <td><span class="badge-custom badge-primary">{{time.end_day}}</span></td>
-                    <td>{{time.start_time}}</td>
-                    <td><span class="badge-custom badge-warning">{{time.lunch_time}}</span></td>
-                    <td>{{time.end_time}}</td>
+                    <td class="fw-semibold">
+                        <span class="badge bg-secondary-subtle text-dark border px-3 py-2 fs-6">
+                            <i class="bx bx-calendar-day me-1 text-primary"></i>{{ ts.day }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="text-dark fw-bold">{{ ts.start_time[:5] if ts.start_time else '07:00' }}</span>
+                        <span class="text-muted mx-2">to</span>
+                        <span class="text-dark fw-bold">{{ ts.end_time[:5] if ts.end_time else '20:00' }}</span>
+                    </td>
+                    <td>
+                        {% if ts.lunch_time %}
+                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-2 py-1">
+                            <i class="bx bx-restaurant me-1 text-warning"></i>{{ ts.lunch_time[:5] }} (1 hr break)
+                        </span>
+                        {% else %}
+                        <span class="text-muted fst-italic">No lunch break</span>
+                        {% endif %}
+                    </td>
                     <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{time.timeslot_id}}" data-start_day="{{time.start_day}}" data-end_day="{{time.end_day}}" data-start_time="{{time.start_time}}" data-lunch_time="{{time.lunch_time}}" data-end_time="{{time.end_time}}">
-                            <i class="bx bx-edit"></i> Edit
+                        {% if is_dean_or_admin %}
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                onclick="openEditTimeslotModal({{ ts.timeslot_id }}, '{{ ts.day }}', '{{ ts.start_time[:5] if ts.start_time else '' }}', '{{ ts.end_time[:5] if ts.end_time else '' }}', '{{ ts.lunch_time[:5] if ts.lunch_time else '' }}')">
+                            <i class="bx bx-edit me-1"></i> Edit Hours
                         </button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6">
-                        <div class="empty-state">
-                            <div class="empty-state__icon"><i class="bx bx-time-five"></i></div>
-                            <div class="empty-state__text">No timeslots configured yet</div>
-                        </div>
+                    <td colspan="4" class="text-center py-4 text-muted">
+                        <i class="bx bx-time fs-2 d-block mb-2"></i>
+                        No timeslots found for this semester. Click "Initialize Standard Week" below.
+                        <form method="post" action="/initialize_timeslots" class="mt-3">
+                            <input type="hidden" name="semester_id" value="{{ semester.id }}">
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="bx bx-refresh me-1"></i> Initialize Standard Week (Mon-Sat 7AM-8PM)</button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}
@@ -55,70 +107,54 @@
         </table>
     </div>
 </div>
-{% endblock %}
+{% endif %}
 
-{% block scripts %}
-<div class="modal fade" id="editModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Edit Timeslot Modal -->
+<div class="modal fade" id="editTimeslotModal" tabindex="-1" aria-labelledby="editTimeslotModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bx bx-edit me-2"></i>Edit Timeslot</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="editTimeslotModalLabel"><i class="bx bx-time-five me-2"></i>Edit Daily Window: <span id="modalDayLabel" class="text-primary"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="editForm" method="POST">
+            <form id="editTimeslotForm" method="POST" action="">
                 <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Start Day</label>
-                            <select name="start_day" id="edit_start_day" class="form-select" required>
-                                <option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">End Day</label>
-                            <select name="end_day" id="edit_end_day" class="form-select" required>
-                                <option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
-                            </select>
-                        </div>
-                    </div>
                     <div class="mb-3">
-                        <label class="form-label">Start Time</label>
+                        <label class="form-label fw-bold">Operating Start Time</label>
                         <input type="time" name="start_time" id="edit_start_time" class="form-control" required>
+                        <small class="text-muted">Earliest time classes may be scheduled on this day.</small>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Lunch Time</label>
-                        <input type="time" name="lunch_time" id="edit_lunch_time" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">End Time</label>
+                        <label class="form-label fw-bold">Operating End Time</label>
                         <input type="time" name="end_time" id="edit_end_time" class="form-control" required>
+                        <small class="text-muted">Latest time classes must conclude on this day.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Lunch Break Start</label>
+                        <input type="time" name="lunch_time" id="edit_lunch_time" class="form-control">
+                        <small class="text-muted">1-hour block strictly reserved with zero classes scheduled.</small>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Changes</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-$(function(){
-    $('#editModal').appendTo("body");
-    $('.edit-btn').on('click', function(){
-        var $t = $(this);
-        $('#edit_start_day').val($t.attr('data-start_day'));
-        $('#edit_end_day').val($t.attr('data-end_day'));
-        $('#edit_lunch_time').val($t.attr('data-lunch_time'));
-        var st = $t.attr('data-start_time');
-        var et = $t.attr('data-end_time');
-        if(st && st.length === 7) st = '0' + st;
-        if(et && et.length === 7) et = '0' + et;
-        $('#edit_start_time').val(st);
-        $('#edit_end_time').val(et);
-        $('#editForm').attr('action', '/edit_timeslot/' + $t.attr('data-id'));
-    });
-});
+function openEditTimeslotModal(id, day, start, end, lunch) {
+    document.getElementById('editTimeslotForm').action = '/edit_timeslot/' + id;
+    document.getElementById('modalDayLabel').textContent = day;
+    document.getElementById('edit_start_time').value = start;
+    document.getElementById('edit_end_time').value = end;
+    document.getElementById('edit_lunch_time').value = lunch;
+    var modal = new bootstrap.Modal(document.getElementById('editTimeslotModal'));
+    modal.show();
+}
 </script>
 {% endblock %}

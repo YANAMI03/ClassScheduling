@@ -26,6 +26,10 @@
     </div>
 </div>
 
+{% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set is_scheduler = (user_role_lower == 'scheduler') %}
+
+{% if not is_scheduler %}
 <div class="card-custom mb-4">
     <div class="card-custom__header">
         <h5 class="card-custom__title"><i class="bx bx-plus-circle me-2"></i>Add New Course</h5>
@@ -105,6 +109,12 @@
         </div>
     </form>
 </div>
+{% else %}
+<div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+    <i class="bx bx-info-circle fs-4 me-2"></i>
+    <div>You are viewing the course catalog in read-only mode. Course catalog management is restricted to Dean/Chair.</div>
+</div>
+{% endif %}
 
 <div class="card-custom">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
@@ -174,7 +184,9 @@
                     {% endif %}
                     <th>Year Level</th>
                     <th>Semester</th>
+                    {% if not is_scheduler %}
                     <th class="text-end">Actions</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -197,6 +209,7 @@
                     {% endif %}
                     <td><span class="badge-custom badge-success">Year {{course.year_level}}</span></td>
                     <td>{{ course.semester or '—' }}</td>
+                    {% if not is_scheduler %}
                     <td class="text-end">
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-major="{{course.major or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
@@ -205,10 +218,11 @@
                             <i class="bx bx-trash"></i> Delete
                         </a>
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{% if show_major %}10{% else %}9{% endif %}">
+                    <td colspan="{% if show_major %}{{ 10 if not is_scheduler else 9 }}{% else %}{{ 9 if not is_scheduler else 8 }}{% endif %}">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-book"></i></div>
                             <div class="empty-state__text">{{ empty_msg }}</div>
@@ -242,6 +256,8 @@
 {% endblock %}
 
 {% block scripts %}
+{% set is_scheduler = ((session.get('role', '') or '') | lower == 'scheduler') %}
+{% if not is_scheduler %}
 <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -317,10 +333,13 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
 $(function(){
+    {% if not is_scheduler %}
     $('#editModal').appendTo("body");
+    {% endif %}
     
     // Major field visibility logic
     function isMajorRequired(year, semester) {
@@ -381,6 +400,7 @@ $(function(){
         toggleMajorField($editYearLevel, $editSemester, $editMajorField);
     });
     
+    {% if not is_scheduler %}
     $(document).on('click', '.edit-btn', function(){
         var $t = $(this);
         $('#edit_name').val($t.data('name'));
@@ -397,6 +417,7 @@ $(function(){
         // Toggle Major field after loading edit data
         toggleMajorField($editYearLevel, $editSemester, $editMajorField);
     });
+    {% endif %}
 
     function refreshCourseFilters() {
         var semester = $('#semesterFilter').val() || 'all';

@@ -1,0 +1,390 @@
+# Product Requirements Document (PRD)
+
+## 1. Product Overview
+
+### 1.1 Product Name
+
+**University Class Scheduling and Room Allocation System with Conflict Detection**
+
+### 1.2 Purpose
+
+The system is designed to assist academic schedulers in generating, managing, and optimizing class schedules for a specific department. It automates scheduling while allowing manual adjustments with built-in conflict detection.
+
+### 1.3 Scope
+
+* Applies to **one department only**
+* Generates schedules **per semester**
+* Supports **lecture and laboratory classes**
+* Focuses on **faculty load-based scheduling**
+
+---
+
+## 2. Goals & Objectives
+
+### 2.1 Goals
+
+* Automate schedule generation based on professor load
+* Minimize scheduling conflicts
+* Provide flexibility for manual edits
+* Ensure fair distribution of teaching loads
+* Improve visibility of room and professor availability
+
+### 2.2 Success Metrics
+
+* Reduced scheduling time
+* Zero unresolved conflicts in final schedule
+* Balanced professor workload within limits
+* Accurate room allocation based on type
+
+---
+
+## 3. Users & Roles
+
+### 3.1 Super Admin
+
+* Manage professors, courses, rooms
+* Maintain system data
+
+### 3.2 Scheduler/Admin
+
+* Generate schedules
+* Edit schedules manually
+* Assign professor loads
+* Manage academic ranking constraints
+
+### 3.3 Viewer (Instructor)
+
+* View assigned schedule only
+
+---
+
+## 4. Core Features
+
+## 4.1 Schedule Generation
+
+* Generates schedules per semester
+* Uses **professor load (professor_load table)**
+* Assigns:
+
+  * Section
+  * Course
+  * Professor
+  * Room
+  * Day and Time
+
+### Rules:
+
+* Must match **exact subject assigned to professor**
+* Must respect:
+
+  * Academic ranking limits (min/max hours & units)
+  * Course lecture/lab hours
+  * Number of sections per subject
+* If unavailable:
+
+  * Assign **TBA (To Be Announced)**
+
+---
+
+## 4.2 Conflict Detection
+
+* Detects:
+
+  * Professor conflicts (overlapping schedules)
+  * Room conflicts
+  * Time conflicts
+* Triggered:
+
+  * During generation
+  * During manual edits
+
+---
+
+## 4.3 Professor Load Management
+
+* Assign courses to professors
+* Specify **number of sections per subject**
+* Real-time calculation:
+
+  * Total hours = (lecture + lab hours) × sections
+  * Total units = units × sections
+
+### Constraints:
+
+* Based on **Academic Ranking**
+* Cannot exceed:
+
+  * Max hours
+  * Max units
+
+---
+
+## 4.4 Academic Ranking System
+
+* New table: `academic_ranking`
+* Linked to program (locked per scheduler)
+
+### Fields:
+
+* min_hours
+* max_hours
+* min_units
+* max_units
+
+### Behavior:
+
+* Replaces professor-level limits
+* Controls scheduling eligibility
+
+---
+
+## 4.5 Section Handling
+
+* Sections auto-generated:
+
+  * Format: `1A`, `1B`, etc.
+* Based on:
+
+  * Number of sections input
+
+### Rules:
+
+* 1st Year:
+
+  * Max 2 courses/day (once per week)
+* 2nd Year:
+
+  * Max 2 late classes (>5PM) per week
+* 3rd/4th Year:
+
+  * Prefer 2 courses/day
+
+---
+
+## 4.6 Room Allocation
+
+* Room types:
+
+  * Lecture rooms
+  * Laboratory rooms
+
+### Rules:
+
+* Lecture → Lecture rooms only
+* Lab → Lab rooms only
+* If unavailable → TBA
+
+---
+
+## 4.7 Time Slot System
+
+* Schedule range: **7:00 AM – 8:00 PM**
+
+### Timeslot Fields:
+
+* start_day
+* end_day
+* start_time
+* lunch_time
+* end_time
+
+### Rules:
+
+* No classes during lunch_time
+* Lunch not shown in room availability
+
+---
+
+## 4.8 Schedule Management
+
+### Active vs Archived:
+
+* New schedule → `archive = false`
+* Old schedules → `archive = true`
+
+### Rules:
+
+* Only **one active schedule per semester**
+* Prevent generation if same semester already active
+
+---
+
+## 4.9 Manual Editing
+
+* Drag/drop or edit schedule entries
+* Conflict detection runs immediately
+* No modal interruption when editing cards
+
+---
+
+## 4.10 Professor Dashboard
+
+* Displays:
+
+  * Total assigned hours
+  * Total units
+  * Remaining capacity
+
+---
+
+## 4.11 Backup & Restore
+
+* Backup current system data
+* Restore via upload
+* Supabase-compatible
+
+---
+
+## 5. Data Model (Key Tables)
+
+### 5.1 Professor
+
+* id
+* name
+* specialization
+* academic_ranking_id
+
+---
+
+### 5.2 Academic Ranking
+
+* id
+* program
+* min_hours
+* max_hours
+* min_units
+* max_units
+
+---
+
+### 5.3 Courses
+
+* id
+* name
+* lecture_hours
+* lab_hours
+* units
+* type (lecture/lab)
+
+---
+
+### 5.4 Professor Load (`professor_load`)
+
+* id
+* professor_id
+* course_id
+* sections
+* ilp_hours
+
+---
+
+### 5.5 Schedule
+
+* id
+* prof_load_id (FK → professor_load)
+* section
+* room
+* day
+* start_time
+* end_time
+* semester
+* archive (boolean)
+
+---
+
+### 5.6 Rooms
+
+* id
+* name
+* type (lecture/lab)
+
+---
+
+## 6. System Constraints
+
+* Must use **professor_load (NOT prof_course)**
+* Schedule must reference:
+
+  * `prof_load_id` only
+* Remove:
+
+  * direct professor_id / course_id in schedule
+
+---
+
+## 7. Tech Stack
+
+### Frontend
+
+* HTML / Tailwind CSS
+* JavaScript
+
+### Backend
+
+* Python (Flask)
+
+### Database
+
+* Supabase (PostgreSQL)
+
+### Deployment (Optional)
+
+* Docker
+* GitHub
+
+---
+
+## 8. Non-Functional Requirements
+
+### Performance
+
+* Generate schedules within seconds
+
+### Reliability
+
+* No duplicate schedules per semester
+
+### Usability
+
+* Clean UI with grouped schedules per section
+
+### Scalability
+
+* Can expand to full university in future
+
+---
+
+## 9. Future Enhancements
+
+* AI-based schedule optimization
+* Multi-department support
+* Student schedule integration
+* Mobile view/dashboard
+
+---
+
+## 10. Risks
+
+* Incorrect professor load data affects output
+* Complex constraint conflicts
+* Database relationship mismatches (e.g., FK errors)
+
+---
+
+## 11. Assumptions
+
+* Professors are pre-assigned to subjects
+* Section counts are predefined
+* Rooms and timeslots are fixed before generation
+
+---
+
+## 12. Acceptance Criteria
+
+* Schedule generates using professor load
+* No conflicts remain after generation
+* Academic ranking limits enforced
+* Correct room type assignment
+* Archive system works correctly
+
+---

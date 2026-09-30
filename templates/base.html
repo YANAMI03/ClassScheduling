@@ -76,32 +76,105 @@
             </a>
         </div>
         <nav class="sidebar__nav">
-            {% set user_role = session.get('role', 'Viewer') %}
+            {% set user_role_lower = (session.get('role', '') or '') | lower %}
             
-            {% if user_role == 'Scheduler' %}
-            <a href="/" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Create Schedule">
+            {# ── SCHEDULER: Exactly four tabs ── #}
+            {% if user_role_lower == 'scheduler' %}
+            <a href="/" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Schedule Generation">
                 <i class="bx bx-calendar-plus sidebar__icon"></i>
-                <span class="sidebar__label">Create Schedule</span>
+                <span class="sidebar__label">Schedule Generation</span>
             </a>
-            {% endif %}
-
-            {% if user_role != 'Viewer' %}
-            {% set nav_items = [
-                {'route': 'courses', 'url': '/courses', 'icon': 'bx-book', 'label': 'Courses'},
-                {'route': 'professors', 'url': '/professors', 'icon': 'bx-user', 'label': 'Professors'},
-                {'route': 'academic_ranking', 'url': '/academic_ranking', 'icon': 'bx-award', 'label': 'Academic Ranking'},
-                {'route': 'professor_load', 'url': '/professor_load', 'icon': 'bx-book-open', 'label': "Professor Load"},
-                {'route': 'rooms', 'url': '/rooms', 'icon': 'bx-building', 'label': 'Rooms'},
-                {'route': 'timeslot', 'url': '/timeslot', 'icon': 'bx-time-five', 'label': 'Timeslots'},
-            ] %}
-            {% for item in nav_items %}
-            <a href="{{ item.url }}" class="sidebar__link {% if active_page == item.route %}sidebar__link--active{% endif %}" title="{{ item.label }}">
-                <i class="bx {{ item.icon }} sidebar__icon"></i>
-                <span class="sidebar__label">{{ item.label }}</span>
+            <a href="/schedules" class="sidebar__link {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Schedule">
+                <i class="bx bx-grid-alt sidebar__icon"></i>
+                <span class="sidebar__label">Schedule</span>
             </a>
-            {% endfor %}
-            {% endif %}
+            <a href="/professor_schedule" class="sidebar__link {% if active_page == 'professor_schedule' %}sidebar__link--active{% endif %}" title="Professor Schedule">
+                <i class="bx bx-user sidebar__icon"></i>
+                <span class="sidebar__label">Professor Schedule</span>
+            </a>
+            <a href="/room_schedule" class="sidebar__link {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
+                <i class="bx bx-building sidebar__icon"></i>
+                <span class="sidebar__label">Room Schedule</span>
+            </a>
 
+            {# ── DEAN / CHAIR: Program-scoped management ── #}
+            {% elif user_role_lower in ['dean', 'chair', 'dean/chair'] %}
+            <a href="/semesters" class="sidebar__link {% if active_page == 'semesters' %}sidebar__link--active{% endif %}" title="Semesters">
+                <i class="bx bx-calendar sidebar__icon"></i>
+                <span class="sidebar__label">Semesters</span>
+            </a>
+            <a href="/section_config" class="sidebar__link {% if active_page == 'section_config' %}sidebar__link--active{% endif %}" title="Section Config">
+                <i class="bx bx-layer sidebar__icon"></i>
+                <span class="sidebar__label">Section Config</span>
+            </a>
+            <a href="/courses" class="sidebar__link {% if active_page == 'courses' %}sidebar__link--active{% endif %}" title="Courses">
+                <i class="bx bx-book sidebar__icon"></i>
+                <span class="sidebar__label">Courses</span>
+            </a>
+            <a href="/professors" class="sidebar__link {% if active_page == 'professors' %}sidebar__link--active{% endif %}" title="Professors">
+                <i class="bx bx-user sidebar__icon"></i>
+                <span class="sidebar__label">Professors</span>
+            </a>
+            <a href="/academic_ranking" class="sidebar__link {% if active_page == 'academic_ranking' %}sidebar__link--active{% endif %}" title="Academic Ranking">
+                <i class="bx bx-award sidebar__icon"></i>
+                <span class="sidebar__label">Academic Ranking</span>
+            </a>
+            <a href="/professor_load" class="sidebar__link {% if active_page == 'professor_load' %}sidebar__link--active{% endif %}" title="Professor Load">
+                <i class="bx bx-book-open sidebar__icon"></i>
+                <span class="sidebar__label">Professor Load</span>
+            </a>
+            <a href="/rooms" class="sidebar__link {% if active_page == 'rooms' %}sidebar__link--active{% endif %}" title="Rooms">
+                <i class="bx bx-building sidebar__icon"></i>
+                <span class="sidebar__label">Rooms</span>
+            </a>
+            <a href="/timeslot" class="sidebar__link {% if active_page == 'timeslot' %}sidebar__link--active{% endif %}" title="Timeslots">
+                <i class="bx bx-time-five sidebar__icon"></i>
+                <span class="sidebar__label">Timeslots</span>
+            </a>
+            <a href="/schedules" class="sidebar__link {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Schedules">
+                <i class="bx bx-grid-alt sidebar__icon"></i>
+                <span class="sidebar__label">Schedules</span>
+            </a>
+
+            {# ── SUPER ADMIN / ADMIN: Full system access ── #}
+            {% else %}
+            <a href="/" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Generate Schedule">
+                <i class="bx bx-calendar-plus sidebar__icon"></i>
+                <span class="sidebar__label">Generate Schedule</span>
+            </a>
+            <a href="/semesters" class="sidebar__link {% if active_page == 'semesters' %}sidebar__link--active{% endif %}" title="Semesters">
+                <i class="bx bx-calendar sidebar__icon"></i>
+                <span class="sidebar__label">Semesters</span>
+            </a>
+            <a href="/section_config" class="sidebar__link {% if active_page == 'section_config' %}sidebar__link--active{% endif %}" title="Section Config">
+                <i class="bx bx-layer sidebar__icon"></i>
+                <span class="sidebar__label">Section Config</span>
+            </a>
+            <a href="/courses" class="sidebar__link {% if active_page == 'courses' %}sidebar__link--active{% endif %}" title="Courses">
+                <i class="bx bx-book sidebar__icon"></i>
+                <span class="sidebar__label">Courses</span>
+            </a>
+            <a href="/professors" class="sidebar__link {% if active_page == 'professors' %}sidebar__link--active{% endif %}" title="Professors">
+                <i class="bx bx-user sidebar__icon"></i>
+                <span class="sidebar__label">Professors</span>
+            </a>
+            <a href="/academic_ranking" class="sidebar__link {% if active_page == 'academic_ranking' %}sidebar__link--active{% endif %}" title="Academic Ranking">
+                <i class="bx bx-award sidebar__icon"></i>
+                <span class="sidebar__label">Academic Ranking</span>
+            </a>
+            <a href="/professor_load" class="sidebar__link {% if active_page == 'professor_load' %}sidebar__link--active{% endif %}" title="Professor Load">
+                <i class="bx bx-book-open sidebar__icon"></i>
+                <span class="sidebar__label">Professor Load</span>
+            </a>
+            <a href="/rooms" class="sidebar__link {% if active_page == 'rooms' %}sidebar__link--active{% endif %}" title="Rooms">
+                <i class="bx bx-building sidebar__icon"></i>
+                <span class="sidebar__label">Rooms</span>
+            </a>
+            <a href="/timeslot" class="sidebar__link {% if active_page == 'timeslot' %}sidebar__link--active{% endif %}" title="Timeslots">
+                <i class="bx bx-time-five sidebar__icon"></i>
+                <span class="sidebar__label">Timeslots</span>
+            </a>
+            
             <!-- Schedules Dropdown -->
             <div class="sidebar__dropdown" id="schedules-dropdown">
                 <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
@@ -129,8 +202,6 @@
                 </div>
             </div>
             
-            <!-- Users (Admin Only) -->
-            {% if user_role == 'admin' %}
             <a href="/users" class="sidebar__link {% if active_page == 'users' %}sidebar__link--active{% endif %}" title="Users">
                 <i class="bx bx-user-voice sidebar__icon"></i>
                 <span class="sidebar__label">Users</span>

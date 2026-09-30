@@ -49,7 +49,7 @@ def _build_client(monkeypatch, session_data=None):
         session['user_id'] = 1
         session['program'] = 'BSIT'
         session['username'] = 'tester'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Dean'
         if session_data:
             session.update(session_data)
 
