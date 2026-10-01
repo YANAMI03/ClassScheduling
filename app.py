@@ -388,29 +388,30 @@ def _find_program_id_by_name(program_name):
 
 def _get_user_program_id(user_id=None):
     """Return the program_id for the current user or specified user_id."""
-    if not user_id and session.get('program_id'):
+    has_ctx = has_request_context()
+    if has_ctx and not user_id and session.get('program_id'):
         return session.get('program_id')
 
-    uid = user_id or session.get('user_id')
+    uid = user_id or (session.get('user_id') if has_ctx else None)
     if uid:
         try:
             res = supabase.table('users').select('program_id').eq('id', str(uid)).limit(1).execute()
             if res.data and res.data[0].get('program_id'):
                 pid = res.data[0]['program_id']
-                if not user_id:
+                if has_ctx and not user_id:
                     session['program_id'] = pid
                 return pid
         except Exception as err:
             logging.debug(f"Error fetching user program_id: {err}")
 
     # Fallback by program name in session
-    prog_name = session.get('program')
+    prog_name = session.get('program') if has_ctx else None
     if prog_name:
         try:
             res = supabase.table('program').select('id').eq('program_name', prog_name).limit(1).execute()
             if res.data and res.data[0].get('id'):
                 pid = res.data[0]['id']
-                if not user_id:
+                if has_ctx and not user_id:
                     session['program_id'] = pid
                 return pid
         except Exception:
@@ -689,10 +690,11 @@ def _request_delete_if_scheduler(item_type, item_id, item_details):
                 if t_row:
                     details_str = f"{t_row.get('start_day', '')} {t_row.get('start_time', '')}-{t_row.get('end_time', '')} (ID: {item_id})"
             elif item_type == 'academic_ranking':
-                res = supabase.table('academic_ranking').select('name, program').eq('academic_ranking_id', item_id).execute()
+                res = supabase.table('academic_ranking').select('name, program_id, program:program_id(program_name)').eq('academic_ranking_id', item_id).execute()
                 ar_row = _first(res.data or [])
                 if ar_row and ar_row.get('name'):
-                    details_str = f"Academic Ranking {ar_row['name']} ({ar_row.get('program', '')}) (ID: {item_id})"
+                    prog_lbl = (_rel(ar_row, 'program') or {}).get('program_name') or ar_row.get('program') or ''
+                    details_str = f"Academic Ranking {ar_row['name']} ({prog_lbl}) (ID: {item_id})"
 
             existing = supabase.table('delete_requests').select('id').eq('item_type', item_type).eq('item_id', str(item_id)).eq('status', 'pending').execute()
             if existing.data:
@@ -740,19 +742,32 @@ def _index_to_letter(index):
 def _ensure_fallback_professor_by_index(index=0, department=None):
     """Ensure a dedicated fallback professor ('Professor A', 'Professor B', ...) exists in the professor table and return it."""
     letter = _index_to_letter(index)
+    prog_id = _find_program_id_by_name(department)
+    if not prog_id and has_request_context():
+        prog_id = _get_user_program_id()
+    if not prog_id:
+        programs = _get_programs()
+        if programs:
+            prog_id = programs[0].get('id')
+
     fallback_prof = {
         'prof_id': 999900 + index,
         'first_name': 'Professor',
         'last_name': letter,
-        'department': department or 'General',
+        'department': department or 'BSIT',
+        'program_name': department or 'BSIT',
+        'program_id': prog_id,
+        'time_designation': 5,
+        'max_hours': 40,
         'academic_ranking_id': None,
     }
     try:
         query = supabase.table('professor').select('*').ilike('first_name', 'Professor').ilike('last_name', letter)
-        if department:
-            res = query.eq('department', department).execute()
-            data = res.data or []
-            if not data:
+        if prog_id:
+            try:
+                res = query.eq('program_id', prog_id).execute()
+                data = res.data or []
+            except Exception:
                 res = supabase.table('professor').select('*').ilike('first_name', 'Professor').ilike('last_name', letter).execute()
                 data = res.data or []
         else:
@@ -767,22 +782,35 @@ def _ensure_fallback_professor_by_index(index=0, department=None):
         if matching:
             existing = matching[0]
             existing.update(_ranking_constraints(existing))
+            existing['department'] = department or 'BSIT'
+            existing['program_name'] = department or 'BSIT'
+            if not existing.get('prof_id'):
+                existing['prof_id'] = fallback_prof.get('prof_id') or (999900 + index)
+            if not existing.get('max_hours'):
+                existing['max_hours'] = 40
             return existing
 
-        ranking_res = supabase.table('academic_ranking').select('academic_ranking_id').eq('program', 'General').limit(1).execute()
-        ranking = _first(ranking_res.data or [])
+        ranking = None
+        if prog_id:
+            try:
+                ranking_res = supabase.table('academic_ranking').select('academic_ranking_id, max_hours').eq('program_id', prog_id).limit(1).execute()
+                ranking = _first(ranking_res.data or [])
+            except Exception:
+                pass
         if not ranking:
-            ranking_res = supabase.table('academic_ranking').select('academic_ranking_id').limit(1).execute()
-            ranking = _first(ranking_res.data or [])
-        if ranking:
-            ins_payload = {
-                'first_name': 'Professor',
-                'last_name': letter,
-                'department': department or 'General',
-                'academic_ranking_id': ranking.get('academic_ranking_id'),
-            }
-        else:
-            raise RuntimeError('No academic ranking exists for fallback professor.')
+            try:
+                ranking_res = supabase.table('academic_ranking').select('academic_ranking_id, max_hours').limit(1).execute()
+                ranking = _first(ranking_res.data or [])
+            except Exception:
+                ranking = None
+
+        ins_payload = {
+            'first_name': 'Professor',
+            'last_name': letter,
+            'academic_ranking_id': ranking.get('academic_ranking_id') if ranking else None,
+        }
+        if prog_id:
+            ins_payload['program_id'] = prog_id
 
         ins_res = supabase.table('professor').insert(ins_payload).execute()
         if ins_res.data:
@@ -794,6 +822,12 @@ def _ensure_fallback_professor_by_index(index=0, department=None):
             if matching_ins:
                 created = matching_ins[0]
                 created.update(_ranking_constraints(created))
+                created['department'] = department or 'BSIT'
+                created['program_name'] = department or 'BSIT'
+                if not created.get('prof_id'):
+                    created['prof_id'] = fallback_prof.get('prof_id') or (999900 + index)
+                if not created.get('max_hours'):
+                    created['max_hours'] = 40
                 return created
     except Exception as err:
         logging.warning(f"[_ensure_fallback_professor_by_index] Error querying/inserting fallback professor Professor {letter}: {err}")
@@ -814,9 +848,10 @@ def _get_department(program=None):
     3. Queries the program_department table using the Supabase Python SDK.
     4. Returns the matching department_name, or None if not found.
     """
-    user_role = (session.get('role') or '').lower()
-    user_program = program or session.get('program')
-    if not user_program and session.get('user_id'):
+    has_ctx = has_request_context()
+    user_role = (session.get('role') or '').lower() if has_ctx else ''
+    user_program = program or (session.get('program') if has_ctx else None)
+    if not user_program and has_ctx and session.get('user_id'):
         try:
             res = supabase.auth.get_user(session.get('jwt_token'))
             if res and res.user:
@@ -826,6 +861,16 @@ def _get_department(program=None):
                     session['program'] = user_program
         except Exception as err:
             logging.error(f"Error retrieving program for user_id {session.get('user_id')}: {err}")
+        if not user_program:
+            try:
+                u_res = supabase.table('users').select('program_id, program:program_id(program_name)').eq('id', session.get('user_id')).single().execute()
+                if u_res.data:
+                    u_prog = (_rel(u_res.data, 'program') or {}).get('program_name') or u_res.data.get('program')
+                    if u_prog:
+                        user_program = u_prog
+                        session['program'] = user_program
+            except Exception:
+                pass
 
     if not user_program or str(user_program).upper() in ['ALL', 'GLOBAL', 'N/A', 'NONE']:
         if user_role == 'admin':
@@ -1164,14 +1209,9 @@ def _build_preview_context(preview_entries=None):
         # Super Admin sees all courses, Dean and Scheduler see their program's courses
         c_query = supabase.table('course').select('course_id, course_name').order('course_name')
         if not is_super_admin:
-            if user_prog_id:
-                try:
-                    c_query = c_query.eq('program_id', user_prog_id)
-                except Exception:
-                    if program:
-                        c_query = c_query.eq('program', program)
-            elif program:
-                c_query = c_query.eq('program', program)
+            eff_pid = user_prog_id or _find_program_id_by_name(program)
+            if eff_pid:
+                c_query = c_query.eq('program_id', eff_pid)
         courses_res = c_query.execute()
         courses = courses_res.data or []
 
@@ -1187,34 +1227,10 @@ def _build_preview_context(preview_entries=None):
 
         # Professor load assignments
         professor_loads = []
-        pc_res = supabase.table('professor_load').select('professor_load_id:id, course_id, prof_id, professor(prof_id, first_name, last_name), course(course_id, course_name, program)').execute()
+        pc_res = supabase.table('professor_load').select('professor_load_id:id, course_id, prof_id, professor(prof_id, first_name, last_name), course(course_id, course_name, program_id)').execute()
         assignments = pc_res.data or []
         for row in assignments:
             p = _rel(row, 'professor') or {}
-
-            print(f"DEBUG row={row}, pid={pid}")
-            if not p and pid:
-                print(f"DEBUG not p and pid. all_profs={all_profs_res.data}")
-                for ap in (all_profs_res.data or []):
-                    if ap.get('prof_id') == pid:
-                        p = ap
-                        print(f"DEBUG found ap={ap}")
-                        break
-
-            print(f"DEBUG row={row}, pid={pid}")
-            if not p and pid:
-                print(f"DEBUG not p and pid. all_profs={all_profs_res.data}")
-                for ap in (all_profs_res.data or []):
-                    if ap.get('prof_id') == pid:
-                        p = ap
-                        print(f"DEBUG found ap={ap}")
-                        break
-
-            if not p and pid:
-                for ap in (all_profs_res.data or []):
-                    if ap.get('prof_id') == pid:
-                        p = ap
-                        break
             c = _rel(row, 'course') or {}
             prof_name = f"{p.get('first_name','') or ''} {p.get('last_name','') or ''}".strip() or 'Professor A'
             prof_entry = {'id': p.get('prof_id'), 'name': prof_name}
@@ -2431,20 +2447,14 @@ def add_course():
             'ilp_hours': int(float(ilp_hours)) if ilp_hours else 0,
             'year_level': year_level,
             'major': major,
+            'semester': semester_str,
         }
         if program_id:
             course_data['program_id'] = program_id
-        if program:
-            course_data['program'] = program
-        if semester_id:
-            course_data['semester_id'] = semester_id
-        if semester_str:
-            course_data['semester'] = semester_str
 
         try:
             supabase.table('course').insert(course_data).execute()
         except Exception:
-            course_data.pop('program', None)
             course_data.pop('semester', None)
             supabase.table('course').insert(course_data).execute()
 
@@ -2467,27 +2477,27 @@ def show_courses():
     program_filter = request.args.get('program', '').strip()
     _ensure_course_semester_column()
 
-    try:
-        query = supabase.table('course').select('*, semester:semester_id(id, school_year, term)')
-        if is_super_admin:
-            if program_filter and program_filter.lower() != 'all':
-                if program_filter.isdigit():
-                    query = query.eq('program_id', int(program_filter))
-                else:
-                    query = query.eq('program', program_filter)
-        else:
-            if user_prog_id:
-                query = query.eq('program_id', user_prog_id)
-            elif user_program:
-                query = query.eq('program', user_program)
+    eff_prog_id = None
+    if program_filter and program_filter.lower() != 'all':
+        eff_prog_id = int(program_filter) if program_filter.isdigit() else _find_program_id_by_name(program_filter)
+    elif not is_super_admin:
+        eff_prog_id = user_prog_id or _find_program_id_by_name(user_program)
 
+    try:
+        query = supabase.table('course').select('*, program:program_id(id, program_name)')
+        if eff_prog_id:
+            query = query.eq('program_id', eff_prog_id)
         all_courses = query.execute().data or []
     except Exception:
         query = supabase.table('course').select('*')
-        if not is_super_admin:
-            if user_prog_id:
-                query = query.or_(f"program_id.eq.{user_prog_id},program.eq.{user_program}")
+        if eff_prog_id:
+            query = query.eq('program_id', eff_prog_id)
         all_courses = query.execute().data or []
+
+    for c in all_courses:
+        p_rel = _rel(c, 'program') or {}
+        c['program_name'] = p_rel.get('program_name') or user_program or ''
+        c['program'] = c['program_name']
 
     all_courses.sort(key=lambda c: (str(c.get('year_level') or ''), str(c.get('major') or ''), str(c.get('course_name') or '')))
 
@@ -2520,27 +2530,39 @@ def search_courses():
     user_program = session.get('program', '')
     user_role = (session.get('role') or 'scheduler').lower()
     program_filter = request.args.get('program', '').strip()
+    user_prog_id = _get_user_program_id()
 
     if not query_str:
         return jsonify({'courses': [], 'exact_match': False})
 
+    eff_prog_id = None
+    if user_role in ('super_admin', 'admin'):
+        if program_filter and program_filter.lower() != 'all':
+            eff_prog_id = int(program_filter) if program_filter.isdigit() else _find_program_id_by_name(program_filter)
+    else:
+        eff_prog_id = user_prog_id or _find_program_id_by_name(user_program)
+
     try:
-        cols = 'course_id, course_name, program, year_level, major, lecture_hours, lab_hours, ilp_hours, units'
-        query = supabase.table('course').select(cols)
+        cols = 'course_id, course_name, program_id, program:program_id(id, program_name), year_level, major, lecture_hours, lab_hours, ilp_hours, units'
+        try:
+            query = supabase.table('course').select(cols)
+        except Exception:
+            cols = 'course_id, course_name, program_id, year_level, major, lecture_hours, lab_hours, ilp_hours, units'
+            query = supabase.table('course').select(cols)
         exact_query = supabase.table('course').select('course_id')
 
-        if user_role in ('super_admin', 'admin'):
-            if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
-                exact_query = exact_query.eq('program', program_filter)
-        else:
-            if user_program:
-                query = query.eq('program', user_program)
-                exact_query = exact_query.eq('program', user_program)
+        if eff_prog_id:
+            query = query.eq('program_id', eff_prog_id)
+            exact_query = exact_query.eq('program_id', eff_prog_id)
 
         matching_courses = query.ilike('course_name', f'%{query_str}%').order('course_name').limit(10).execute().data or []
         exact = exact_query.ilike('course_name', query_str).limit(1).execute()
         exact_match_row = _first(exact.data or [])
+
+        for c in matching_courses:
+            p_rel = _rel(c, 'program') or {}
+            c['program_name'] = p_rel.get('program_name') or user_program or ''
+            c['program'] = c['program_name']
 
         return jsonify({
             'courses': matching_courses,
@@ -2555,6 +2577,7 @@ def search_courses():
 def api_courses():
     user_role = (session.get('role') or 'scheduler').lower()
     user_program = session.get('program', '')
+    user_prog_id = _get_user_program_id()
     program_filter = request.args.get('program', '').strip()
     year_level = request.args.get('year_level', '').strip()
     semester = request.args.get('semester', '').strip()
@@ -2562,15 +2585,21 @@ def api_courses():
 
     _ensure_course_semester_column()
 
-    try:
-        query = supabase.table('course').select('course_id, course_name, program, year_level, major, semester, units, lecture_hours, lab_hours, ilp_hours')
+    eff_prog_id = None
+    if user_role in ('super_admin', 'admin'):
+        if program_filter and program_filter.lower() != 'all':
+            eff_prog_id = int(program_filter) if program_filter.isdigit() else _find_program_id_by_name(program_filter)
+    else:
+        eff_prog_id = user_prog_id or _find_program_id_by_name(user_program)
 
-        if user_role in ('super_admin', 'admin'):
-            if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
-        else:
-            if user_program:
-                query = query.eq('program', user_program)
+    try:
+        try:
+            query = supabase.table('course').select('course_id, course_name, program_id, program:program_id(id, program_name), year_level, major, semester, units, lecture_hours, lab_hours, ilp_hours')
+        except Exception:
+            query = supabase.table('course').select('course_id, course_name, program_id, year_level, major, semester, units, lecture_hours, lab_hours, ilp_hours')
+
+        if eff_prog_id:
+            query = query.eq('program_id', eff_prog_id)
 
         if year_level and year_level.lower() != 'all':
             query = query.eq('year_level', year_level)
@@ -2582,6 +2611,10 @@ def api_courses():
             query = query.eq('major', major)
 
         courses = query.order('course_name').execute().data or []
+        for c in courses:
+            p_rel = _rel(c, 'program') or {}
+            c['program_name'] = p_rel.get('program_name') or user_program or ''
+            c['program'] = c['program_name']
         return jsonify({'courses': courses})
     except Exception as err:
         return jsonify({'error': str(err), 'courses': []}), 500
@@ -2659,12 +2692,14 @@ def edit_course(course_id):
             return redirect(url_for('show_courses'))
 
         year_level = request.form.get('year_level', '')
-        program_id = _get_user_program_id()
-        program = session.get('program', '')
+        raw_prog = request.form.get('program', '').strip()
+        program_id = None
+        if raw_prog:
+            program_id = int(raw_prog) if raw_prog.isdigit() else _find_program_id_by_name(raw_prog)
+        if not program_id:
+            program_id = _get_user_program_id()
 
-        raw_sem_id = request.form.get('semester_id')
         raw_semester = request.form.get('semester', '').strip()
-        semester_id = int(raw_sem_id) if raw_sem_id and raw_sem_id.isdigit() else None
         major = request.form.get('major', '').strip() or None
 
         update_data = {
@@ -2678,17 +2713,12 @@ def edit_course(course_id):
         }
         if program_id:
             update_data['program_id'] = program_id
-        if program:
-            update_data['program'] = program
-        if semester_id:
-            update_data['semester_id'] = semester_id
         if raw_semester:
             update_data['semester'] = raw_semester
 
         try:
             supabase.table('course').update(update_data).eq('course_id', course_id).execute()
         except Exception:
-            update_data.pop('program', None)
             update_data.pop('semester', None)
             supabase.table('course').update(update_data).eq('course_id', course_id).execute()
 
@@ -2735,10 +2765,10 @@ def add_professor():
 
         if academic_ranking_id:
             try:
-                r_check = supabase.table('academic_ranking').select('academic_ranking_id, program, program_id, name').eq('academic_ranking_id', academic_ranking_id).execute()
+                r_check = supabase.table('academic_ranking').select('academic_ranking_id, program_id, program:program_id(program_name), name').eq('academic_ranking_id', academic_ranking_id).execute()
                 r_row = _first(r_check.data or [])
                 if r_row:
-                    row_prog = str(r_row.get('program') or '').strip().upper()
+                    row_prog = str((_rel(r_row, 'program') or {}).get('program_name') or r_row.get('program') or '').strip().upper()
                     row_prog_id = r_row.get('program_id')
                     mismatch = False
                     if user_role not in ('admin', 'super_admin'):
@@ -2772,14 +2802,8 @@ def add_professor():
         }
         if program_id:
             payload['program_id'] = program_id
-        if department:
-            payload['department'] = department
 
-        try:
-            insert_res = supabase.table('professor').insert(payload).execute()
-        except Exception as insert_err:
-            payload.pop('department', None)
-            insert_res = supabase.table('professor').insert(payload).execute()
+        insert_res = supabase.table('professor').insert(payload).execute()
 
         new_id = _first(insert_res.data or [])
         new_id = new_id.get('prof_id') if isinstance(new_id, dict) else None
@@ -2838,10 +2862,10 @@ def edit_professor(professor_id):
         program_id = _get_user_program_id()
         if academic_ranking_id:
             try:
-                r_check = supabase.table('academic_ranking').select('academic_ranking_id, program, program_id, name').eq('academic_ranking_id', academic_ranking_id).execute()
+                r_check = supabase.table('academic_ranking').select('academic_ranking_id, program_id, program:program_id(program_name), name').eq('academic_ranking_id', academic_ranking_id).execute()
                 r_row = _first(r_check.data or [])
                 if r_row:
-                    row_prog = str(r_row.get('program') or '').strip().upper()
+                    row_prog = str((_rel(r_row, 'program') or {}).get('program_name') or r_row.get('program') or '').strip().upper()
                     row_prog_id = r_row.get('program_id')
                     mismatch = False
                     if user_role not in ('admin', 'super_admin'):
@@ -2862,11 +2886,10 @@ def edit_professor(professor_id):
             'academic_ranking_id': academic_ranking_id,
             'time_designation': time_designation,
         }
-        try:
-            supabase.table('professor').update(update_payload).eq('prof_id', professor_id).execute()
-        except Exception:
-            update_payload.pop('department', None)
-            supabase.table('professor').update(update_payload).eq('prof_id', professor_id).execute()
+        if program_id:
+            update_payload['program_id'] = program_id
+
+        supabase.table('professor').update(update_payload).eq('prof_id', professor_id).execute()
 
         log_activity('edit', 'professor', f'{first_name} {last_name}')
         flash('Edited successfully', 'success')
@@ -2901,12 +2924,16 @@ def professors():
     is_super_admin = user_role in ('super_admin', 'admin')
 
     try:
-        query = supabase.table('professor').select('*')
+        query = supabase.table('professor').select('*, program:program_id(id, program_name)')
         if not is_super_admin and user_prog_id:
             query = query.eq('program_id', user_prog_id)
         all_professors = query.execute().data or []
     except Exception:
         all_professors = (supabase.table('professor').select('*').execute().data) or []
+
+    for p in all_professors:
+        p_rel = _rel(p, 'program') or {}
+        p['department'] = p['program_name'] = p_rel.get('program_name') or session.get('program', '')
 
     all_professors.sort(key=lambda p: (str(p.get('last_name') or ''), str(p.get('first_name') or '')))
 
@@ -2971,19 +2998,30 @@ def academic_ranking():
     program_filter = request.args.get('program', '').strip()
 
     try:
-        query = supabase.table('academic_ranking').select('*')
+        query = supabase.table('academic_ranking').select('*, program:program_id(id, program_name)')
         if not is_super_admin and user_prog_id:
-            try:
-                query = query.eq('program_id', user_prog_id)
-            except Exception:
-                query = query.eq('program', user_program)
+            query = query.eq('program_id', user_prog_id)
         elif is_super_admin and program_filter and program_filter.lower() != 'all':
-            query = query.eq('program', program_filter)
+            p_id = _find_program_id_by_name(program_filter)
+            if p_id:
+                query = query.eq('program_id', p_id)
         rankings = query.execute().data or []
-        rankings.sort(key=lambda r: str(r.get('name') or ''))
     except Exception as err:
-        logging.warning(f"Error querying academic_ranking: {err}")
-        rankings = []
+        try:
+            query = supabase.table('academic_ranking').select('*')
+            if not is_super_admin and user_prog_id:
+                query = query.eq('program_id', user_prog_id)
+            rankings = query.execute().data or []
+        except Exception:
+            logging.warning(f"Error querying academic_ranking: {err}")
+            rankings = []
+
+    for r in rankings:
+        r_prog = (_rel(r, 'program') or {}).get('program_name') or r.get('program') or user_program or 'General'
+        r['program_name'] = r_prog
+        r['program'] = r_prog
+
+    rankings.sort(key=lambda r: str(r.get('name') or ''))
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
         return jsonify({'rankings': rankings})
@@ -3029,30 +3067,29 @@ def add_academic_ranking():
         return redirect(url_for('academic_ranking'))
 
     try:
+        eff_pid = user_prog_id or _find_program_id_by_name(program)
         payload = {
             'name': name,
-            'program': program,
             'min_units': min_units,
             'max_units': max_units,
             'min_hours': min_hours,
             'max_hours': max_hours,
         }
-        if user_prog_id:
-            payload['program_id'] = user_prog_id
+        if eff_pid:
+            payload['program_id'] = eff_pid
 
         try:
             ins_res = supabase.table('academic_ranking').insert(payload).execute()
-        except Exception as ins_err:
-            if 'program_id' in str(ins_err) or '42703' in str(ins_err):
-                payload.pop('program_id', None)
-                ins_res = supabase.table('academic_ranking').insert(payload).execute()
-            else:
-                raise
+        except Exception:
+            payload['program'] = program
+            ins_res = supabase.table('academic_ranking').insert(payload).execute()
 
         new_ranking = _first(ins_res.data or []) or {
             'name': name,
             'program': program
         }
+        if isinstance(new_ranking, dict):
+            new_ranking.setdefault('program', program)
 
         log_activity('create', 'academic_ranking', f'{name} ({program})')
         flash('Academic ranking added successfully.', 'success')
@@ -3173,18 +3210,28 @@ def api_academic_rankings():
     user_program = session.get('program', '').strip()
     prog_arg = request.args.get('program', '').strip()
 
-    query = supabase.table('academic_ranking').select('*')
     target_prog = prog_arg or user_program
-    if user_role not in ('super_admin', 'admin') or target_prog:
-        if target_prog:
-            query = query.eq('program', target_prog)
+    target_pid = _find_program_id_by_name(target_prog) or _get_user_program_id()
+    query = supabase.table('academic_ranking').select('*, program:program_id(id, program_name)')
+    if user_role not in ('super_admin', 'admin') or target_pid:
+        if target_pid:
+            query = query.eq('program_id', target_pid)
 
     try:
         data = query.execute().data or []
-        data.sort(key=lambda r: str(r.get('name') or ''))
-        return jsonify({'academic_rankings': data})
-    except Exception as err:
-        return jsonify({'error': str(err), 'academic_rankings': []}), 500
+    except Exception:
+        query = supabase.table('academic_ranking').select('*')
+        if target_pid:
+            query = query.eq('program_id', target_pid)
+        data = query.execute().data or []
+
+    for r in data:
+        r_prog = (_rel(r, 'program') or {}).get('program_name') or r.get('program') or target_prog or 'General'
+        r['program_name'] = r_prog
+        r['program'] = r_prog
+
+    data.sort(key=lambda r: str(r.get('name') or ''))
+    return jsonify({'academic_rankings': data})
 #-------------------------------------------------------show_rooms----------------------------------------------------------------------------------------------
 @app.route('/rooms')
 @dean_required
@@ -3192,17 +3239,35 @@ def rooms():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
     is_super_admin = user_role in ('super_admin', 'admin')
+    selected_program = request.args.get('program', '').strip()
 
     try:
-        query = supabase.table('room').select('*')
+        query = supabase.table('room').select('*, program:program_id(id, program_name)')
         if not is_super_admin and user_prog_id:
             query = query.eq('program_id', user_prog_id)
+        elif is_super_admin and selected_program and selected_program.lower() != 'all':
+            p_id = _find_program_id_by_name(selected_program)
+            if p_id:
+                query = query.eq('program_id', p_id)
         all_rooms = query.execute().data or []
     except Exception:
         all_rooms = (supabase.table('room').select('*').execute().data) or []
 
+    programs = _get_programs()
+    prog_map = {p['id']: p['program_name'] for p in programs}
+    for r in all_rooms:
+        r['program_name'] = (_rel(r, 'program') or {}).get('program_name') or prog_map.get(r.get('program_id')) or session.get('program', '')
+
     all_rooms.sort(key=lambda r: str(r.get('room_name') or ''))
-    return render_template('room.html', active_page='rooms', rooms=all_rooms)
+    return render_template(
+        'room.html',
+        active_page='rooms',
+        rooms=all_rooms,
+        programs=programs,
+        user_program_id=user_prog_id,
+        is_super_admin=is_super_admin,
+        selected_program=selected_program
+    )
 
 #-------------------------------------------------------search_rooms----------------------------------------------------------------------------------------------
 @app.route('/search_rooms', methods=['GET'])
@@ -3217,8 +3282,12 @@ def search_rooms():
         return jsonify({'rooms': [], 'exact_match': False})
 
     try:
-        cols = 'room_id, room_name, room_type'
-        query = supabase.table('room').select(cols)
+        cols = 'room_id, room_name, room_type, program_id, program:program_id(id, program_name)'
+        try:
+            query = supabase.table('room').select(cols)
+        except Exception:
+            cols = 'room_id, room_name, room_type, program_id'
+            query = supabase.table('room').select(cols)
         exact_query = supabase.table('room').select('room_id')
 
         if not is_super_admin and user_prog_id:
@@ -3228,6 +3297,13 @@ def search_rooms():
         matching_rooms = query.ilike('room_name', f'%{query_str}%').order('room_name').limit(10).execute().data or []
         exact = exact_query.ilike('room_name', query_str).limit(1).execute()
         exact_match_row = _first(exact.data or [])
+
+        programs = _get_programs()
+        prog_map = {p['id']: p['program_name'] for p in programs}
+        for r in matching_rooms:
+            prog_info = _rel(r, 'program') or {}
+            r['program_name'] = prog_info.get('program_name') or prog_map.get(r.get('program_id')) or session.get('program', '')
+            r.pop('department', None)
 
         return jsonify({
             'rooms': matching_rooms,
@@ -3241,9 +3317,16 @@ def search_rooms():
 def add_room():
     try:
         room_name = request.form['room_name'].strip()
-        room_type = request.form.get('room_type', 'Lecture')
-        program_id = _get_user_program_id()
-        department = _get_department()
+        room_type = request.form.get('room_type', 'Lecture Room')
+        raw_prog = request.form.get('program_id')
+        program_id = None
+        if raw_prog and str(raw_prog).strip():
+            try:
+                program_id = int(raw_prog)
+            except (ValueError, TypeError):
+                program_id = _find_program_id_by_name(str(raw_prog).strip())
+        if not program_id:
+            program_id = _get_user_program_id()
 
         payload = {
             'room_name': room_name,
@@ -3251,14 +3334,8 @@ def add_room():
         }
         if program_id:
             payload['program_id'] = program_id
-        if department:
-            payload['department'] = department
 
-        try:
-            supabase.table('room').insert(payload).execute()
-        except Exception:
-            payload.pop('department', None)
-            supabase.table('room').insert(payload).execute()
+        supabase.table('room').insert(payload).execute()
 
         log_activity('create', 'room', room_name)
         flash('Created successfully', 'success')
@@ -3273,12 +3350,23 @@ def add_room():
 def edit_room(room_id):
     try:
         room_name = request.form['room_name'].strip()
-        room_type = request.form.get('room_type', 'Lecture')
+        room_type = request.form.get('room_type', 'Lecture Room')
+        raw_prog = request.form.get('program_id')
+        program_id = None
+        if raw_prog and str(raw_prog).strip():
+            try:
+                program_id = int(raw_prog)
+            except (ValueError, TypeError):
+                program_id = _find_program_id_by_name(str(raw_prog).strip())
 
-        supabase.table('room').update({
+        update_payload = {
             'room_name': room_name,
             'room_type': room_type,
-        }).eq('room_id', room_id).execute()
+        }
+        if program_id is not None:
+            update_payload['program_id'] = program_id
+
+        supabase.table('room').update(update_payload).eq('room_id', room_id).execute()
 
         log_activity('edit', 'room', room_name)
         flash('Edited successfully', 'success')
@@ -3314,8 +3402,8 @@ def professor_load():
     department = _get_department()
     program = session.get('program', '')
 
-    cols_pc_full = 'professor_load_id:id, prof_id, course_id, sections, course(course_name, program, lecture_hours, lab_hours, ilp_hours, units, program_id), professor(first_name, last_name, department, specialization, program_id, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours))'
-    cols_pc_fallback = 'professor_load_id:id, prof_id, course_id, sections, course(course_name, program, lecture_hours, lab_hours, ilp_hours, units), professor(first_name, last_name, department, specialization)'
+    cols_pc_full = 'professor_load_id:id, prof_id, course_id, sections, course(course_name, program_id, program:program_id(program_name), lecture_hours, lab_hours, ilp_hours, units), professor(first_name, last_name, specialization, program_id, program:program_id(program_name), academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours))'
+    cols_pc_fallback = 'professor_load_id:id, prof_id, course_id, sections, course(course_name, program_id, program:program_id(program_name), lecture_hours, lab_hours, ilp_hours, units), professor(first_name, last_name, specialization, program_id)'
 
     def _fetch_pc_rows(cols):
         q = supabase.table('professor_load').select(cols)
@@ -3335,6 +3423,9 @@ def professor_load():
     for row in pc_rows:
         c = _rel(row, 'course') or {}
         p = _rel(row, 'professor') or {}
+        c['program_name'] = (_rel(c, 'program') or {}).get('program_name') or ''
+        c['program'] = c['program_name']
+        p['department'] = p['program_name'] = (_rel(p, 'program') or {}).get('program_name') or department or ''
         
         # Filter by program_id for Dean
         if not is_super_admin and user_prog_id:
@@ -3381,7 +3472,7 @@ def professor_load():
     professor_loads.sort(key=lambda x: (str(x.get('prof_id') or ''), str(x.get('course_id') or '')))
 
     def _fetch_professors():
-        cols_p = 'prof_id, first_name, last_name, specialization, program_id, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)'
+        cols_p = 'prof_id, first_name, last_name, specialization, program_id, program:program_id(program_name), academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)'
         try:
             q = supabase.table('professor').select(cols_p)
             if not is_super_admin and user_prog_id:
@@ -3389,7 +3480,7 @@ def professor_load():
             return q.execute().data or []
         except Exception:
             try:
-                q = supabase.table('professor').select('prof_id, first_name, last_name, specialization')
+                q = supabase.table('professor').select('prof_id, first_name, last_name, specialization, program_id')
                 if not is_super_admin and user_prog_id:
                     q = q.eq('program_id', user_prog_id)
                 return q.execute().data or []
@@ -3399,9 +3490,11 @@ def professor_load():
     professors = _fetch_professors()
     for professor in professors:
         professor.update(_ranking_constraints(professor))
+        p_rel = _rel(professor, 'program') or {}
+        professor['department'] = professor['program_name'] = p_rel.get('program_name') or department or ''
     professors.sort(key=lambda p: (str(p.get('last_name') or ''), str(p.get('first_name') or '')))
 
-    cols_c = 'course_id, course_name, program_id, year_level, lecture_hours, lab_hours, ilp_hours, units, semester_id'
+    cols_c = 'course_id, course_name, program_id, program:program_id(program_name), year_level, lecture_hours, lab_hours, ilp_hours, units, semester'
     try:
         course_query = supabase.table('course').select(cols_c)
         if not is_super_admin and user_prog_id:
@@ -3415,6 +3508,10 @@ def professor_load():
             courses = course_query.execute().data or []
         except Exception:
             courses = []
+    for c in courses:
+        p_rel = _rel(c, 'program') or {}
+        c['program_name'] = p_rel.get('program_name') or program or ''
+        c['program'] = c['program_name']
     courses.sort(key=lambda c: str(c.get('course_name') or ''))
 
     return render_template(
@@ -3445,7 +3542,7 @@ def add_professor_load():
         total_hours = 0.0
         total_units = 0.0
 
-        c_res = supabase.table('course').select('course_id, course_name, year_level, semester_id, lecture_hours, lab_hours, ilp_hours, units').in_('course_id', [int(cid) for cid in course_ids]).execute()
+        c_res = supabase.table('course').select('course_id, course_name, year_level, semester, lecture_hours, lab_hours, ilp_hours, units').in_('course_id', [int(cid) for cid in course_ids]).execute()
         course_map = {str(c['course_id']): c for c in (c_res.data or [])}
 
         course_sections = {}
@@ -3565,12 +3662,15 @@ def update_prof_with_courses(prof_id):
         specialization = request.form.get('specialization', '').strip()
         course_ids = request.form.getlist('course_ids')
 
+        prog_id = _find_program_id_by_name(department) or _get_user_program_id()
         update_data = {
             'first_name': first_name,
             'last_name': last_name,
-            'department': department,
             'specialization': specialization,
         }
+        if prog_id:
+            update_data['program_id'] = prog_id
+
         try:
             supabase.table('professor').update(update_data).eq('prof_id', prof_id).execute()
         except Exception as err:
@@ -3591,7 +3691,7 @@ def update_prof_with_courses(prof_id):
         course_sections = {}
 
         if course_ids:
-            c_res = supabase.table('course').select('course_id, course_name, year_level, semester_id, lecture_hours, lab_hours, ilp_hours, units').in_('course_id', [int(cid) for cid in course_ids]).execute()
+            c_res = supabase.table('course').select('course_id, course_name, year_level, semester, lecture_hours, lab_hours, ilp_hours, units').in_('course_id', [int(cid) for cid in course_ids]).execute()
             course_map = {str(c['course_id']): c for c in (c_res.data or [])}
 
             for cid in course_ids:
@@ -5132,11 +5232,20 @@ def view_professor_schedule(professor_id):
     program = session.get('program', '')
     user_role = (session.get('role') or 'scheduler').lower()
 
-    prof_res = supabase.table('professor').select('prof_id, first_name, last_name, department, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)').eq('prof_id', professor_id).execute()
+    try:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id, program:program_id(id, program_name), academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)').eq('prof_id', professor_id).execute()
+    except Exception:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)').eq('prof_id', professor_id).execute()
     professor = _first(prof_res.data or [])
 
     if not professor:
         return redirect(url_for('professor_schedule'))
+
+    prog_obj = _rel(professor, 'program') or {}
+    prog_name = prog_obj.get('program_name') or ''
+    professor['program_name'] = prog_name
+    professor['department'] = prog_name
+    professor['program'] = prog_name
 
     professor_name = f"{professor['first_name']} {professor['last_name']}"
     ranking_limits = _ranking_constraints(professor)
@@ -5302,12 +5411,21 @@ def export_professor_schedule(professor_id):
     program = session.get('program', '')
     user_role = (session.get('role') or 'scheduler').lower()
 
-    prof_res = supabase.table('professor').select('prof_id, first_name, last_name, department, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)').eq('prof_id', professor_id).execute()
+    try:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id, program:program_id(id, program_name), academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)').eq('prof_id', professor_id).execute()
+    except Exception:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)').eq('prof_id', professor_id).execute()
     professor = _first(prof_res.data or [])
 
     if not professor:
         flash("Professor not found", "error")
         return redirect(url_for('professor_schedule'))
+
+    prog_obj = _rel(professor, 'program') or {}
+    prog_name = prog_obj.get('program_name') or ''
+    professor['program_name'] = prog_name
+    professor['department'] = prog_name
+    professor['program'] = prog_name
 
     professor_name = f"{professor.get('first_name', '')} {professor.get('last_name', '')}".strip() or 'Professor'
 
@@ -5465,10 +5583,19 @@ def export_professor_schedule(professor_id):
 @login_required
 def api_professor_availability(professor_id):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
-    prof_res = supabase.table('professor').select('prof_id, first_name, last_name, department').eq('prof_id', professor_id).execute()
+    try:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id, program:program_id(id, program_name)').eq('prof_id', professor_id).execute()
+    except Exception:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name').eq('prof_id', professor_id).execute()
     professor = _first(prof_res.data or [])
     if not professor:
         return jsonify({'success': False, 'error': 'Professor not found.'}), 404
+
+    prog_obj = _rel(professor, 'program') or {}
+    prog_name = prog_obj.get('program_name') or ''
+    professor['program_name'] = prog_name
+    professor['department'] = prog_name
+    professor['program'] = prog_name
 
     prof_name = f"{professor.get('first_name','')} {professor.get('last_name','')}".strip()
     pc_res = supabase.table('professor_load').select('professor_load_id:id, course_id, course(course_name)').eq('prof_id', professor_id).execute()
@@ -5552,10 +5679,19 @@ def api_professor_availability(professor_id):
 @login_required
 def api_professor_workload(professor_id):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
-    prof_res = supabase.table('professor').select('prof_id, first_name, last_name, department').eq('prof_id', professor_id).execute()
+    try:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id, program:program_id(id, program_name)').eq('prof_id', professor_id).execute()
+    except Exception:
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name').eq('prof_id', professor_id).execute()
     professor = _first(prof_res.data or [])
     if not professor:
         return jsonify({'error': 'Professor not found.'}), 404
+
+    prog_obj = _rel(professor, 'program') or {}
+    prog_name = prog_obj.get('program_name') or ''
+    professor['program_name'] = prog_name
+    professor['department'] = prog_name
+    professor['program'] = prog_name
 
     prof_name = f"{professor.get('first_name','')} {professor.get('last_name','')}".strip()
     ranking_limits = _ranking_constraints(professor)
@@ -6359,27 +6495,27 @@ def view_schedule(section_name):
 
     availability = _calculate_section_availability(entries, timeslots=timeslots, section=section)
 
-    dept = _get_department()
-    r_query = supabase.table('room').select('room_id, room_name, room_type')
-    if dept:
-        rooms = (r_query.eq('department', dept).execute().data) or []
+    user_prog_id = _get_user_program_id()
+    r_query = supabase.table('room').select('room_id, room_name, room_type, program_id')
+    if user_prog_id:
+        rooms = (r_query.eq('program_id', user_prog_id).execute().data) or []
         if not rooms:
-            rooms = (supabase.table('room').select('room_id, room_name, room_type').execute().data) or []
+            rooms = (supabase.table('room').select('room_id, room_name, room_type, program_id').execute().data) or []
     else:
         rooms = (r_query.execute().data) or []
 
     pc_query = supabase.table('professor_load').select(
         'professor_load_id:id, course_id, prof_id, '
-        'course(course_id, course_name, program), '
-        'professor(prof_id, first_name, last_name, department)'
+        'course(course_id, course_name, program_id, program:program_id(program_name)), '
+        'professor(prof_id, first_name, last_name, program_id, program:program_id(program_name))'
     )
-    if dept:
-        pc_rows = (pc_query.eq('professor.department', dept).execute().data) or []
+    if user_prog_id:
+        pc_rows = (pc_query.eq('professor.program_id', user_prog_id).execute().data) or []
         if not pc_rows:
             pc_rows = (supabase.table('professor_load').select(
                 'professor_load_id:id, course_id, prof_id, '
-                'course(course_id, course_name, program), '
-                'professor(prof_id, first_name, last_name, department)'
+                'course(course_id, course_name, program_id, program:program_id(program_name)), '
+                'professor(prof_id, first_name, last_name, program_id, program:program_id(program_name))'
             ).execute().data) or []
     else:
         pc_rows = (pc_query.execute().data) or []
@@ -6870,8 +7006,9 @@ def edit_schedule_entry(schedule_id):
             target_course_id = existing_course_id
             if course_name:
                 c_query = supabase.table('course').select('course_id').eq('course_name', course_name)
-                if program:
-                    c_res = c_query.eq('program', program).limit(1).execute()
+                eff_pid = _find_program_id_by_name(program) or user_prog_id
+                if eff_pid:
+                    c_res = c_query.eq('program_id', eff_pid).limit(1).execute()
                     c_row = _first(c_res.data or [])
                     if not c_row:
                         c_res = supabase.table('course').select('course_id').eq('course_name', course_name).limit(1).execute()
@@ -6889,10 +7026,12 @@ def edit_schedule_entry(schedule_id):
                 elif professor_name.upper() in ('TBA', 'PROFESSOR A'):
                     target_prof_id = None
                 else:
-                    dept = _get_department()
-                    p_query = supabase.table('professor').select('prof_id, first_name, last_name')
-                    if dept:
-                        p_res = p_query.eq('department', dept).execute()
+                    eff_pid = _find_program_id_by_name(program) or user_prog_id
+                    p_query = supabase.table('professor').select('prof_id, first_name, last_name, program_id')
+                    if eff_pid:
+                        p_res = p_query.eq('program_id', eff_pid).execute()
+                        if not (p_res.data or []):
+                            p_res = supabase.table('professor').select('prof_id, first_name, last_name').execute()
                     else:
                         p_res = p_query.execute()
                     for p in (p_res.data or []):
@@ -6929,10 +7068,10 @@ def edit_schedule_entry(schedule_id):
             if room_name.upper() in ('TBA', 'NONE', 'N/A'):
                 target_room_id = None
             else:
-                dept = _get_department()
-                r_query = supabase.table('room').select('room_id, room_name, room_type')
-                if dept:
-                    r_res = r_query.eq('room_name', room_name).eq('department', dept).limit(1).execute()
+                eff_pid = _find_program_id_by_name(program) or user_prog_id
+                r_query = supabase.table('room').select('room_id, room_name, room_type, program_id')
+                if eff_pid:
+                    r_res = r_query.eq('room_name', room_name).eq('program_id', eff_pid).limit(1).execute()
                     r_row = _first(r_res.data or [])
                     if not r_row:
                         r_res = supabase.table('room').select('room_id, room_name, room_type').eq('room_name', room_name).limit(1).execute()
@@ -7299,7 +7438,11 @@ def manage_irregular_student_schedule(student_id):
     raw_yls = [y.strip() for y in (student.get('year_level') or '').split(',') if y.strip()]
 
     # Available courses for the student's program, filtered in Python by semester/year level
-    program_courses = (supabase.table('course').select('*').eq('program', student['program']).execute().data) or []
+    stud_prog_id = _find_program_id_by_name(student.get('program'))
+    if stud_prog_id:
+        program_courses = (supabase.table('course').select('*, program:program_id(id, program_name)').eq('program_id', stud_prog_id).execute().data) or []
+    else:
+        program_courses = (supabase.table('course').select('*, program:program_id(id, program_name)').execute().data) or []
     available_courses = []
     for c in program_courses:
         if semester_filter:
@@ -7335,8 +7478,8 @@ def manage_irregular_student_schedule(student_id):
     sched_query = supabase.table('schedule').select(
         'schedule_id, section, day, class_start, class_end, room_id, professor_load_id, session_type, '
         'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
-        'course(course_name), room(room_name), professor(first_name, last_name)'
-    ).eq('program_id', _find_program_id_by_name(student.get('program')) or -1).eq('archive', False)
+        'room(room_name)'
+    ).eq('program_id', stud_prog_id or -1).eq('archive', False)
     if semester_filter:
         sched_query = sched_query.eq('semester', semester_filter)
     sched_rows = sched_query.execute().data or []
@@ -7777,16 +7920,26 @@ def generate_schedule():
             return redirect(url_for('generate_schedule'))
 
         # Fetch curriculum for all four year levels for this semester
-        query = supabase.table('course').select('*').eq('semester', standard_semester)
-        if is_viewer:
-            query = query.eq('program', program)
-        elif not is_admin and program:
-            query = query.eq('program', program)
+        query = supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester)
+        if user_prog_id:
+            query = query.eq('program_id', user_prog_id)
+        elif program:
+            resolved_pid = _find_program_id_by_name(program)
+            if resolved_pid:
+                query = query.eq('program_id', resolved_pid)
 
         all_courses = query.order('year_level').order('course_name').execute().data or []
         if not all_courses:
-            all_c = (supabase.table('course').select('*').execute().data) or []
-            all_courses = [c for c in all_c if str(c.get('semester') or '').strip().lower() == standard_semester.lower()]
+            all_c = (supabase.table('course').select('*, program:program_id(id, program_name)').execute().data) or []
+            if user_prog_id:
+                all_courses = [c for c in all_c if str(c.get('semester') or '').strip().lower() == standard_semester.lower() and c.get('program_id') == user_prog_id]
+            else:
+                all_courses = [c for c in all_c if str(c.get('semester') or '').strip().lower() == standard_semester.lower()]
+
+        for c in all_courses:
+            p_rel = _rel(c, 'program') or {}
+            c['program_name'] = p_rel.get('program_name') or program or ''
+            c['program'] = c['program_name']
 
         if not all_courses:
             flash(f"No courses found for {standard_semester}.", 'warning')
@@ -7849,12 +8002,12 @@ def generate_schedule():
 
         # Fetch professor_load mappings
         try:
-            pc_res = supabase.table('professor_load').select('professor_load_id:id, course_id, prof_id, sections, professor(first_name, last_name, department, time_designation, academic_ranking_id, academic_ranking(max_hours))').execute()
-            all_profs_res = supabase.table('professor').select('prof_id, first_name, last_name, department, time_designation, academic_ranking_id, academic_ranking(max_hours)').execute()
+            pc_res = supabase.table('professor_load').select('professor_load_id:id, course_id, prof_id, sections, professor(first_name, last_name, program_id, program:program_id(id, program_name), time_designation, academic_ranking_id, academic_ranking(max_hours))').execute()
+            all_profs_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id, program:program_id(id, program_name), time_designation, academic_ranking_id, academic_ranking(max_hours)').execute()
         except Exception:
             try:
-                pc_res = supabase.table('professor_load').select('professor_load_id:id, course_id, prof_id, sections, professor(first_name, last_name, department, academic_ranking_id, academic_ranking(max_hours))').execute()
-                all_profs_res = supabase.table('professor').select('prof_id, first_name, last_name, department, academic_ranking_id, academic_ranking(max_hours)').execute()
+                pc_res = supabase.table('professor_load').select('professor_load_id:id, course_id, prof_id, sections, professor(first_name, last_name, program_id, academic_ranking_id, academic_ranking(max_hours))').execute()
+                all_profs_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id, academic_ranking_id, academic_ranking(max_hours)').execute()
             except Exception:
                 pc_res = supabase.table('professor_load').select('*').execute()
                 all_profs_res = supabase.table('professor').select('*').execute()
@@ -7875,11 +8028,9 @@ def generate_schedule():
                         p = ap
                         break
             if p:
-                # Use sections/quota from professor_load; default to 999 if not set (meaning unlimited)
                 sec_val = int(row.get('sections') or 0)
                 if sec_val == 0:
                     sec_val = 999
-                print(f"DEBUG appending to professors_by_course: cid={cid}")
                 professors_by_course.setdefault(cid, []).append({
                     'professor_load_id': pcid,
                     'course_id': cid,
@@ -7892,12 +8043,10 @@ def generate_schedule():
                     'quota': sec_val,
                 })
 
-        
+        fallback_prof_obj = _ensure_fallback_professor_by_index(0, department)
+        fallback_prof_id = fallback_prof_obj.get('prof_id') or 999900
+        active_fallback_profs = [fallback_prof_obj]
 
-
-        print('DEBUG professors_by_course:', professors_by_course)
-        print('DEBUG pc_data:', pc_data)
-        print('DEBUG all_profs_res.data:', all_profs_res.data)
         all_prof_data = all_profs_res.data or []
         all_professors_pool = []
         for p in all_prof_data:
@@ -7907,17 +8056,98 @@ def generate_schedule():
                 'last_name': p.get('last_name'),
                 'time_designation': int(p.get('time_designation') or 5),
                 'max_hours': int(_ranking_constraints(p)['max_hours']),
-                'department': p.get('department'),
+                'program_id': p.get('program_id'),
                 'sections': 0,
                 'quota': 999,
             })
 
+        if not any(p.get('prof_id') == fallback_prof_id for p in all_professors_pool):
+            all_professors_pool.append({
+                'prof_id': fallback_prof_id,
+                'first_name': fallback_prof_obj.get('first_name', 'Professor'),
+                'last_name': fallback_prof_obj.get('last_name', 'A'),
+                'time_designation': 5,
+                'max_hours': int(fallback_prof_obj.get('max_hours') or 40),
+                'program_id': fallback_prof_obj.get('program_id'),
+                'sections': 0,
+                'quota': 999,
+            })
+
+        # Subject-Oriented Fallback Professor Assignment:
+        fallback_prof_index = 0
+        fallback_prof_preparations = {}
+        fallback_prof_committed_hours = {}
+
+        seen_course_ids = set()
+        deduped_curriculum_courses = []
+        for c in all_courses:
+            cid = c.get('course_id')
+            if cid and cid not in seen_course_ids:
+                seen_course_ids.add(cid)
+                deduped_curriculum_courses.append(c)
+
+        for course in deduped_curriculum_courses:
+            cid = course['course_id']
+            if professors_by_course.get(cid):
+                continue
+
+            yl = int(course.get('year_level') or 1)
+            cmajor = course.get('major')
+            matching_secs = [
+                s for s in all_sections
+                if int(s.get('year_level') or 1) == yl and _major_matches(cmajor, s.get('major'))
+            ]
+            sec_count = max(1, len(matching_secs))
+            dur = float(course.get('lecture_hours') or 0.0) + float(course.get('lab_hours') or 0.0)
+            total_sec_h = dur * sec_count
+
+            current_fprof = _ensure_fallback_professor_by_index(fallback_prof_index, department)
+            cur_fpid = current_fprof.get('prof_id') or (999900 + fallback_prof_index)
+            cur_preps = fallback_prof_preparations.get(cur_fpid, 0)
+            cur_h = fallback_prof_committed_hours.get(cur_fpid, 0.0)
+
+            if cur_preps >= 2 or (cur_preps >= 1 and cur_h + total_sec_h > 40.0):
+                fallback_prof_index += 1
+                current_fprof = _ensure_fallback_professor_by_index(fallback_prof_index, department)
+                cur_fpid = current_fprof.get('prof_id') or (999900 + fallback_prof_index)
+
+            if not any(p.get('prof_id') == cur_fpid for p in active_fallback_profs):
+                active_fallback_profs.append(current_fprof)
+
+            fprof_entry = {
+                'professor_load_id': None,
+                'course_id': cid,
+                'prof_id': cur_fpid,
+                'first_name': current_fprof.get('first_name', 'Professor'),
+                'last_name': current_fprof.get('last_name'),
+                'time_designation': 5,
+                'max_hours': int(current_fprof.get('max_hours') or 40),
+                'program_id': current_fprof.get('program_id'),
+                'sections': sec_count,
+                'quota': sec_count,
+            }
+            professors_by_course.setdefault(cid, []).append(fprof_entry)
+
+            if not any(p.get('prof_id') == cur_fpid for p in all_professors_pool):
+                all_professors_pool.append(fprof_entry)
+
+            fallback_prof_preparations[cur_fpid] = cur_preps + 1
+            fallback_prof_committed_hours[cur_fpid] = cur_h + total_sec_h
+
         # Fetch rooms
-        if is_viewer and department:
-            rooms_res = supabase.table('room').select('*').eq('department', department).execute()
+        if user_prog_id:
+            try:
+                rooms_res = supabase.table('room').select('*').eq('program_id', user_prog_id).execute()
+                all_rooms = rooms_res.data or []
+                if not all_rooms:
+                    rooms_res = supabase.table('room').select('*').execute()
+                    all_rooms = rooms_res.data or []
+            except Exception:
+                rooms_res = supabase.table('room').select('*').execute()
+                all_rooms = rooms_res.data or []
         else:
             rooms_res = supabase.table('room').select('*').execute()
-        all_rooms = rooms_res.data or []
+            all_rooms = rooms_res.data or []
         lecture_rooms = [r for r in all_rooms if _is_lecture_room_type(r.get('room_type'))]
         lab_rooms = [r for r in all_rooms if _is_lab_room_type(r.get('room_type'))]
         logging.info(f"[ROOM POOL] Total: {len(all_rooms)} | Lecture Rooms: {len(lecture_rooms)} | Laboratory Rooms: {len(lab_rooms)}")
@@ -7952,11 +8182,21 @@ def generate_schedule():
         existing_rows = (supabase.table('schedule').select('section, room_id, day, class_start, class_end, professor_load_id, professor_load(prof_id), semester, program_id, major').eq('archive', False).execute().data) or []
         for existing in existing_rows:
             # ONLY consider rows for the EXACT same semester that belong to a DIFFERENT program
-            # (different semesters do not run simultaneously, so they must NOT block rooms or professors)
             if existing.get('semester') != standard_semester:
                 continue
-            if not current_program_id or existing.get('program_id') == current_program_id:
+            is_same = False
+            ex_pid = existing.get('program_id')
+            ex_prog = existing.get('program') or existing.get('program_name')
+            if current_program_id and ex_pid:
+                is_same = (ex_pid == current_program_id)
+            elif program and ex_prog:
+                is_same = (ex_prog.strip().lower() == program.strip().lower())
+            elif current_program_id and ex_prog and program:
+                is_same = (ex_prog.strip().lower() == program.strip().lower())
+
+            if is_same:
                 continue
+
             sec_n = existing.get('section')
             sec_m = existing.get('major')
             rid = existing.get('room_id')
@@ -7986,7 +8226,53 @@ def generate_schedule():
         room_tba_count = 0
 
         def _is_fallback_prof(prof):
-            return False
+            if not prof:
+                return False
+            fn = str(prof.get('first_name') or '').strip().lower()
+            ln = str(prof.get('last_name') or '').strip().upper()
+            if fn == 'professor' and len(ln) <= 2 and ln.isalpha():
+                return True
+            return any(p.get('prof_id') == prof.get('prof_id') for p in active_fallback_profs)
+
+        def _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id=None):
+            if course_id and professors_by_course.get(course_id):
+                for prof in professors_by_course[course_id]:
+                    if _is_fallback_prof(prof):
+                        pid = prof.get('prof_id')
+                        if not pid:
+                            continue
+                        curr_h = professor_hours.get(pid, 0.0)
+                        max_h = prof.get('max_hours') or 40
+                        if curr_h + duration <= max_h and not _has_conflict(day, block_start, block_end, professor_bookings.get(pid, [])):
+                            return prof
+
+            for prof in active_fallback_profs:
+                pid = prof.get('prof_id')
+                if not pid:
+                    continue
+                curr_h = professor_hours.get(pid, 0.0)
+                max_h = prof.get('max_hours') or 40
+                if curr_h + duration <= max_h and not _has_conflict(day, block_start, block_end, professor_bookings.get(pid, [])):
+                    return prof
+
+            next_idx = len(active_fallback_profs)
+            new_prof = _ensure_fallback_professor_by_index(next_idx, department)
+            active_fallback_profs.append(new_prof)
+
+            new_prof_entry = {
+                'prof_id': new_prof.get('prof_id'),
+                'first_name': new_prof.get('first_name', 'Professor'),
+                'last_name': new_prof.get('last_name'),
+                'time_designation': 5,
+                'max_hours': int(new_prof.get('max_hours') or 40),
+                'program_id': new_prof.get('program_id'),
+                'sections': 0,
+                'quota': 999,
+            }
+            if not any(p.get('prof_id') == new_prof.get('prof_id') for p in all_professors_pool):
+                all_professors_pool.append(new_prof_entry)
+
+            return new_prof_entry
 
         def _can_prof_teach_on_day(prof_dict, check_day):
             pid = prof_dict.get('prof_id')
@@ -8175,13 +8461,20 @@ def generate_schedule():
                                 cand_rooms, day, block_start, block_end,
                                 room_bookings, room_usage, room_last_used, room_order
                             )
-                            print(f"    assigned_room = {assigned_room}")
                             if not assigned_room and session_type != 'ILP':
                                 continue
                             cand_profs.sort(key=lambda p: _score_candidate_professor(
                                 p, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=False
                             ))
                             assigned_prof = cand_profs[0]
+                        elif not p_config['strict_rules']:
+                            assigned_room = _select_least_used_room(
+                                cand_rooms, day, block_start, block_end,
+                                room_bookings, room_usage, room_last_used, room_order
+                            )
+                            if not assigned_room and session_type != 'ILP':
+                                continue
+                            assigned_prof = _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id)
 
 
                         if not assigned_prof:
@@ -8293,9 +8586,8 @@ def generate_schedule():
                             conflict_free_profs.sort(key=lambda p: _score_candidate_professor(
                                 p, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=True
                             ))
-                            assigned_prof = conflict_free_profs[0]
                     else:
-                        assigned_prof = None
+                        assigned_prof = _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id)
 
                     # If no conflict-free professor, reject slot to prevent double-booking
                     if not assigned_prof:
@@ -8704,6 +8996,7 @@ def generate_schedule():
             **preview_context
         )
     except Exception as err:
+        logging.exception(f"Exception in generate_schedule: {err}")
         _clear_preview_generation_state()
         return f"Error: {err}", 500
 
@@ -8951,7 +9244,7 @@ def confirm_preview():
         # Determine the semester, program, and sections from preview
         sem_val = (preview[0].get('semester') or '').strip()
         prog_val = (preview[0].get('program') or session.get('program') or '').strip()
-        program_id = _find_program_id_by_name(prog_val)
+        program_id = _find_program_id_by_name(prog_val) or session.get('program_id') or 1
         sections_in_preview = list({e.get('section') for e in preview if e.get('section')})
 
         # Prepare payload rows
@@ -8965,14 +9258,48 @@ def confirm_preview():
             course_id = entry.get('course_id')
             room_id = entry.get('room_id')
 
-            if not professor_load_id and prof_id and course_id:
+            # Resolve synthetic or missing professor_load_id
+            resolved_load_id = None
+            if professor_load_id:
+                try:
+                    raw_lid = int(professor_load_id)
+                    if raw_lid >= 900000:
+                        if prof_id and course_id:
+                            pc_chk = supabase.table('professor_load').select('professor_load_id:id').eq('prof_id', int(prof_id)).eq('course_id', int(course_id)).execute()
+                            pc_chk_row = _first(pc_chk.data or [])
+                            if pc_chk_row:
+                                resolved_load_id = pc_chk_row.get('professor_load_id') or pc_chk_row.get('id')
+                    else:
+                        try:
+                            pc_exists = supabase.table('professor_load').select('professor_load_id:id').eq('professor_load_id', raw_lid).execute()
+                            matching_rows = [r for r in (pc_exists.data or []) if str(r.get('professor_load_id') or r.get('id')) == str(raw_lid)]
+                            if not matching_rows:
+                                pc_exists_id = supabase.table('professor_load').select('professor_load_id:id').eq('id', raw_lid).execute()
+                                matching_rows = [r for r in (pc_exists_id.data or []) if str(r.get('professor_load_id') or r.get('id')) == str(raw_lid)]
+
+                            if matching_rows:
+                                resolved_load_id = raw_lid
+                            elif prof_id and course_id:
+                                pc_chk = supabase.table('professor_load').select('professor_load_id:id').eq('prof_id', int(prof_id)).eq('course_id', int(course_id)).execute()
+                                pc_chk_row = _first(pc_chk.data or [])
+                                if pc_chk_row:
+                                    resolved_load_id = pc_chk_row.get('professor_load_id') or pc_chk_row.get('id')
+                            else:
+                                resolved_load_id = None
+                        except Exception:
+                            resolved_load_id = raw_lid
+                except (ValueError, TypeError):
+                    resolved_load_id = None
+            elif prof_id and course_id:
                 try:
                     pc_chk = supabase.table('professor_load').select('professor_load_id:id').eq('prof_id', int(prof_id)).eq('course_id', int(course_id)).execute()
                     pc_chk_row = _first(pc_chk.data or [])
                     if pc_chk_row:
-                        professor_load_id = pc_chk_row.get('professor_load_id')
+                        resolved_load_id = pc_chk_row.get('professor_load_id') or pc_chk_row.get('id')
                 except Exception as pc_err:
                     logging.warning(f"[confirm_preview] Could not resolve professor_load for prof_id={prof_id}, course_id={course_id}: {pc_err}")
+
+            professor_load_id = resolved_load_id
 
             rows.append({
                 'professor_load_id': int(professor_load_id) if professor_load_id not in (None, '', 0, '0') else None,
@@ -9028,7 +9355,7 @@ def confirm_preview():
 
         if not rpc_success:
             if not program_id:
-                raise ValueError(f"Could not find a program record for '{prog_val}'.")
+                program_id = session.get('program_id') or 1
 
             # Fallback: Soft-archive existing active records for this program by setting archive = True
             try:
@@ -9248,7 +9575,7 @@ def schedule_archive():
 def view_schedule_archive_batch(batch_id):
     try:
         query = supabase.table('schedule').select(
-            '*, program:program_id(program_name), professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), course(course_name), professor(first_name, last_name), room(room_name)'
+            '*, program:program_id(program_name), professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), room(room_name)'
         ).eq('archive', True)
 
         if '__' in batch_id:
