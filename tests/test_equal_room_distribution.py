@@ -256,10 +256,10 @@ def test_6_multiple_sections_global_distribution(monkeypatch):
     ]
 
     professor_load = [
-        {'course_id': 1, 'prof_id': 1, 'professor': profs[0]},
-        {'course_id': 2, 'prof_id': 2, 'professor': profs[1]},
-        {'course_id': 3, 'prof_id': 3, 'professor': profs[2]},
-        {'course_id': 4, 'prof_id': 4, 'professor': profs[3]},
+        {'course_id': 1, 'prof_id': 1, 'sections': 2, 'professor': profs[0]},
+        {'course_id': 2, 'prof_id': 2, 'sections': 2, 'professor': profs[1]},
+        {'course_id': 3, 'prof_id': 3, 'sections': 2, 'professor': profs[2]},
+        {'course_id': 4, 'prof_id': 4, 'sections': 2, 'professor': profs[3]},
     ]
 
     timeslots = [
@@ -339,7 +339,7 @@ def test_7_existing_schedule_no_conflicts(monkeypatch):
     ]
 
     professor_load = [
-        {'course_id': 1, 'prof_id': 1, 'professor': profs[0]},
+        {'course_id': 1, 'prof_id': 1, 'sections': 1, 'professor': profs[0]},
     ]
 
     timeslots = [

@@ -86,9 +86,18 @@
             <div class="section-card__info">
                 <div class="d-flex align-items-center gap-2 mb-1">
                     <h5 class="mb-0 fw-bold text-dark">{{ room.room_name }}</h5>
-                    {% if room.room_type %}
-                    <span class="badge {% if 'lab' in (room.room_type|lower) %}bg-purple-subtle text-purple border border-purple-subtle{% else %}bg-primary-subtle text-primary border border-primary-subtle{% endif %}">
-                        {{ room.room_type }}
+                    {% set rtype = (room.room_type or '')|lower %}
+                    {% if 'lab' in rtype or 'lab' in (room.room_name|lower) %}
+                    <span class="badge badge-purple-subtle bg-purple-subtle text-purple border border-purple-subtle" style="background-color: #f3e8ff !important; color: #6b21a8 !important; border: 1px solid #d8b4fe !important;">
+                        Laboratory Room
+                    </span>
+                    {% elif 'lec' in rtype or 'room' in (room.room_name|lower) %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                        Lecture Room
+                    </span>
+                    {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                        {{ room.room_type or 'General' }}
                     </span>
                     {% endif %}
                 </div>

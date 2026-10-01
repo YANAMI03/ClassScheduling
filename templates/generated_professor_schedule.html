@@ -9,8 +9,11 @@
         <p class="page-subtitle">Interactive weekly timetable grid, free periods, and assigned workload details</p>
     </div>
     <div class="d-flex align-items-center gap-2">
-        <a href="/professor_schedule/{{ professor.prof_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success" title="Export Professor Schedule to Excel">
+        <a href="/professor_schedule/{{ professor.prof_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Professor Schedule to Excel">
             <i class="bx bx-file me-1"></i> Export to Excel
+        </a>
+        <a href="/professor_schedule/{{ professor.prof_id }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Professor Schedule to PDF (NEUST format)">
+            <i class="bx bx-file-pdf me-1"></i> Export to PDF
         </a>
         <a href="/professor_schedule" class="btn btn-outline-secondary">
             <i class="bx bx-arrow-back"></i> Back to Professor Schedule

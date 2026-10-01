@@ -16,7 +16,7 @@
             <select class="form-select form-select-sm" id="exportThemeSelect"
                 onchange="handleSectionThemeChange(this.value)" style="width: 110px;">
                 {% for t in theme_options or ['Blue', 'Red', 'Green', 'Purple', 'Orange', 'Teal', 'Pink'] %}
-                <option value="{{ t }}" {% if (current_theme or 'Blue' )==t %}selected{% endif %}>{{ t }}</option>
+                <option value="{{ t }}" {% if (current_theme or 'Blue')==t %}selected{% endif %}>{{ t }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -24,6 +24,10 @@
             href="/schedule/{{ section.section_name or section.section }}/export?semester={{ semester_filter }}&major={{ major_filter }}&theme={{ current_theme or 'Blue' }}{% if is_preview %}&mode=preview{% endif %}"
             class="btn btn-success" title="Export Section Schedule to Excel">
             <i class="bx bx-file me-1"></i> Export to Excel
+        </a>
+        <a href="/schedule/{{ section.section_name or section.section }}/export_pdf?semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}"
+            class="btn btn-danger" title="Export Section Schedule to PDF (NEUST format)">
+            <i class="bx bx-file-pdf me-1"></i> Export to PDF
         </a>
         <a href="/schedules" class="btn btn-outline-secondary">
             <i class="bx bx-arrow-back"></i> Back to Section Schedule
@@ -481,7 +485,7 @@
 
             $('#modalCourseName').text($t.data('course') || 'TBA');
             $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
-            $('#modalProfessor').text($t.data('professor') || 'Professor A');
+            $('#modalProfessor').text($t.data('professor') || 'TBA');
             $('#modalRoom').text($t.data('room') || 'TBA');
             $('#modalDay').text($t.data('day') || 'TBA');
             $('#modalTime').text($t.data('time') || 'TBA');

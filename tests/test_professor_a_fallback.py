@@ -145,7 +145,10 @@ def test_sequential_fallback_professors_zero_conflict(monkeypatch):
         'course': courses,
         'room': rooms,
         'professor': professors,
-        'professor_load': [],
+        'professor_load': [
+            {'course_id': 101, 'prof_id': None, 'sections': 2},
+            {'course_id': 102, 'prof_id': None, 'sections': 2},
+        ],
         'timeslot': timeslots,
         'schedule': [],
     }
@@ -203,7 +206,7 @@ def test_multi_year_fallback_scheduling(monkeypatch):
         {'course_id': 1, 'course_name': 'IT101', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'major': None},
         {'course_id': 2, 'course_name': 'IT201', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'major': None},
         {'course_id': 3, 'course_name': 'IT301', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'major': None},
-        {'course_id': 4, 'course_name': 'IT401', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'major': None},
+        {'course_id': 4, 'course_name': 'IT401', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'major': None, 'specialization': 'Database Systems'},
     ]
     rooms = [
         {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'department': 'CICT'},
@@ -219,7 +222,12 @@ def test_multi_year_fallback_scheduling(monkeypatch):
         'course': courses,
         'room': rooms,
         'professor': professors,
-        'professor_load': [],
+        'professor_load': [
+            {'course_id': 1, 'prof_id': None, 'sections': 1},
+            {'course_id': 2, 'prof_id': None, 'sections': 1},
+            {'course_id': 3, 'prof_id': None, 'sections': 1},
+            {'course_id': 4, 'prof_id': None, 'sections': 1},
+        ],
         'timeslot': timeslots,
         'schedule': [],
     }
@@ -292,7 +300,10 @@ def test_subject_oriented_fallback_across_sections(monkeypatch):
         'room': rooms,
         'academic_ranking': [{'academic_ranking_id': 1, 'name': 'General', 'program': 'General', 'max_hours': 40, 'max_units': 24, 'min_hours': 0, 'min_units': 0}],
         'professor': [],
-        'professor_load': [],
+        'professor_load': [
+            {'course_id': 101, 'prof_id': None, 'sections': 2},
+            {'course_id': 102, 'prof_id': None, 'sections': 2},
+        ],
         'timeslot': timeslots,
         'schedule': [],
     }

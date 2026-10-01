@@ -13,9 +13,16 @@
             <i class="bx bx-archive"></i> Archive History
         </a>
         {% if user_role != 'Viewer' %}
+        {% if sections_with_entries or sections %}
+        <form action="/archive_schedule" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to archive the current active schedule? This will set its status to archived and allow generating a new schedule.');">
+            <button type="submit" class="btn btn-warning text-dark" id="btn-archive-schedule" title="Archive currently active schedule">
+                <i class="bx bx-archive-in"></i> Archive Schedule
+            </button>
+        </form>
         <button type="button" class="btn btn-danger" id="delete-all-btn">
             <i class="bx bx-trash"></i> Delete All
         </button>
+        {% endif %}
         <a href="/" class="btn btn-primary">
             <i class="bx bx-plus-circle"></i> Generate New Schedule
         </a>
@@ -148,7 +155,7 @@
                                                 tabindex="0"
                                                 role="button"
                                                 data-course="{{ entry.course_name or 'TBA' }}"
-                                                data-professor="{{ entry.professor_name }}"
+                                                data-professor="{{ entry.professor_name or 'TBA' }}"
                                                 data-room="{{ entry.room_name or 'TBA' }}"
                                                 data-timeslot="{{ entry.time_range }}"
                                                 data-session="{{ entry.session_type or 'TBA' }}"
@@ -157,7 +164,7 @@
                                                     <strong>{{ entry.course_name or 'TBA' }}</strong>
                                                     <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
                                                 </td>
-                                                <td>{{ entry.professor_name }}</td>
+                                                <td>{{ entry.professor_name or 'TBA' }}</td>
                                                 <td>{{ entry.room_name or 'TBA' }}</td>
                                                 <td><span class="badge-custom badge-primary">{{ entry.time_range }}</span></td>
                                                 <td>
@@ -201,15 +208,23 @@
         </div>
     {% endif %}
 {% else %}
-<div class="card-custom">
+<div class="card-custom text-center py-5">
     <div class="empty-state">
-        <div class="empty-state__icon"><i class="bx bx-grid-alt"></i></div>
-        <div class="empty-state__text">No schedules have been generated yet</div>
-        {% if user_role != 'Viewer' %}
-        <a href="/" class="btn btn-primary mt-3">
-            <i class="bx bx-plus-circle"></i> Generate Your First Schedule
-        </a>
-        {% endif %}
+        <div class="empty-state__icon text-warning mb-3"><i class="bx bx-archive fs-1"></i></div>
+        <h4 class="fw-bold">No Active Schedule</h4>
+        <p class="text-secondary max-w-md mx-auto mb-4" style="max-width: 480px; margin: 0 auto 1.5rem;">
+            There is currently no active schedule for this program. You can generate a new schedule for either semester or restore an archived schedule version.
+        </p>
+        <div class="d-flex justify-content-center gap-2">
+            {% if user_role != 'Viewer' %}
+            <a href="/" class="btn btn-primary">
+                <i class="bx bx-plus-circle me-1"></i> Generate New Schedule
+            </a>
+            {% endif %}
+            <a href="/schedule_archive" class="btn btn-outline-secondary">
+                <i class="bx bx-history me-1"></i> View Archive History
+            </a>
+        </div>
     </div>
 </div>
 {% endif %}

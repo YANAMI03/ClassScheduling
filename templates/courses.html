@@ -66,8 +66,8 @@
                 <input type="number" name="lab_hours" class="form-control" placeholder="0" min="0" value="0">
             </div>
             <div class="col-lg-2 col-md-3">
-                <label class="form-label">ILP Hours</label>
-                <input type="number" name="ilp_hours" class="form-control" placeholder="0" min="0" value="0">
+                <label class="form-label">ILP Hours (0 or 1)</label>
+                <input type="number" name="ilp_hours" class="form-control" placeholder="0" min="0" max="1" step="1" value="0">
             </div>
             <div class="col-lg-3 col-md-6">
                 <label class="form-label">Program</label>
@@ -92,11 +92,11 @@
                 </select>
             </div>
             <div class="col-lg-3 col-md-6">
-                <label class="form-label">Major (Year 3-4)</label>
-                <select name="major" id="add_major" class="form-select">
-                    <option value="" selected>None / General</option>
-                    <option value="Web">Web Development</option>
-                    <option value="Database">Database Systems</option>
+                <label class="form-label">Specialization</label>
+                <select name="specialization" id="add_specialization" class="form-select">
+                    <option value="" selected>None / Select</option>
+                    <option value="Database Systems">Database Systems</option>
+                    <option value="Web Systems">Web Systems</option>
                     <option value="Networking">Networking</option>
                     <option value="General">General</option>
                 </select>
@@ -112,7 +112,7 @@
 {% else %}
 <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
     <i class="bx bx-info-circle fs-4 me-2"></i>
-    <div>You are viewing the course catalog in read-only mode. Course catalog management is restricted to Dean/Chair.</div>
+    <div>You are viewing the course catalog in read-only mode. Course catalog management is restricted to Administrators.</div>
 </div>
 {% endif %}
 
@@ -180,7 +180,7 @@
                     <th>ILP Hrs</th>
                     <th>Program</th>
                     {% if show_major %}
-                    <th>Major</th>
+                    <th>Specialization</th>
                     {% endif %}
                     <th>Year Level</th>
                     <th>Semester</th>
@@ -200,10 +200,11 @@
                     <td><span class="badge-custom badge-primary">{{course.program}}</span></td>
                     {% if show_major %}
                     <td>
-                        {% if course.major %}
-                        <span class="badge-custom badge-warning">{{course.major}}</span>
+                        {% set spec = course.specialization or course.major %}
+                        {% if spec %}
+                        <span class="badge-custom badge-warning">{{spec}}</span>
                         {% else %}
-                        <span class="text-muted small">None</span>
+                        <span class="text-muted small">—</span>
                         {% endif %}
                     </td>
                     {% endif %}
@@ -211,7 +212,7 @@
                     <td>{{ course.semester or '—' }}</td>
                     {% if not is_scheduler %}
                     <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-major="{{course.major or ''}}" data-semester="{{course.semester or ''}}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_course/{{course.course_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this course?">
@@ -291,8 +292,8 @@
                             <input type="number" name="lab_hours" id="edit_lab" class="form-control" min="0">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">ILP Hours</label>
-                            <input type="number" name="ilp_hours" id="edit_ilp" class="form-control" min="0">
+                            <label class="form-label">ILP Hours (0 or 1)</label>
+                            <input type="number" name="ilp_hours" id="edit_ilp" class="form-control" min="0" max="1" step="1">
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -314,11 +315,11 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Major (Year 3-4)</label>
-                            <select name="major" id="edit_major" class="form-select">
-                                <option value="">None / General</option>
-                                <option value="Web">Web Development</option>
-                                <option value="Database">Database Systems</option>
+                            <label class="form-label">Specialization</label>
+                            <select name="specialization" id="edit_specialization" class="form-select">
+                                <option value="">None / Select</option>
+                                <option value="Database Systems">Database Systems</option>
+                                <option value="Web Systems">Web Systems</option>
                                 <option value="Networking">Networking</option>
                                 <option value="General">General</option>
                             </select>
@@ -341,63 +342,61 @@ $(function(){
     $('#editModal').appendTo("body");
     {% endif %}
     
-    // Major field visibility logic
-    function isMajorRequired(year, semester) {
-        // Major is required for 3rd Year - 2nd Semester
-        if (year === '3' && (semester === '2nd Semester' || semester === '2nd' || semester === '2')) {
-            return true;
-        }
-        // Major is required for 4th Year - 1st Semester
-        if (year === '4' && (semester === '1st Semester' || semester === '1st' || semester === '1')) {
-            return true;
-        }
-        // Major is required for 4th Year - 2nd Semester
-        if (year === '4' && (semester === '2nd Semester' || semester === '2nd' || semester === '2')) {
-            return true;
-        }
+    // Specialization field visibility logic: required in 3rd Year 2nd Sem, 4th Year 1st Sem, 4th Year 2nd Sem
+    function isSpecializationRequired(year, semester) {
+        year = String(year || '').trim();
+        semester = String(semester || '').trim().toLowerCase();
+        var is2nd = semester.indexOf('2nd') !== -1 || semester === '2';
+        var is1st = semester.indexOf('1st') !== -1 || semester === '1';
+
+        if (year === '3' && is2nd) return true;
+        if (year === '4' && (is1st || is2nd)) return true;
         return false;
     }
     
-    function toggleMajorField(yearSelect, semesterSelect, majorField) {
+    function toggleSpecializationField(yearSelect, semesterSelect, specField) {
         var year = yearSelect.val();
         var semester = semesterSelect.val();
-        var required = isMajorRequired(year, semester);
+        var required = isSpecializationRequired(year, semester);
+        var selectEl = specField.find('select');
         
         if (required) {
-            majorField.show();
+            specField.show();
+            selectEl.prop('required', true);
         } else {
-            majorField.hide();
-            majorField.find('select').val('');
+            specField.hide();
+            selectEl.prop('required', false);
+            selectEl.val('');
         }
     }
     
     // Add Course form
     var $addYearLevel = $('#add_year_level');
     var $addSemester = $('#add_semester');
-    var $addMajorField = $('#add_major').closest('.col-lg-3');
+    var $addSpecField = $('#add_specialization').closest('.col-lg-3');
     
     $addYearLevel.on('change', function() {
-        toggleMajorField($addYearLevel, $addSemester, $addMajorField);
+        toggleSpecializationField($addYearLevel, $addSemester, $addSpecField);
     });
     
     $addSemester.on('change', function() {
-        toggleMajorField($addYearLevel, $addSemester, $addMajorField);
+        toggleSpecializationField($addYearLevel, $addSemester, $addSpecField);
     });
     
     // Initial state for Add Course
-    toggleMajorField($addYearLevel, $addSemester, $addMajorField);
+    toggleSpecializationField($addYearLevel, $addSemester, $addSpecField);
     
     // Edit Course form
     var $editYearLevel = $('#edit_year_level');
     var $editSemester = $('#edit_semester');
-    var $editMajorField = $('#edit_major').closest('.col-md-4');
+    var $editSpecField = $('#edit_specialization').closest('.col-md-4');
     
     $editYearLevel.on('change', function() {
-        toggleMajorField($editYearLevel, $editSemester, $editMajorField);
+        toggleSpecializationField($editYearLevel, $editSemester, $editSpecField);
     });
     
     $editSemester.on('change', function() {
-        toggleMajorField($editYearLevel, $editSemester, $editMajorField);
+        toggleSpecializationField($editYearLevel, $editSemester, $editSpecField);
     });
     
     {% if not is_scheduler %}
@@ -411,11 +410,11 @@ $(function(){
         $('#edit_program').val($t.data('program'));
         $('#edit_year_level').val($t.data('yearlevel'));
         $('#edit_semester').val($t.data('semester') || '');
-        $('#edit_major').val($t.data('major') || '');
+        var specVal = $t.data('specialization') || '';
+        $('#edit_specialization').val(specVal);
         $('#editForm').attr('action', '/edit_course/' + $t.data('id'));
         
-        // Toggle Major field after loading edit data
-        toggleMajorField($editYearLevel, $editSemester, $editMajorField);
+        toggleSpecializationField($editYearLevel, $editSemester, $editSpecField);
     });
     {% endif %}
 
