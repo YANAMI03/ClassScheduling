@@ -257,7 +257,7 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
             p_first = entity_info.get('first_name', '')
             p_last = entity_info.get('last_name', '')
             prof_name = f"{p_first} {p_last}".strip() or entity_info.get('professor_name', 'Professor')
-            dept = entity_info.get('department', 'N/A')
+            dept = entity_info.get('department') or entity_info.get('program_name') or entity_info.get('program') or 'N/A'
         else:
             prof_name = str(entity_info)
             dept = 'N/A'
