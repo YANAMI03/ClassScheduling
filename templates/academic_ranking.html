@@ -44,6 +44,15 @@
             <div class="col-md-3"><label class="form-label fw-semibold">Min Hours</label><input type="number" name="min_hours" class="form-control" min="0" step="any" value="0" required></div>
             <div class="col-md-3"><label class="form-label fw-semibold">Max Hours</label><input type="number" name="max_hours" class="form-control" min="0.01" step="any" value="40" required></div>
             <div class="col-12">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="has_cutoff" id="add_has_cutoff" checked>
+                    <label class="form-check-label fw-semibold" for="add_has_cutoff">
+                        Subject to daily cutoff
+                    </label>
+                    <small class="text-muted d-block">When checked, professors with this rank cannot be scheduled past daily non-LOHB cutoffs.</small>
+                </div>
+            </div>
+            <div class="col-12">
                 <button class="btn btn-primary" type="submit">
                     <i class="bx bx-plus"></i> Add Academic Ranking
                 </button>
@@ -76,6 +85,7 @@
                     <th>Program</th>
                     <th>Units</th>
                     <th>Hours</th>
+                    <th>Daily Cutoff</th>
                     {% if not is_scheduler %}
                     <th class="text-end">Actions</th>
                     {% endif %}
@@ -88,6 +98,13 @@
                     <td><span class="badge-custom badge-success">{{ r.program or 'General' }}</span></td>
                     <td>{{ r.min_units }} - {{ r.max_units }}</td>
                     <td>{{ r.min_hours }} - {{ r.max_hours }}</td>
+                    <td>
+                        {% if r.has_cutoff != false %}
+                        <span class="badge-custom badge-primary"><i class="bx bx-check me-1"></i>Enforced</span>
+                        {% else %}
+                        <span class="badge-custom badge-warning"><i class="bx bx-x me-1"></i>Exempt (No Cutoff)</span>
+                        {% endif %}
+                    </td>
                     {% if not is_scheduler %}
                     <td class="text-end">
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-ranking-btn"
@@ -99,7 +116,8 @@
                                 data-minunits="{{ r.min_units }}"
                                 data-maxunits="{{ r.max_units }}"
                                 data-minhours="{{ r.min_hours }}"
-                                data-maxhours="{{ r.max_hours }}">
+                                data-maxhours="{{ r.max_hours }}"
+                                data-hascutoff="{{ 'true' if r.has_cutoff != false else 'false' }}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_academic_ranking/{{ r.academic_ranking_id }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this academic ranking?">
@@ -110,7 +128,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ 5 if not is_scheduler else 4 }}">
+                    <td colspan="{{ 6 if not is_scheduler else 5 }}">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-award"></i></div>
                             <div class="empty-state__text">No academic rankings found for this program</div>
@@ -151,6 +169,15 @@
                         <label class="form-label fw-semibold">Program <span class="text-muted">(Read-only)</span></label>
                         <input type="text" class="form-control bg-light" id="edit_ranking_program_disp" disabled readonly>
                     </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="has_cutoff" id="edit_ranking_has_cutoff">
+                            <label class="form-check-label fw-semibold" for="edit_ranking_has_cutoff">
+                                Subject to daily cutoff
+                            </label>
+                            <small class="text-muted d-block">When checked, professors with this rank cannot be scheduled past daily non-LOHB cutoffs.</small>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -173,6 +200,7 @@ $(function(){
         var id = $t.data('id');
         var name = $t.data('name');
         var prog = $t.data('program') || '{{ program or "" }}';
+        var hasCutoff = $t.data('hascutoff') === 'true' || $t.data('hascutoff') === true;
 
         $('#edit_ranking_name').val(name);
         $('#edit_ranking_min_units').val($t.data('minunits'));
@@ -180,6 +208,7 @@ $(function(){
         $('#edit_ranking_min_hours').val($t.data('minhours'));
         $('#edit_ranking_max_hours').val($t.data('maxhours'));
         $('#edit_ranking_program_disp').val(prog);
+        $('#edit_ranking_has_cutoff').prop('checked', hasCutoff);
         $('#editRankingForm').attr('action', '/edit_academic_ranking/' + id);
     });
     {% endif %}

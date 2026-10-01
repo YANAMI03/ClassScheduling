@@ -221,7 +221,14 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
     if schedule_type == 'room':
         doc_heading = "ROOM SCHEDULE"
         room_name = entity_info.get('room_name') if isinstance(entity_info, dict) else str(entity_info)
-        room_type = entity_info.get('room_type', 'Lecture') if isinstance(entity_info, dict) else 'Lecture'
+        raw_type = (entity_info.get('room_type') or 'Lecture') if isinstance(entity_info, dict) else 'Lecture'
+        raw_lower = str(raw_type).strip().lower()
+        if 'lab' in raw_lower:
+            room_type = 'Laboratory Room'
+        elif 'lec' in raw_lower:
+            room_type = 'Lecture Room'
+        else:
+            room_type = str(raw_type).strip() or 'General'
         sub_heading = f"Room: {room_name}  ({room_type})"
         meta_items = [
             ("Semester", semester or "All Semesters"),

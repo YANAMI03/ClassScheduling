@@ -674,6 +674,25 @@ a {
     color: #dc2626;
 }
 
+.badge-secondary {
+    background: rgba(100, 116, 139, 0.1);
+    color: #475569;
+}
+
+.badge-purple-subtle,
+.bg-purple-subtle {
+    background-color: #f3e8ff !important;
+    color: #6b21a8 !important;
+}
+
+.text-purple {
+    color: #6b21a8 !important;
+}
+
+.border-purple-subtle {
+    border-color: #d8b4fe !important;
+}
+
 /* === Empty State === */
 
 .empty-state {

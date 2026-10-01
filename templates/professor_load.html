@@ -53,9 +53,12 @@
     border-color: #94a3b8;
     background: #fafafa;
 }
-.course-card-item.selected {
-    border-color: #3b82f6;
-    background: #eff6ff;
+.course-card-item.selected,
+.course-card-item.is-assigned {
+    border-color: #3b82f6 !important;
+    background: #f0f7ff !important;
+    border-left: 4px solid #2563eb !important;
+    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.12);
 }
 .section-stepper {
     display: inline-flex;
@@ -327,6 +330,16 @@
                 </div>
 
                 <div class="card-custom p-3 d-flex flex-column h-100">
+                    <!-- Semester Filter Tabs -->
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="small fw-bold text-muted"><i class="bx bx-calendar me-1 text-primary"></i>Semester Filter:</span>
+                        <div class="btn-group" role="group" aria-label="Course semester filters">
+                            <button type="button" class="btn btn-primary btn-sm sem-filter-btn active" data-semester="all">All Semesters</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm sem-filter-btn" data-semester="1st Semester">1st Semester</button>
+                            <button type="button" class="btn btn-outline-primary btn-sm sem-filter-btn" data-semester="2nd Semester">2nd Semester</button>
+                        </div>
+                    </div>
+
                     <!-- Year Filter Tabs -->
                     <div class="btn-group w-100 mb-3" role="group" aria-label="Course year filters">
                         <button type="button" class="btn btn-primary btn-sm year-filter-btn active" data-year="all">All Courses</button>
@@ -347,15 +360,24 @@
                     <div class="course-catalog-container flex-grow-1" id="course-checkbox-list">
                         {% for course in courses %}
                         {% set course_hrs = (course.lecture_hours or 0) + (course.lab_hours or 0) + (course.ilp_hours or 0) %}
-                        <div class="course-card-item" id="card_add_course_{{ course.course_id }}" data-cid="{{ course.course_id }}" data-year="{{ course.year_level or '' }}" data-name="{{ course.course_name|lower }}" data-program="{{ (course.program or '')|lower }}">
+                        <div class="course-card-item" id="card_add_course_{{ course.course_id }}" data-cid="{{ course.course_id }}" data-year="{{ course.year_level or '' }}" data-semester="{{ course.semester or '' }}" data-specialization="{{ course.specialization or '' }}" data-name="{{ course.course_name|lower }}" data-program="{{ (course.program or '')|lower }}">
                             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                                 <div class="d-flex align-items-start gap-2 flex-grow-1" style="min-width: 220px;">
                                     <input class="form-check-input mt-1 course-check" type="checkbox" name="course_ids" value="{{ course.course_id }}" id="add_course_{{ course.course_id }}">
                                     <label class="form-check-label mb-0" for="add_course_{{ course.course_id }}" style="cursor: pointer;">
-                                        <span class="fw-semibold text-dark d-block">{{ course.course_name }}</span>
+                                        <div class="d-flex align-items-center flex-wrap gap-1">
+                                            <span class="fw-semibold text-dark">{{ course.course_name }}</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle assigned-status-badge ms-1" style="display: none; font-size: 0.72rem;"><i class="bx bx-check-circle me-1"></i>Assigned</span>
+                                        </div>
                                         <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
                                             {% if course.program %}
                                             <span class="badge bg-secondary-subtle text-secondary border px-1 py-0" style="font-size: 0.72rem;">{{ course.program }}</span>
+                                            {% endif %}
+                                            {% if course.semester %}
+                                            <span class="stat-pill" style="background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe;">{{ course.semester }}</span>
+                                            {% endif %}
+                                            {% if course.specialization %}
+                                            <span class="stat-pill" style="background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8;">{{ course.specialization }}</span>
                                             {% endif %}
                                             <span class="stat-pill stat-pill-lec">Lec: {{ course.lecture_hours or 0 }}h</span>
                                             <span class="stat-pill stat-pill-lab">Lab: {{ course.lab_hours or 0 }}h</span>
@@ -429,6 +451,11 @@
                 {% set total_prof_units = prof_group.list|map(attribute='total_units')|sum %}
                 {% set total_prof_secs = prof_group.list|map(attribute='sections')|sum %}
 
+                {% set p_min_u = prof_group.list[0].min_units|default(0, true) %}
+                {% set p_max_u = prof_group.list[0].max_units|default(40, true) %}
+                {% set p_min_h = prof_group.list[0].min_hours|default(0, true) %}
+                {% set p_max_h = prof_group.list[0].max_hours|default(40, true) %}
+
                 <tr>
                     <td class="align-middle">
                         <div class="fw-bold text-dark">{{ p_first }} {{ p_last }}</div>
@@ -467,7 +494,15 @@
                             </span>
                         </div>
                         <div class="mt-1">
+                            {% if total_prof_units > p_max_u or total_prof_hours > p_max_h %}
+                            <span class="badge bg-danger"><i class="bx bx-error-circle me-1"></i>Overload</span>
+                            {% elif p_min_h > 0 and total_prof_hours < p_min_h %}
+                            {# Hours minimum not met — yellow (status driven by hours, not units) #}
+                            <span class="badge bg-warning text-dark"><i class="bx bx-info-circle me-1"></i>Underload</span>
+                            {% else %}
+                            {# Hours minimum met — green, even if units minimum is not yet fulfilled #}
                             <span class="badge bg-success"><i class="bx bx-check-circle me-1"></i>Balanced</span>
+                            {% endif %}
                         </div>
                     </td>
                     <td class="text-end align-middle">
@@ -619,6 +654,16 @@
                             <p class="text-muted small mb-2">Check courses and set the number of sections assigned to this professor.</p>
 
                             <div class="card-custom p-3 d-flex flex-column flex-grow-1">
+                                <!-- Semester Filter Tabs for Edit Modal -->
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="small fw-bold text-muted"><i class="bx bx-calendar me-1 text-primary"></i>Semester Filter:</span>
+                                    <div class="btn-group" role="group" aria-label="Course semester filters for edit modal">
+                                        <button type="button" class="btn btn-primary btn-sm edit-sem-filter-btn active" data-semester="all">All Semesters</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm edit-sem-filter-btn" data-semester="1st Semester">1st Semester</button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm edit-sem-filter-btn" data-semester="2nd Semester">2nd Semester</button>
+                                    </div>
+                                </div>
+
                                 <div class="btn-group w-100 mb-2" role="group" aria-label="Course year filters for edit modal">
                                     <button type="button" class="btn btn-primary btn-sm edit-year-filter-btn active" data-year="all">All Courses</button>
                                     <button type="button" class="btn btn-outline-primary btn-sm edit-year-filter-btn" data-year="1">1st Year</button>
@@ -660,8 +705,9 @@ $(function(){
 
     // Master state registries
     var coursesData = {};
+    var allCoursesList = [];
     {% for c in courses %}
-    coursesData[String({{ c.course_id|tojson }})] = {
+    var cItem_{{ loop.index }} = {
         course_id: {{ c.course_id|tojson }},
         course_name: {{ c.course_name|tojson }},
         lecture_hours: {{ c.lecture_hours or 0 }},
@@ -669,8 +715,12 @@ $(function(){
         ilp_hours: {{ c.ilp_hours or 0 }},
         units: {{ c.units or 0 }},
         program: {{ c.program|tojson if c.program else '""'|tojson }},
-        year_level: {{ c.year_level|tojson if c.year_level else '""'|tojson }}
+        year_level: {{ c.year_level|tojson if c.year_level else '""'|tojson }},
+        semester: {{ c.semester|tojson if c.semester else '""'|tojson }},
+        specialization: {{ c.specialization|tojson if c.specialization else '""'|tojson }}
     };
+    coursesData[String({{ c.course_id|tojson }})] = cItem_{{ loop.index }};
+    allCoursesList.push(cItem_{{ loop.index }});
     {% endfor %}
 
     var profDataMap = {};
@@ -809,12 +859,6 @@ $(function(){
     function handleAddSectionChange(cid, val, mode) {
         var current = parseInt(addSectionMap[cid], 10) || 1;
         var next = (mode === 'delta') ? Math.max(1, Math.min(20, current + val)) : Math.max(1, Math.min(20, val));
-        var candidateMap = Object.assign({}, addSectionMap, {});
-        candidateMap[cid] = next;
-        if (!isAddLoadWithinLimits(addSelectedIds, candidateMap)) {
-            updateAddLoadPanel();
-            return;
-        }
         addSectionMap[cid] = next;
 
         // Sync catalog card if present in current view
@@ -832,11 +876,12 @@ $(function(){
         addSelectedIds.delete(cid);
         var $card = $(addCourseList).find('#card_add_course_' + cid);
         if ($card.length) {
-            $card.removeClass('selected');
+            updateAssignedBadge($card, false);
             $card.find('.course-check').prop('checked', false);
         }
         syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
         updateAddLoadPanel();
+        applyCourseFilter($('#course-search-input').val(), addCourseList);
     }
 
     // Section change and remove handlers for Edit Modal
@@ -845,25 +890,50 @@ $(function(){
         var next = (mode === 'delta') ? Math.max(1, Math.min(20, current + val)) : Math.max(1, Math.min(20, val));
         editSectionMap[cid] = next;
 
+        // Ensure course is selected when its section count changes
+        editSelectedIds.add(cid);
+
+        // Sync the catalog card (section input, subtotal badge, checkbox, assigned badge)
         var $card = $(editCourseList).find('#card_edit_course_' + cid);
         if ($card.length) {
             $card.find('.section-input').val(next);
             updateCourseSubtotalCard($card, cid, next);
+            updateAssignedBadge($card, true);
         }
 
         syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
         updateEditLoadPanel();
+        updateEditControlAvailability();
+        // Re-run filter to reorder and refresh badges without moving already-focused elements
+        applyCourseFilter($('#edit-course-search-input').val(), editCourseList);
     }
 
     function handleEditRemove(cid) {
         editSelectedIds.delete(cid);
         var $card = $(editCourseList).find('#card_edit_course_' + cid);
         if ($card.length) {
-            $card.removeClass('selected');
-            $card.find('.course-check').prop('checked', false);
+            updateAssignedBadge($card, false);
         }
         syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
         updateEditLoadPanel();
+        updateEditControlAvailability();
+        applyCourseFilter($('#edit-course-search-input').val(), editCourseList);
+    }
+
+    // Enable/disable +/- buttons for edit modal catalog cards (never block adds, only enforce min/max)
+    function updateEditControlAvailability() {
+        $(editCourseList).find('.course-card-item').each(function() {
+            var $card = $(this);
+            var cid = String($card.data('cid'));
+            var $check = $card.find('.course-check');
+            var $plus = $card.find('.btn-sec-plus');
+            var $minus = $card.find('.btn-sec-minus');
+            var currentSections = parseInt(editSectionMap[cid], 10) || 1;
+
+            $check.prop('disabled', false);
+            $plus.prop('disabled', currentSections >= 20);
+            $minus.prop('disabled', currentSections <= 1);
+        });
     }
 
     // Core Load Calculation Function
@@ -909,49 +979,60 @@ $(function(){
             });
         });
 
+        var resolvedMinUnits = profLimits ? (Number(profLimits.min_units) || 0) : 0;
+        var resolvedMaxUnits = profLimits ? (Number(profLimits.max_units) || 24) : 24;
+        var resolvedMinHours = profLimits ? (Number(profLimits.min_hours) || 0) : 0;
+        var resolvedMaxHours = profLimits ? (Number(profLimits.max_hours) || 40) : 40;
+
+        // Overload: exceeding either maximum is a hard limit
+        var hoursExceeded = totalHours > resolvedMaxHours;
+        var unitsExceeded = totalUnits > resolvedMaxUnits;
+
+        // Underload is hours-primary: status is decided by whether the hours minimum is met.
+        // Units progress is shown but does NOT determine the badge/status color.
+        var hoursUnderload = resolvedMinHours > 0 && totalHours < resolvedMinHours;
+        var unitsUnderload = resolvedMinUnits > 0 && totalUnits < resolvedMinUnits;
+
         return {
             totalHours: totalHours,
             totalUnits: totalUnits,
             courseCount: courseCount,
             sectionCount: sectionCount,
             items: items,
-            minUnits: profLimits ? Number(profLimits.min_units) : 0,
-            maxUnits: profLimits ? Number(profLimits.max_units) : 24,
-            minHours: profLimits ? Number(profLimits.min_hours) : 0,
-            maxHours: profLimits ? Number(profLimits.max_hours) : 40,
-            unitsExceeded: profLimits ? totalUnits > Number(profLimits.max_units) : false,
-            hoursExceeded: profLimits ? totalHours > Number(profLimits.max_hours) : false,
-            isUnderload: profLimits ? (totalUnits < Number(profLimits.min_units) && totalHours < Number(profLimits.min_hours)) : false,
+            minUnits: resolvedMinUnits,
+            maxUnits: resolvedMaxUnits,
+            minHours: resolvedMinHours,
+            maxHours: resolvedMaxHours,
+            unitsExceeded: unitsExceeded,
+            hoursExceeded: hoursExceeded,
+            hoursUnderload: hoursUnderload,
+            unitsUnderload: unitsUnderload,
+            // isUnderload is hours-only: yellow only when hours minimum is not yet met
+            isUnderload: hoursUnderload,
             isSafe: courseCount > 0
         };
     }
 
     function isAddLoadWithinLimits(selectedIds, sectionMap) {
-        if (!currentProfLimits) return false;
+        if (!currentProfLimits) return true;
         var result = calculateLoad(selectedIds, sectionMap, currentProfLimits);
         return !result.hoursExceeded && !result.unitsExceeded;
     }
 
     function updateAddControlAvailability() {
+        // Never disable checkboxes - user can freely add and remove courses consecutively.
+        // Overload conditions are communicated via the visual meters, warning badge, and disabled submit button.
         $(addCourseList).find('.course-card-item').each(function() {
             var $card = $(this);
             var cid = String($card.data('cid'));
             var $check = $card.find('.course-check');
             var $plus = $card.find('.btn-sec-plus');
-            var isSelected = addSelectedIds.has(cid);
+            var $minus = $card.find('.btn-sec-minus');
             var currentSections = parseInt(addSectionMap[cid], 10) || 1;
 
-            var candidateIds = new Set(addSelectedIds);
-            candidateIds.add(cid);
-            var candidateMap = Object.assign({}, addSectionMap);
-            candidateMap[cid] = currentSections;
-            var canSelect = isAddLoadWithinLimits(candidateIds, candidateMap);
-
-            $check.prop('disabled', !isSelected && !canSelect);
-
-            var incrementMap = Object.assign({}, addSectionMap);
-            incrementMap[cid] = Math.min(20, currentSections + 1);
-            $plus.prop('disabled', currentSections >= 20 || !isAddLoadWithinLimits(candidateIds, incrementMap));
+            $check.prop('disabled', false);
+            $plus.prop('disabled', currentSections >= 20);
+            $minus.prop('disabled', currentSections <= 1);
         });
     }
 
@@ -1029,19 +1110,26 @@ $(function(){
             $submitBtn.prop('disabled', true);
             $btnHint.text('Reduce sections or choose another professor');
         } else if (result.isUnderload) {
+            // Hours minimum not yet met — yellow warning
             $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-error-circle me-1"></i>Below Minimum');
             $barHours.addClass('bg-warning');
-            $barUnits.addClass('bg-warning');
+            // Units bar: green if units min met, yellow if not, but does NOT affect overall status
+            $barUnits.addClass(result.unitsUnderload ? 'bg-warning' : 'bg-success');
             $alert.attr('class', 'alert alert-warning py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-info-circle me-1"></i> Load is below this academic ranking\'s minimum target.');
+                  .html('<i class="bx bx-info-circle me-1"></i> Load is below this academic ranking\'s minimum target (' + result.minHours.toFixed(1) + ' hrs required).');
             $submitBtn.prop('disabled', false);
-            $btnHint.text('Ready to assign; minimum target not reached');
+            $btnHint.text('Ready to assign; minimum hours not yet reached');
         } else {
+            // Hours minimum met — Ready, even if units minimum is not yet fulfilled
             $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Ready');
             $barHours.addClass('bg-success');
-            $barUnits.addClass('bg-success');
+            // Units bar: green if units min met, yellow if still short (informational only)
+            $barUnits.addClass(result.unitsUnderload ? 'bg-warning' : 'bg-success');
+            var unitsNote = result.unitsUnderload
+                ? ' <span class="text-warning fw-semibold">(units below target: ' + result.totalUnits.toFixed(1) + '/' + result.minUnits.toFixed(1) + ' u)</span>'
+                : ' &bull; ' + result.totalUnits.toFixed(1) + ' u';
             $alert.attr('class', 'alert alert-success py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-check-circle me-1"></i> <strong>Load calculated:</strong> Hours (' + result.totalHours.toFixed(1) + ' hrs) and units (' + result.totalUnits.toFixed(1) + ' u).');
+                  .html('<i class="bx bx-check-circle me-1"></i> <strong>Load calculated:</strong> ' + result.totalHours.toFixed(1) + ' hrs/wk' + unitsNote + '.');
             $submitBtn.prop('disabled', false);
             $btnHint.text('Ready to assign');
         }
@@ -1098,16 +1186,30 @@ $(function(){
         }
 
         else if (result.hoursExceeded || result.unitsExceeded) {
-            $statusBadge.attr('class', 'badge bg-danger').html('<i class="bx bx-x-circle me-1"></i>Exceeded');
+            $statusBadge.attr('class', 'badge bg-danger').html('<i class="bx bx-x-circle me-1"></i>Limit Exceeded');
+            $barHours.addClass(result.hoursExceeded ? 'bg-danger' : 'bg-success');
+            $barUnits.addClass(result.unitsExceeded ? 'bg-danger' : 'bg-success');
             $alert.attr('class', 'alert alert-danger py-2 px-2 mb-0 small')
-                  .html('<i class="bx bx-error-circle me-1"></i> Load exceeds the academic ranking limit. Save disabled.');
+                  .html('<i class="bx bx-error-circle me-1"></i> Load exceeds academic ranking limit. Reduce sections to save.');
             $submitBtn.prop('disabled', true);
+        } else if (result.isUnderload) {
+            // Hours minimum not yet met — yellow warning
+            $statusBadge.attr('class', 'badge bg-warning text-dark').html('<i class="bx bx-error-circle me-1"></i>Below Minimum');
+            $barHours.addClass('bg-warning');
+            $barUnits.addClass(result.unitsUnderload ? 'bg-warning' : 'bg-success');
+            $alert.attr('class', 'alert alert-warning py-2 px-2 mb-0 small')
+                  .html('<i class="bx bx-info-circle me-1"></i> Load is below this academic ranking\'s minimum target (' + result.minHours.toFixed(1) + ' hrs required).');
+            $submitBtn.prop('disabled', false);
         } else {
-            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Ready');
+            // Hours minimum met — Balanced, even if units minimum is not yet fulfilled
+            $statusBadge.attr('class', 'badge bg-success').html('<i class="bx bx-check-circle me-1"></i>Balanced');
             $barHours.addClass('bg-success');
-            $barUnits.addClass('bg-success');
+            $barUnits.addClass(result.unitsUnderload ? 'bg-warning' : 'bg-success');
+            var editUnitsNote = result.unitsUnderload
+                ? ' <span class="text-warning fw-semibold">(units below target: ' + result.totalUnits.toFixed(1) + '/' + result.minUnits.toFixed(1) + ' u)</span>'
+                : ', ' + result.totalUnits.toFixed(1) + 'u';
             $alert.attr('class', 'alert alert-success py-2 px-2 mb-0 small')
-                  .html('<i class="bx bx-check-circle me-1"></i> Load calculated (' + result.totalHours.toFixed(1) + 'h, ' + result.totalUnits.toFixed(1) + 'u).');
+                  .html('<i class="bx bx-check-circle me-1"></i> Load within limits (' + result.totalHours.toFixed(1) + 'h' + editUnitsNote + ').');
             $submitBtn.prop('disabled', false);
         }
     }
@@ -1138,15 +1240,23 @@ $(function(){
             var hrsStr = (courseHrs % 1 === 0) ? courseHrs : courseHrs.toFixed(1);
             var unitsStr = (courseUnits % 1 === 0) ? courseUnits : courseUnits.toFixed(1);
 
-            html += '<div class="course-card-item' + (isChecked ? ' selected' : '') + '" id="card_' + idPrefix + course.course_id + '" data-cid="' + course.course_id + '" data-year="' + (course.year_level || '') + '" data-name="' + (course.course_name || '').toLowerCase() + '" data-program="' + (course.program || '').toLowerCase() + '">';
-            html += '  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">';
+            html += '<div class="course-card-item' + (isChecked ? ' selected' : '') + '" id="card_' + idPrefix + course.course_id + '" data-cid="' + course.course_id + '" data-year="' + (course.year_level || '') + '" data-semester="' + (course.semester || '') + '" data-specialization="' + (course.specialization || '') + '" data-name="' + (course.course_name || '').toLowerCase() + '" data-program="' + (course.program || '').toLowerCase() + '">';
             html += '    <div class="d-flex align-items-start gap-2 flex-grow-1" style="min-width: 200px;">';
             html += '      <input class="form-check-input mt-1 course-check" type="checkbox" value="' + course.course_id + '" id="' + idPrefix + course.course_id + '"' + (isChecked ? ' checked' : '') + '>';
             html += '      <label class="form-check-label mb-0" for="' + idPrefix + course.course_id + '" style="cursor: pointer;">';
-            html += '        <span class="fw-semibold text-dark d-block">' + (course.course_name || 'Untitled') + '</span>';
+            html += '        <div class="d-flex align-items-center flex-wrap gap-1">';
+            html += '          <span class="fw-semibold text-dark">' + (course.course_name || 'Untitled') + '</span>';
+            html += '          <span class="badge bg-primary-subtle text-primary border border-primary-subtle assigned-status-badge ms-1"' + (isChecked ? '' : ' style="display:none;"') + ' style="font-size: 0.72rem;"><i class="bx bx-check-circle me-1"></i>Assigned</span>';
+            html += '        </div>';
             html += '        <div class="d-flex flex-wrap gap-1 align-items-center mt-1">';
             if (course.program) {
                 html += '          <span class="badge bg-secondary-subtle text-secondary border px-1 py-0" style="font-size: 0.72rem;">' + course.program + '</span>';
+            }
+            if (course.semester) {
+                html += '          <span class="stat-pill" style="background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe;">' + course.semester + '</span>';
+            }
+            if (course.specialization) {
+                html += '          <span class="stat-pill" style="background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8;">' + course.specialization + '</span>';
             }
             html += '          <span class="stat-pill stat-pill-lec">Lec: ' + lec + 'h</span>';
             html += '          <span class="stat-pill stat-pill-lab">Lab: ' + lab + 'h</span>';
@@ -1202,7 +1312,19 @@ $(function(){
     function loadCourses(container, buttons, yearValue, selectedIds, sectionMap, inputPrefix, idPrefix, onComplete) {
         if (!container) return;
 
-        buttons.each(function(){ $(this).prop('disabled', true); });
+        var list = allCoursesList;
+        if (yearValue && yearValue !== 'all') {
+            list = allCoursesList.filter(function(c) {
+                return String(c.year_level) === String(yearValue);
+            });
+        }
+        if (list && list.length > 0) {
+            renderCourseList(container, list, selectedIds, sectionMap, inputPrefix, idPrefix);
+            if (onComplete) onComplete();
+            return;
+        }
+
+        if (buttons) buttons.each(function(){ $(this).prop('disabled', true); });
         container.innerHTML = '<div class="text-muted small py-4 text-center"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading courses...</div>';
 
         fetch(getCourseListUrl(yearValue))
@@ -1211,16 +1333,22 @@ $(function(){
                 return response.json();
             })
             .then(function(data){
-                var list = data.courses || [];
-                list.forEach(function(c){ coursesData[c.course_id] = c; });
-                renderCourseList(container, list, selectedIds, sectionMap, inputPrefix, idPrefix);
+                var fetchedList = data.courses || [];
+                fetchedList.forEach(function(c){ coursesData[String(c.course_id)] = c; });
+                renderCourseList(container, fetchedList, selectedIds, sectionMap, inputPrefix, idPrefix);
                 if (onComplete) onComplete();
             })
             .catch(function(){
-                container.innerHTML = '<p class="text-muted text-center py-4 mb-0">Unable to load courses right now.</p>';
+                var fallback = Object.values(coursesData);
+                if (fallback.length > 0) {
+                    renderCourseList(container, fallback, selectedIds, sectionMap, inputPrefix, idPrefix);
+                    if (onComplete) onComplete();
+                } else {
+                    container.innerHTML = '<p class="text-muted text-center py-4 mb-0">Unable to load courses right now.</p>';
+                }
             })
             .finally(function(){
-                buttons.each(function(){ $(this).prop('disabled', false); });
+                if (buttons) buttons.each(function(){ $(this).prop('disabled', false); });
             });
     }
 
@@ -1237,22 +1365,13 @@ $(function(){
             var isChecked = $chk.is(':checked');
 
             if (isChecked) {
-                var candidateIds = new Set(selectedIds);
-                candidateIds.add(cid);
-                var candidateMap = Object.assign({}, sectionMap);
-                candidateMap[cid] = parseInt($secInput.val(), 10) || 1;
-                if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
-                    $chk.prop('checked', false);
-                    updateAddLoadPanel();
-                    return;
-                }
                 selectedIds.add(cid);
                 if (!sectionMap[cid]) sectionMap[cid] = parseInt($secInput.val(), 10) || 1;
-                $card.addClass('selected');
                 $secInput.val(sectionMap[cid]);
+                updateAssignedBadge($card, true);
             } else {
                 selectedIds.delete(cid);
-                $card.removeClass('selected');
+                updateAssignedBadge($card, false);
             }
 
             updateCourseSubtotalCard($card, cid, sectionMap[cid] || 1);
@@ -1278,19 +1397,17 @@ $(function(){
             var $card = $btn.closest('.course-card-item');
             var cid = String($btn.data('cid') || $card.data('cid'));
             var $secInput = $card.find('.section-input');
-            var $chk = $card.find('.course-check');
 
+            // Always read from the authoritative sectionMap, fall back to DOM only if missing
             var current = parseInt(sectionMap[cid], 10) || parseInt($secInput.val(), 10) || 1;
             var next = Math.max(1, current - 1);
 
             sectionMap[cid] = next;
             $secInput.val(next);
 
-            if (!$chk.is(':checked')) {
-                $chk.prop('checked', true);
-                selectedIds.add(cid);
-                $card.addClass('selected');
-            }
+            // Auto-select when stepping
+            selectedIds.add(cid);
+            updateAssignedBadge($card, true);
 
             updateCourseSubtotalCard($card, cid, next);
             if (onUpdate) onUpdate();
@@ -1304,28 +1421,17 @@ $(function(){
             var $card = $btn.closest('.course-card-item');
             var cid = String($btn.data('cid') || $card.data('cid'));
             var $secInput = $card.find('.section-input');
-            var $chk = $card.find('.course-check');
 
+            // Always read from the authoritative sectionMap, fall back to DOM only if missing
             var current = parseInt(sectionMap[cid], 10) || parseInt($secInput.val(), 10) || 1;
             var next = Math.min(20, current + 1);
-
-            var candidateIds = new Set(selectedIds);
-            candidateIds.add(cid);
-            var candidateMap = Object.assign({}, sectionMap);
-            candidateMap[cid] = next;
-            if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
-                updateAddLoadPanel();
-                return;
-            }
 
             sectionMap[cid] = next;
             $secInput.val(next);
 
-            if (!$chk.is(':checked')) {
-                $chk.prop('checked', true);
-                selectedIds.add(cid);
-                $card.addClass('selected');
-            }
+            // Auto-select when stepping
+            selectedIds.add(cid);
+            updateAssignedBadge($card, true);
 
             updateCourseSubtotalCard($card, cid, next);
             if (onUpdate) onUpdate();
@@ -1341,15 +1447,6 @@ $(function(){
             var val = parseInt(raw, 10);
             if (!isNaN(val) && val >= 1) {
                 val = Math.min(20, val);
-                var candidateIds = new Set(selectedIds);
-                candidateIds.add(cid);
-                var candidateMap = Object.assign({}, sectionMap);
-                candidateMap[cid] = val;
-                if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
-                    $input.val(sectionMap[cid] || 1);
-                    updateAddLoadPanel();
-                    return;
-                }
                 sectionMap[cid] = val;
                 var $chk = $card.find('.course-check');
                 if (!$chk.is(':checked')) {
@@ -1371,13 +1468,11 @@ $(function(){
             if (isNaN(val) || val < 1) val = 1;
             if (val > 20) val = 20;
 
-            var candidateIds = new Set(selectedIds);
-            candidateIds.add(cid);
-            var candidateMap = Object.assign({}, sectionMap);
-            candidateMap[cid] = val;
-            if (selectedIds === addSelectedIds && !isAddLoadWithinLimits(candidateIds, candidateMap)) {
-                $input.val(sectionMap[cid] || 1);
-                updateAddLoadPanel();
+            // Guard: if nothing changed (e.g. spurious blur from DOM reorder), only normalize display
+            var prevVal = parseInt(sectionMap[cid], 10) || 1;
+            var prevChecked = $card.find('.course-check').is(':checked');
+            if (val === prevVal && prevChecked === selectedIds.has(cid)) {
+                $input.val(val);
                 return;
             }
 
@@ -1421,16 +1516,19 @@ $(function(){
     setupContainerEvents(addCourseList, addSelectedIds, addSectionMap, 'add_course_', function() {
         syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
         updateAddLoadPanel();
+        applyCourseFilter($('#course-search-input').val(), addCourseList);
     });
 
     setupContainerEvents(editCourseList, editSelectedIds, editSectionMap, 'edit_course_', function() {
         syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
         updateEditLoadPanel();
+        updateEditControlAvailability();
+        applyCourseFilter($('#edit-course-search-input').val(), editCourseList);
     });
 
     function applyProfessorAssignments(assignments) {
         addSelectedIds.clear();
-        addSectionMap = {};
+        Object.keys(addSectionMap).forEach(function(k) { delete addSectionMap[k]; });
         (assignments || []).forEach(function(item) {
             var cidStr = String(item.course_id);
             addSelectedIds.add(cidStr);
@@ -1445,12 +1543,13 @@ $(function(){
 
             $card.find('.course-check').prop('checked', isChecked);
             $card.find('.section-input').val(secVal);
-            $card.toggleClass('selected', isChecked);
+            updateAssignedBadge($card, isChecked);
             updateCourseSubtotalCard($card, cid, secVal);
         });
 
         syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
         updateAddLoadPanel();
+        applyCourseFilter($('#course-search-input').val(), addCourseList);
     }
 
     $('#prof-search-input').on('click', function(e) {
@@ -1574,6 +1673,71 @@ $(function(){
             });
     });
 
+    // Helper to toggle assigned badge, card styling, AND checkbox — single source of truth
+    function updateAssignedBadge($card, isAssigned) {
+        $card.toggleClass('selected', isAssigned);
+        $card.toggleClass('is-assigned', isAssigned);
+        var $chk = $card.find('.course-check');
+        if ($chk.prop('checked') !== isAssigned) {
+            $chk.prop('checked', isAssigned);
+        }
+        var $badge = $card.find('.assigned-status-badge');
+        if ($badge.length) {
+            $badge.toggle(isAssigned);
+        }
+    }
+
+    // Helper to reorder catalog so assigned courses appear first, then alphabetically.
+    // Safe: skips any card that contains a currently focused element to avoid spurious blur events.
+    function reorderCourseCatalog(container, selectedIds) {
+        if (!container) return;
+        var $container = $(container);
+        var items = $container.children('.course-card-item').get();
+        if (!items || !items.length) return;
+
+        // Find the currently focused element to avoid moving its card
+        var $focused = $(document.activeElement);
+        var $focusedCard = $focused.closest('.course-card-item');
+        var focusedCardEl = $focusedCard.length ? $focusedCard[0] : null;
+
+        items.sort(function(a, b) {
+            var aCid = String($(a).data('cid'));
+            var bCid = String($(b).data('cid'));
+            var aAssigned = selectedIds.has(aCid) ? 1 : 0;
+            var bAssigned = selectedIds.has(bCid) ? 1 : 0;
+
+            if (aAssigned !== bAssigned) {
+                return bAssigned - aAssigned; // 1 (assigned) before 0 (unassigned)
+            }
+            var aName = String($(a).data('name') || '');
+            var bName = String($(b).data('name') || '');
+            return aName.localeCompare(bName);
+        });
+
+        // Append in sorted order — skip focused card's element to prevent blur
+        $.each(items, function(idx, el) {
+            if (el === focusedCardEl) return; // skip; will stay in place
+            $container.append(el);
+        });
+        // If focused card was skipped, move it to its correct sorted position after the loop
+        if (focusedCardEl) {
+            var focusedIdx = items.indexOf(focusedCardEl);
+            if (focusedIdx >= 0) {
+                if (focusedIdx === 0) {
+                    $container.prepend(focusedCardEl);
+                } else {
+                    var $prevSibling = $(items[focusedIdx - 1]);
+                    // If prev sibling was also skipped (unlikely), just append
+                    if ($prevSibling.length) {
+                        $prevSibling.after(focusedCardEl);
+                    } else {
+                        $container.append(focusedCardEl);
+                    }
+                }
+            }
+        }
+    }
+
     // Reset / Clear Selection button
     $('#btn-clear-selection').on('click', function() {
         $('#prof_select').val('');
@@ -1586,55 +1750,130 @@ $(function(){
         addSectionMap = {};
         $(addCourseList).find('.course-card-item').each(function() {
             var $card = $(this);
-            var cid = $card.data('cid');
-            $card.removeClass('selected');
+            var cid = String($card.data('cid'));
+            updateAssignedBadge($card, false);
             $card.find('.course-check').prop('checked', false);
             $card.find('.section-input').val(1);
             updateCourseSubtotalCard($card, cid, 1);
         });
         syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
         updateAddLoadPanel();
+        applyCourseFilter($('#course-search-input').val(), addCourseList);
     });
 
     // Year Filter Button Handlers (Add Form)
     $('.year-filter-btn').on('click', function() {
-        var yearValue = $(this).data('year');
         setActiveFilter($('.year-filter-btn'), this);
-        loadCourses(addCourseList, $('.year-filter-btn'), yearValue, addSelectedIds, addSectionMap, 'sections_', 'add_course_', function() {
-            syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
-            updateAddLoadPanel();
-            applyCourseFilter($('#course-search-input').val(), addCourseList);
-        });
+        applyCourseFilter($('#course-search-input').val(), addCourseList);
+    });
+
+    // Semester Filter Button Handlers (Add Form)
+    $('.sem-filter-btn').on('click', function() {
+        setActiveFilter($('.sem-filter-btn'), this);
+        applyCourseFilter($('#course-search-input').val(), addCourseList);
     });
 
     // Year Filter Button Handlers (Edit Modal)
     $('.edit-year-filter-btn').on('click', function() {
-        var yearValue = $(this).data('year');
         setActiveFilter($('.edit-year-filter-btn'), this);
-        loadCourses(editCourseList, $('.edit-year-filter-btn'), yearValue, editSelectedIds, editSectionMap, 'edit_sections_', 'edit_course_', function() {
-            syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
-            updateEditLoadPanel();
-            applyCourseFilter($('#edit-course-search-input').val(), editCourseList);
-        });
+        applyCourseFilter($('#edit-course-search-input').val(), editCourseList);
     });
 
-    // Course Search Filters
+    // Semester Filter Button Handlers (Edit Modal)
+    $('.edit-sem-filter-btn').on('click', function() {
+        setActiveFilter($('.edit-sem-filter-btn'), this);
+        applyCourseFilter($('#edit-course-search-input').val(), editCourseList);
+    });
+
+    function semMatches(cSem, activeSem) {
+        if (!activeSem || activeSem === 'all') return true;
+        if (!cSem) return false;
+        var s1 = String(cSem).trim().toLowerCase();
+        var s2 = String(activeSem).trim().toLowerCase();
+        if (s1 === s2) return true;
+        if (s2.indexOf('1') !== -1 && (s1 === '1' || s1.indexOf('1st') !== -1 || s1.indexOf('first') !== -1)) return true;
+        if (s2.indexOf('2') !== -1 && (s1 === '2' || s1.indexOf('2nd') !== -1 || s1.indexOf('second') !== -1)) return true;
+        return false;
+    }
+
+    function normalizeYear(val) {
+        if (val === undefined || val === null) return '';
+        var s = String(val).trim().toLowerCase();
+        if (!s || s === 'all') return 'all';
+        var match = s.match(/[1-4]/);
+        if (match) return match[0];
+        if (s.indexOf('first') !== -1) return '1';
+        if (s.indexOf('second') !== -1) return '2';
+        if (s.indexOf('third') !== -1) return '3';
+        if (s.indexOf('fourth') !== -1) return '4';
+        return s;
+    }
+
+    function yearMatches(cYear, activeYear) {
+        var aNorm = normalizeYear(activeYear);
+        if (!aNorm || aNorm === 'all') return true;
+        var cNorm = normalizeYear(cYear);
+        return cNorm === aNorm;
+    }
+
+    // Course Search & Combined Filters
     function applyCourseFilter(term, container) {
-        var q = (term || '').trim().toLowerCase();
+        if (!container) return;
+        var isEdit = (container === editCourseList);
+        var selectedIds = isEdit ? editSelectedIds : addSelectedIds;
+
+        // Reorder container so assigned courses appear first, then alphabetically
+        reorderCourseCatalog(container, selectedIds);
+
+        var q = (term !== undefined && term !== null ? String(term) : (isEdit ? $('#edit-course-search-input').val() : $('#course-search-input').val()) || '').trim().toLowerCase();
+        var activeSem = isEdit ? $('.edit-sem-filter-btn.active').data('semester') : $('.sem-filter-btn.active').data('semester');
+        var activeYear = isEdit ? $('.edit-year-filter-btn.active').data('year') : $('.year-filter-btn.active').data('year');
         var visibleCount = 0;
-        $(container).find('.course-card-item').each(function() {
-            var name = String($(this).data('name') || '');
-            var prog = String($(this).data('program') || '');
-            if (!q || name.indexOf(q) !== -1 || prog.indexOf(q) !== -1) {
-                $(this).show();
+
+        $(container).children('.course-card-item').each(function() {
+            var $card = $(this);
+            var cid = String($card.data('cid'));
+            var isAssigned = selectedIds.has(cid);
+
+            // Update badge and card styling
+            updateAssignedBadge($card, isAssigned);
+
+            var name = String($card.data('name') || '');
+            var prog = String($card.data('program') || '');
+            var cSem = String($card.data('semester') || '');
+            var cYear = String($card.data('year') || '');
+
+            var matchesSearch = !q || name.indexOf(q) !== -1 || prog.indexOf(q) !== -1;
+            var matchesSem = semMatches(cSem, activeSem);
+            var matchesYear = yearMatches(cYear, activeYear);
+
+            if (matchesSearch && matchesSem && matchesYear) {
+                $card.show();
                 visibleCount++;
             } else {
-                $(this).hide();
+                $card.hide();
             }
         });
+
         if (container === addCourseList) {
             $('#visible-course-count').text('Showing ' + visibleCount + ' courses');
         }
+
+        var emptyMsgId = isEdit ? 'edit-empty-filter-msg' : 'add-empty-filter-msg';
+        var $emptyMsg = $(container).find('#' + emptyMsgId);
+        if (visibleCount === 0) {
+            if (!$emptyMsg.length) {
+                $(container).append('<div class="empty-state py-4 text-center" id="' + emptyMsgId + '"><div class="empty-state__text text-muted">No courses match the selected filters.</div></div>');
+            } else {
+                $emptyMsg.show();
+                $(container).append($emptyMsg);
+            }
+        } else {
+            $emptyMsg.hide();
+        }
+
+        // Keep edit-modal +/- button states accurate after every filter pass
+        if (isEdit) updateEditControlAvailability();
     }
 
     $('#course-search-input').on('input', function() {
@@ -1656,10 +1895,10 @@ $(function(){
     // Edit Modal Trigger Handler
     $('.edit-btn').on('click', function() {
         var $t = $(this);
-        var profId = $t.data('id');
-        var firstName = $t.data('firstname');
-        var lastName = $t.data('lastname');
-        var department = $t.data('department');
+        var profId = String($t.data('id') || '');
+        var firstName = $t.data('firstname') || '';
+        var lastName = $t.data('lastname') || '';
+        var department = $t.data('department') || '';
         var specialization = String($t.data('specialization') || '');
         var minUnits = Number($t.data('minunits')) || 0;
         var maxUnits = Number($t.data('maxunits')) || 24;
@@ -1668,21 +1907,44 @@ $(function(){
         var courseAttr = String($t.data('courses') || '');
         var sectionAttr = String($t.data('sections') || '');
 
-        $('#edit_firstname').val(firstName);
-        $('#edit_lastname').val(lastName);
-        $('#edit_department').val(department);
-        $('#edit_specialization').val(specialization);
+        var profInfo = profDataMap[profId] || {};
+        var resolvedMinUnits = (profInfo.min_units !== undefined && profInfo.min_units !== null && profInfo.min_units !== '') ? Number(profInfo.min_units) : minUnits;
+        var resolvedMaxUnits = (profInfo.max_units !== undefined && profInfo.max_units !== null && profInfo.max_units !== '') ? Number(profInfo.max_units) : maxUnits;
+        var resolvedMinHours = (profInfo.min_hours !== undefined && profInfo.min_hours !== null && profInfo.min_hours !== '') ? Number(profInfo.min_hours) : minHours;
+        var resolvedMaxHours = (profInfo.max_hours !== undefined && profInfo.max_hours !== null && profInfo.max_hours !== '') ? Number(profInfo.max_hours) : maxHours;
+        var resolvedDept = department || profInfo.department || '';
+        var resolvedSpec = (specialization && specialization !== '-') ? specialization : (profInfo.specialization || '');
+
+        $('#edit_firstname').val(firstName || profInfo.first_name || '');
+        $('#edit_lastname').val(lastName || profInfo.last_name || '');
+        $('#edit_specialization').val(resolvedSpec);
+
+        // Ensure department dropdown has the department value selected
+        if (resolvedDept && resolvedDept !== 'N/A') {
+            if ($('#edit_department option[value="' + resolvedDept + '"]').length === 0) {
+                $('#edit_department').append($('<option>', {
+                    value: resolvedDept,
+                    text: resolvedDept
+                }));
+            }
+            $('#edit_department').val(resolvedDept);
+        } else {
+            if (!$('#edit_department').val()) {
+                $('#edit_department').val('CICT');
+            }
+        }
+
         editProfLimits = {
             prof_id: profId,
-            specialization: specialization,
-            min_units: minUnits,
-            max_units: maxUnits,
-            min_hours: minHours,
-            max_hours: maxHours
+            specialization: resolvedSpec,
+            min_units: resolvedMinUnits,
+            max_units: resolvedMaxUnits,
+            min_hours: resolvedMinHours,
+            max_hours: resolvedMaxHours
         };
 
         editSelectedIds.clear();
-        editSectionMap = {};
+        Object.keys(editSectionMap).forEach(function(k) { delete editSectionMap[k]; });
 
         // Parse section pairs: "courseId:sections,courseId:sections"
         if (sectionAttr) {
@@ -1705,14 +1967,26 @@ $(function(){
             });
         }
 
+        if (existingProfAssignments && existingProfAssignments[profId]) {
+            existingProfAssignments[profId].forEach(function(item) {
+                var cid = String(item.course_id);
+                editSelectedIds.add(cid);
+                if (!editSectionMap[cid]) {
+                    editSectionMap[cid] = parseInt(item.sections, 10) || 1;
+                }
+            });
+        }
+
         setActiveFilter($('.edit-year-filter-btn'), $('.edit-year-filter-btn[data-year="all"]'));
+        setActiveFilter($('.edit-sem-filter-btn'), $('.edit-sem-filter-btn[data-semester="all"]'));
         $('#edit-course-search-input').val('');
         $('#editForm').attr('action', '/update_prof_with_courses/' + profId);
 
-        loadCourses(editCourseList, $('.edit-year-filter-btn'), 'all', editSelectedIds, editSectionMap, 'edit_sections_', 'edit_course_', function() {
-            syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
-            updateEditLoadPanel();
-        });
+        renderCourseList(editCourseList, allCoursesList, editSelectedIds, editSectionMap, 'edit_sections_', 'edit_course_');
+        syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+        updateEditLoadPanel();
+        updateEditControlAvailability();
+        applyCourseFilter('', editCourseList);
     });
 
     // Keep the load preview synchronized with professor details.
@@ -1734,6 +2008,8 @@ $(function(){
                 selectedIds.add(cid);
                 var val = parseInt($sec.val(), 10) || 1;
                 sectionMap[cid] = Math.max(1, Math.min(20, val));
+            } else {
+                selectedIds.delete(cid);
             }
         });
     }
@@ -1764,6 +2040,7 @@ $(function(){
 
     // Initial state setup
     updateAddLoadPanel();
+    applyCourseFilter('', addCourseList);
     if ($('#prof_select').val()) {
         $('#prof_select').trigger('change');
     }

@@ -7,16 +7,18 @@
     <div>
         <h1 class="page-title">
             Room Schedule & Availability: {{ room.room_name }}
-            {% if room.room_type %}
-            <span class="badge-custom {% if room.room_type == 'Laboratory' %}badge-warning{% else %}badge-primary{% endif %} ms-2">
-                {{ room.room_type }}
+            {% set rt = (room.room_type or '')|lower %}
+            <span class="badge-custom {% if 'lab' in rt or 'lab' in (room.room_name|lower) %}badge-warning{% elif 'lec' in rt or 'room' in (room.room_name|lower) %}badge-primary{% else %}badge-secondary{% endif %} ms-2">
+                {% if 'lab' in rt or 'lab' in (room.room_name|lower) %}Laboratory Room{% elif 'lec' in rt or 'room' in (room.room_name|lower) %}Lecture Room{% else %}{{ room.room_type or 'General' }}{% endif %}
             </span>
-            {% endif %}
         </h1>
         <p class="page-subtitle">View occupied classes and available (unoccupied) time slots across the operating week</p>
     </div>
     <div class="d-flex align-items-center gap-2">
-        <a href="/room_schedule/{{ room.room_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success" title="Export Room Schedule to Excel">
+        <a href="/room_schedule/{{ room.room_id }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Room Utilization to PDF (NEUST format)">
+            <i class="bx bx-file-pdf me-1"></i> Export to PDF
+        </a>
+        <a href="/room_schedule/{{ room.room_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Room Schedule to Excel">
             <i class="bx bx-file me-1"></i> Export to Excel
         </a>
         <a href="/room_schedule" class="btn btn-outline-secondary">
@@ -130,8 +132,9 @@
                     <i class="bx bx-building fs-5"></i>
                 </div>
             </div>
+            {% set rt = (room.room_type or '')|lower %}
             <h4 class="fw-bold mb-1 text-dark" style="font-size: 1.15rem;">
-                {{ room.room_type or 'Lecture' }} Room
+                {% if 'lab' in rt or 'lab' in (room.room_name|lower) %}Laboratory Room{% elif 'lec' in rt or 'room' in (room.room_name|lower) %}Lecture Room{% else %}{{ room.room_type or 'General' }} Room{% endif %}
             </h4>
             <div class="text-muted small mt-1">
                 <i class="bx bx-time me-1 text-primary"></i>Operating: {{ availability.metrics.operating_range_text }}
@@ -413,8 +416,9 @@
                                 <small class="text-muted d-block">({{ period.duration_hours }} hours)</small>
                             </td>
                             <td>
-                                <span class="badge-custom {% if room.room_type == 'Laboratory' %}badge-warning{% else %}badge-primary{% endif %}">
-                                    {{ room.room_type or 'Lecture' }} Ready
+                                {% set rt = (room.room_type or '')|lower %}
+                                <span class="badge-custom {% if 'lab' in rt or 'lab' in (room.room_name|lower) %}badge-warning{% elif 'lec' in rt or 'room' in (room.room_name|lower) %}badge-primary{% else %}badge-secondary{% endif %}">
+                                    {% if 'lab' in rt or 'lab' in (room.room_name|lower) %}Laboratory Ready{% else %}Lecture Ready{% endif %}
                                 </span>
                             </td>
                             <td>
@@ -490,7 +494,7 @@
                                 <strong>{{ entry.course_name or 'TBA' }}</strong>
                                 <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
                             </td>
-                            <td>{{ entry.professor or 'Professor A' }}</td>
+                            <td>{{ entry.professor or 'TBA' }}</td>
                             <td><span class="badge bg-light text-dark border">{{ entry.section or 'TBA' }}</span></td>
                             <td><strong>{{ entry.day or 'TBA' }}</strong></td>
                             <td><span class="badge-custom badge-primary font-monospace">{{ entry.start_time }} - {{ entry.end_time }}</span></td>
@@ -598,7 +602,7 @@ $(function(){
         var $t = $(this);
         $('#modalCourseName').text($t.data('course') || 'TBA');
         $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
-        $('#modalProfessor').text($t.data('professor') || 'Professor A');
+        $('#modalProfessor').text($t.data('professor') || 'TBA');
         $('#modalDay').text($t.data('day') || 'TBA');
         $('#modalTime').text($t.data('time') || 'TBA');
         var sess = $t.data('session') || 'Lecture';

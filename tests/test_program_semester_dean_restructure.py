@@ -225,15 +225,13 @@ def test_scheduler_zero_crud_enforcement(mock_db):
     assert r3.status_code == 302
     assert r3.headers['Location'].endswith('/schedules')
 
-    # POST to Save Section Config -> Denied
+    # POST to Save Section Config -> Removed (404)
     r4 = client.post('/save_section_config', data={'semester_id': 10, 'sections_1': 5})
-    assert r4.status_code == 302
-    assert r4.headers['Location'].endswith('/schedules')
+    assert r4.status_code == 404
 
-    # POST to Add Semester -> Denied
+    # POST to Add Semester -> Removed (404)
     r5 = client.post('/add_semester', data={'school_year': '2027-2028', 'term': '1st Semester'})
-    assert r5.status_code == 302
-    assert r5.headers['Location'].endswith('/schedules')
+    assert r5.status_code == 404
 
 
 def test_scheduler_read_only_access(mock_db):
@@ -255,8 +253,8 @@ def test_scheduler_read_only_access(mock_db):
         assert not re.search(r'href=["\'][^"\']*/delete_', html), f"Forbidden delete action found in {path} for scheduler"
 
 
-def test_dean_semester_management(mock_db):
-    """Requirement 2 & 3: Dean can create, view, and activate semesters scoped to program_id."""
+def test_semester_and_section_config_routes_removed(mock_db):
+    """Change 1: Semester and section_config creation routes and tables removed."""
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 2
@@ -265,55 +263,11 @@ def test_dean_semester_management(mock_db):
         session['program'] = 'BSIT'
         session['program_id'] = 1
 
-    # 1. Dean views semesters
-    resp = client.get('/semesters')
-    assert resp.status_code == 200
-
-    # 2. Dean adds a new semester
-    r_add = client.post('/add_semester', data={
-        'school_year': '2026-2027',
-        'term': 'Summer Term',
-        'is_active': 'true',
-    }, follow_redirects=True)
-    assert r_add.status_code == 200
-    inserted_sems = [s for s in mock_db.table('semester').data if s.get('term') == 'Summer Term']
-    assert len(inserted_sems) == 1
-    assert inserted_sems[0]['program_id'] == 1
-    assert inserted_sems[0]['is_active'] is True
-
-    # 3. Dean activates an existing semester (e.g. ID 11: 2nd Semester)
-    r_act = client.get('/activate_semester/11', follow_redirects=True)
-    assert r_act.status_code == 200
-    sem11 = [s for s in mock_db.table('semester').data if s.get('id') == 11][0]
-    assert sem11['is_active'] is True
-
-
-def test_dean_section_config_management(mock_db):
-    """Requirement 5: Section config module per semester with year-level counts."""
-    client = app_module.app.test_client()
-    with client.session_transaction() as session:
-        session['user_id'] = 2
-        session['username'] = 'dean_it'
-        session['role'] = 'Dean'
-        session['program'] = 'BSIT'
-        session['program_id'] = 1
-
-    resp = client.get('/section_config?semester_id=10')
-    assert resp.status_code == 200
-
-    # Save section configs
-    r_save = client.post('/save_section_config', data={
-        'semester_id': '10',
-        'sections_1': '4',
-        'sections_2': '3',
-        'sections_3': '2',
-        'sections_4': '1',
-    }, follow_redirects=True)
-    assert r_save.status_code == 200
-
-    configs = [c for c in mock_db.table('section_config').data if str(c.get('semester_id')) == '10']
-    c_y1 = [c for c in configs if str(c.get('year_level')) == '1'][0]
-    assert c_y1['number_of_sections'] == 4
+    # Endpoints must return 404
+    assert client.get('/semesters').status_code == 404
+    assert client.post('/add_semester', data={'term': '1st Semester'}).status_code == 404
+    assert client.get('/section_config').status_code == 404
+    assert client.post('/save_section_config', data={'sections_1': 3}).status_code == 404
 
 
 def test_professor_time_designation_day_capping():

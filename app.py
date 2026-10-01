@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort
+from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort, has_request_context
 from datetime import timedelta, datetime, timezone
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -48,6 +48,11 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'scheduler-secret-key')
+
+# Shared Constants
+SEMESTER_CHOICES = ["1st Semester", "2nd Semester"]
+SPECIALIZATION_CHOICES = ["Database Systems", "Web Systems", "Networking", "General"]
+SPECIALIZED_TERMS = [(3, "2nd Semester"), (4, "1st Semester"), (4, "2nd Semester")]
 
 # Simple scheduler app: manage courses, professors, rooms, and generated schedules
 
@@ -367,6 +372,19 @@ def _get_programs():
     except Exception as err:
         logging.debug(f"Failed to fetch programs: {err}")
         return []
+
+def _find_program_id_by_name(program_name):
+    """Resolve a program name or numeric ID to public.program.id."""
+    value = str(program_name or '').strip()
+    if not value:
+        return None
+
+    for program in _get_programs():
+        if value.isdigit() and str(program.get('id')) == value:
+            return program.get('id')
+        if str(program.get('program_name') or '').strip().casefold() == value.casefold():
+            return program.get('id')
+    return None
 
 def _get_user_program_id(user_id=None):
     """Return the program_id for the current user or specified user_id."""
@@ -1173,6 +1191,30 @@ def _build_preview_context(preview_entries=None):
         assignments = pc_res.data or []
         for row in assignments:
             p = _rel(row, 'professor') or {}
+
+            print(f"DEBUG row={row}, pid={pid}")
+            if not p and pid:
+                print(f"DEBUG not p and pid. all_profs={all_profs_res.data}")
+                for ap in (all_profs_res.data or []):
+                    if ap.get('prof_id') == pid:
+                        p = ap
+                        print(f"DEBUG found ap={ap}")
+                        break
+
+            print(f"DEBUG row={row}, pid={pid}")
+            if not p and pid:
+                print(f"DEBUG not p and pid. all_profs={all_profs_res.data}")
+                for ap in (all_profs_res.data or []):
+                    if ap.get('prof_id') == pid:
+                        p = ap
+                        print(f"DEBUG found ap={ap}")
+                        break
+
+            if not p and pid:
+                for ap in (all_profs_res.data or []):
+                    if ap.get('prof_id') == pid:
+                        p = ap
+                        break
             c = _rel(row, 'course') or {}
             prof_name = f"{p.get('first_name','') or ''} {p.get('last_name','') or ''}".strip() or 'Professor A'
             prof_entry = {'id': p.get('prof_id'), 'name': prof_name}
@@ -1349,6 +1391,286 @@ def registrar_counts():
     if year_level and year_level.lower() not in ('all', 'batch'):
         return jsonify(_get_registrar_counts_for_year(year_level, semester=semester))
     return jsonify(_generate_mock_registrar_data(semester=semester))
+
+
+def calculate_semester_section_counts(program_id=None, semester=None, department=None):
+    """Calculates section counts per course and year level derived strictly from professor_load.
+    Validates section count consistency across courses in each year level and specialization group.
+    Enforces General courses total_sections == sum of specialization groups.
+    Enforces active schedule rule (same semester blocks generation).
+    """
+    if not semester or semester not in SEMESTER_CHOICES:
+        return {
+            'valid': False,
+            'errors': ['Please select a valid semester (1st Semester or 2nd Semester).'],
+            'breakdown': [],
+            'active_schedule': {'exists': False, 'same_semester': False}
+        }
+
+    errors = []
+    warnings = []
+
+    # 1. Fetch curriculum courses for this semester & program
+    try:
+        c_query = supabase.table('course').select(
+            'course_id, course_name, year_level, semester, specialization, major, program_id, units, lecture_hours, lab_hours, ilp_hours'
+        ).eq('semester', semester)
+        if program_id:
+            c_query = c_query.eq('program_id', program_id)
+        courses_data = c_query.execute().data or []
+    except Exception:
+        try:
+            c_query = supabase.table('course').select('*').eq('semester', semester)
+            if program_id:
+                c_query = c_query.eq('program_id', program_id)
+            courses_data = c_query.execute().data or []
+        except Exception:
+            courses_data = []
+
+    if not courses_data and program_id:
+        try:
+            fb_c = supabase.table('course').select('*').eq('semester', semester).execute().data or []
+            if fb_c:
+                courses_data = [c for c in fb_c if c.get('program_id') is None or str(c.get('program_id')) == str(program_id)]
+        except Exception:
+            pass
+
+    if not courses_data:
+        return {
+            'valid': False,
+            'errors': [f'No courses found for {semester} in this program.'],
+            'breakdown': [],
+            'active_schedule': {'exists': False, 'same_semester': False}
+        }
+
+    # 2. Fetch professor_load section counts per course
+    try:
+        pl_query = supabase.table('professor_load').select('id, prof_id, course_id, sections')
+        pl_data = pl_query.execute().data or []
+    except Exception:
+        pl_data = []
+
+    pl_by_course = {}
+    for pl in pl_data:
+        cid = pl.get('course_id')
+        sec = int(pl.get('sections') or 0)
+        pl_by_course.setdefault(cid, []).append({
+            'prof_id': pl.get('prof_id'),
+            'sections': sec
+        })
+
+    # Group courses by year_level
+    courses_by_year = {}
+    for c in courses_data:
+        try:
+            yl = int(c.get('year_level') or 1)
+        except (ValueError, TypeError):
+            yl = 1
+        courses_by_year.setdefault(yl, []).append(c)
+
+    breakdown = []
+    year_names = {1: '1st Year', 2: '2nd Year', 3: '3rd Year', 4: '4th Year'}
+
+    for yl in sorted(courses_by_year.keys()):
+        yl_courses = courses_by_year[yl]
+        yl_name = year_names.get(yl, f'{yl}th Year')
+        is_spec_term = (yl, semester) in SPECIALIZED_TERMS
+
+        if not is_spec_term:
+            # Regular (non-specialized) term
+            course_counts = {}
+            course_details = []
+            for c in yl_courses:
+                cid = c['course_id']
+                cname = c['course_name']
+                loads = pl_by_course.get(cid, [])
+                tot_sec = sum(l['sections'] for l in loads)
+                course_counts[cname] = tot_sec
+                course_details.append({
+                    'course_id': cid,
+                    'course_name': cname,
+                    'sections': tot_sec,
+                    'units': c.get('units', 0),
+                    'loads': loads
+                })
+                if tot_sec == 0:
+                    errors.append(f"{cname} has no assigned load")
+
+            # Check consistency: all courses in this year level must have the exact same section count
+            unique_counts = set(course_counts.values())
+            if len(unique_counts) > 1:
+                mismatch_items = [f"{cname} has {cnt} sections" for cname, cnt in course_counts.items()]
+                errors.append(f"{yl_name}: mismatched section counts - " + ", ".join(mismatch_items))
+
+            first_count = next(iter(course_counts.values())) if course_counts else 0
+            is_uniform = len(unique_counts) == 1 and first_count > 0
+            sec_names = [f"{yl}{chr(65 + i)}" for i in range(first_count)] if is_uniform else []
+
+            breakdown.append({
+                'year_level': yl,
+                'year_label': yl_name,
+                'is_specialized': False,
+                'section_count': first_count if is_uniform else 0,
+                'section_names': sec_names,
+                'courses': course_details
+            })
+        else:
+            # Specialized term: courses carry specialization (Database Systems, Web Systems, Networking, General)
+            spec_groups = {'Database Systems': [], 'Web Systems': [], 'Networking': []}
+            general_courses = []
+
+            for c in yl_courses:
+                spec = (c.get('specialization') or c.get('major') or '').strip()
+                if spec in spec_groups:
+                    spec_groups[spec].append(c)
+                elif spec == 'General':
+                    general_courses.append(c)
+                else:
+                    errors.append(f"{c['course_name']} in {yl_name} {semester} has invalid or missing specialization ('{spec}')")
+
+            group_counts = {}
+            group_breakdown = []
+            all_spec_section_names = []
+
+            for spec_name, group_c_list in spec_groups.items():
+                if not group_c_list:
+                    continue
+                grp_counts = {}
+                grp_details = []
+                for c in group_c_list:
+                    cid = c['course_id']
+                    cname = c['course_name']
+                    loads = pl_by_course.get(cid, [])
+                    tot_sec = sum(l['sections'] for l in loads)
+                    grp_counts[cname] = tot_sec
+                    grp_details.append({
+                        'course_id': cid,
+                        'course_name': cname,
+                        'sections': tot_sec,
+                        'units': c.get('units', 0),
+                        'loads': loads
+                    })
+                    if tot_sec == 0:
+                        errors.append(f"{cname} has no assigned load")
+
+                unique_grp_counts = set(grp_counts.values())
+                if len(unique_grp_counts) > 1:
+                    mismatch_items = [f"{cname} has {cnt} sections" for cname, cnt in grp_counts.items()]
+                    errors.append(f"{yl_name} ({spec_name}): mismatched section counts - " + ", ".join(mismatch_items))
+
+                grp_sec_cnt = next(iter(grp_counts.values())) if grp_counts else 0
+                is_grp_uniform = len(unique_grp_counts) == 1 and grp_sec_cnt > 0
+                group_counts[spec_name] = grp_sec_cnt if is_grp_uniform else 0
+
+                sec_names = [f"{yl}{chr(65 + i)}-{spec_name}" for i in range(grp_sec_cnt)] if is_grp_uniform else []
+                all_spec_section_names.extend(sec_names)
+
+                group_breakdown.append({
+                    'specialization': spec_name,
+                    'section_count': group_counts[spec_name],
+                    'section_names': sec_names,
+                    'courses': grp_details
+                })
+
+            # General courses validation: must equal sum of all specialization groups
+            required_general_total = sum(group_counts.values())
+            gen_details = []
+            for c in general_courses:
+                cid = c['course_id']
+                cname = c['course_name']
+                loads = pl_by_course.get(cid, [])
+                tot_sec = sum(l['sections'] for l in loads)
+                gen_details.append({
+                    'course_id': cid,
+                    'course_name': cname,
+                    'sections': tot_sec,
+                    'units': c.get('units', 0),
+                    'loads': loads
+                })
+                if tot_sec == 0:
+                    errors.append(f"{cname} (General) has no assigned load")
+                elif tot_sec != required_general_total:
+                    spec_sum_desc = " + ".join(f"{k}: {v}" for k, v in group_counts.items())
+                    errors.append(
+                        f"{yl_name} {semester}: General course {cname} has {tot_sec} sections, but requires {required_general_total} sections (sum of {spec_sum_desc})"
+                    )
+
+            breakdown.append({
+                'year_level': yl,
+                'year_label': yl_name,
+                'is_specialized': True,
+                'specialization_groups': group_breakdown,
+                'general_total_required': required_general_total,
+                'general_courses': gen_details,
+                'all_section_names': all_spec_section_names
+            })
+
+    # Check active schedule status for program
+    prog_name = None
+    if has_request_context():
+        prog_name = session.get('program')
+
+    sched_q = supabase.table('schedule').select('schedule_id, semester, program_id').eq('archive', False)
+    if program_id:
+        try:
+            sched_q = sched_q.eq('program_id', program_id)
+        except Exception:
+            pass
+    try:
+        sched_rows = sched_q.execute().data or []
+    except Exception:
+        try:
+            sched_rows = supabase.table('schedule').select('*').eq('archive', False).execute().data or []
+        except Exception:
+            sched_rows = []
+
+    if program_id:
+        sched_rows = [r for r in sched_rows if r.get('program_id') is None or str(r.get('program_id')) == str(program_id)]
+    elif prog_name:
+        sched_rows = [r for r in sched_rows if not r.get('program') or str(r.get('program') or '').strip().upper() == str(prog_name).strip().upper()]
+
+    active_info = {'exists': False, 'same_semester': False, 'semester': None, 'count': 0}
+    if sched_rows:
+        active_semesters = list({r.get('semester') for r in sched_rows if r.get('semester')})
+        has_same_sem = semester in active_semesters
+        display_sem = semester if has_same_sem else (active_semesters[0] if active_semesters else None)
+        active_info = {
+            'exists': True,
+            'same_semester': has_same_sem,
+            'semester': display_sem,
+            'count': len(sched_rows)
+        }
+        if has_same_sem:
+            errors.append(f"An active schedule for {semester} already exists. Archive it first to generate a new one.")
+
+    return {
+        'valid': len(errors) == 0,
+        'errors': errors,
+        'warnings': warnings,
+        'breakdown': breakdown,
+        'active_schedule': active_info
+    }
+
+
+@app.route('/api/semester-section-counts')
+@login_required
+def api_semester_section_counts():
+    """Return calculated section counts and validation status derived strictly from professor_load."""
+    semester = request.args.get('semester', '').strip()
+    user_prog_id = _get_user_program_id()
+    department = _get_department()
+
+    try:
+        result = calculate_semester_section_counts(program_id=user_prog_id, semester=semester, department=department)
+        return jsonify(result)
+    except Exception as err:
+        logging.error(f"Error in api_semester_section_counts: {err}")
+        return jsonify({
+            'valid': False,
+            'errors': [f"Calculation error: {err}"],
+            'breakdown': [],
+            'active_schedule': {'exists': False, 'same_semester': False}
+        }), 200
 #-----------------------------------------------------LOGIN AND LOGOUT----------------------------------------------------------------------------------------------
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -2059,6 +2381,17 @@ def add_course():
         except (ValueError, TypeError):
             units = 0
 
+        try:
+            ilp_val = float(ilp_hours)
+            if ilp_val not in (0.0, 1.0):
+                session['course_message'] = 'ILP hours must be either 0 or 1.'
+                session.modified = True
+                return redirect(url_for('show_courses'))
+        except (ValueError, TypeError):
+            session['course_message'] = 'ILP hours must be a valid number.'
+            session.modified = True
+            return redirect(url_for('show_courses'))
+
         year_level = request.form.get('year_level', '')
         
         # Resolve program_id
@@ -2093,9 +2426,9 @@ def add_course():
         course_data = {
             'course_name': course_name,
             'units': units,
-            'lecture_hours': lecture_hours,
-            'lab_hours': lab_hours,
-            'ilp_hours': ilp_hours,
+            'lecture_hours': int(lecture_hours) if lecture_hours else 0,
+            'lab_hours': int(lab_hours) if lab_hours else 0,
+            'ilp_hours': int(float(ilp_hours)) if ilp_hours else 0,
             'year_level': year_level,
             'major': major,
         }
@@ -2314,6 +2647,17 @@ def edit_course(course_id):
         except (ValueError, TypeError):
             units = 0
 
+        try:
+            ilp_val = float(ilp_hours)
+            if ilp_val not in (0.0, 1.0):
+                session['course_message'] = 'ILP hours must be either 0 or 1.'
+                session.modified = True
+                return redirect(url_for('show_courses'))
+        except (ValueError, TypeError):
+            session['course_message'] = 'ILP hours must be a valid number.'
+            session.modified = True
+            return redirect(url_for('show_courses'))
+
         year_level = request.form.get('year_level', '')
         program_id = _get_user_program_id()
         program = session.get('program', '')
@@ -2326,9 +2670,9 @@ def edit_course(course_id):
         update_data = {
             'course_name': course_name,
             'units': units,
-            'lecture_hours': lecture_hours,
-            'lab_hours': lab_hours,
-            'ilp_hours': ilp_hours,
+            'lecture_hours': int(lecture_hours) if lecture_hours else 0,
+            'lab_hours': int(lab_hours) if lab_hours else 0,
+            'ilp_hours': int(float(ilp_hours)) if ilp_hours else 0,
             'year_level': year_level,
             'major': major,
         }
@@ -2998,7 +3342,12 @@ def professor_load():
             if row_prog_id and row_prog_id != user_prog_id:
                 continue
 
-        sections = int(row.get('sections') or 1)
+        try:
+            sections = int(row.get('sections') or 1)
+        except (ValueError, TypeError):
+            sections = 1
+        if sections >= 999 or sections <= 0:
+            sections = 1
         lec = float(c.get('lecture_hours') or 0)
         lab = float(c.get('lab_hours') or 0)
         ilp = float(c.get('ilp_hours') or 0)
@@ -3560,6 +3909,36 @@ def _is_contiguous_block(block_slots):
     return True
 
 
+def _check_professor_cutoff_conflict(prof_id, day, start_time, end_time, session_type=None):
+    print(f"DEBUG CUTOFF CHECK: prof={prof_id} day={day} end={end_time}")
+    if session_type == 'ILP':
+        return None
+    try:
+        prof_res = supabase.table('professor').select('academic_ranking(has_cutoff)').eq('prof_id', prof_id).limit(1).execute()
+        if not prof_res.data:
+            return None
+        rank = prof_res.data[0].get('academic_ranking') or {}
+        has_cutoff = rank.get('has_cutoff', True)
+        if not has_cutoff:
+            return None
+
+        ts_res = supabase.table('timeslot').select('professor_cutoff').eq('day', day).execute()
+        print(f"DEBUG CUTOFF ts_res.data={ts_res.data}")
+        if not ts_res.data:
+            return None
+
+        end_td = _to_seconds(end_time)
+        for ts in ts_res.data:
+            cutoff = ts.get('professor_cutoff')
+            if cutoff:
+                cutoff_td = _to_seconds(cutoff)
+                if end_td > cutoff_td:
+                    return {'message': f"Professor has a daily cutoff at {cutoff}."}
+    except Exception as e:
+        print(f"DEBUG EXCEPTION IN CUTOFF: {e}")
+        logging.error(f"Cutoff check error: {e}")
+    return None
+
 def _has_conflict(day, start_time, end_time, bookings):
     # Check whether the given time range conflicts with any existing booking using total seconds comparison
     start_sec = _to_seconds(start_time)
@@ -3778,13 +4157,19 @@ def _build_subject_session_queue(course):
     lec_hours = int(course.get('lecture_hours') or 0)
     lab_hours = int(course.get('lab_hours') or 0)
 
+    queue = []
     if lec_hours > 0 and lab_hours > 0:
-        return [{'paired': True, 'lec_duration': lec_hours, 'lab_duration': lab_hours}]
+        queue.append({'paired': True, 'lec_duration': lec_hours, 'lab_duration': lab_hours})
     elif lec_hours > 0:
-        return [{'paired': False, 'session_type': 'Lecture', 'duration': lec_hours}]
+        queue.append({'paired': False, 'session_type': 'Lecture', 'duration': lec_hours})
     elif lab_hours > 0:
-        return [{'paired': False, 'session_type': 'Laboratory', 'duration': lab_hours}]
-    return []
+        queue.append({'paired': False, 'session_type': 'Laboratory', 'duration': lab_hours})
+        
+    ilp_hours = int(float(course.get('ilp_hours') or 0))
+    if ilp_hours > 0:
+        queue.append({'paired': False, 'session_type': 'ILP', 'duration': ilp_hours, 'is_ilp': True})
+        
+    return queue
 
 
 def _canonical_major_name(major_key):
@@ -4654,10 +5039,10 @@ def professor_schedule():
 
     # Fetch schedules
     try:
-        sched_cols = 'schedule_id, professor_load_id, section, semester, major, program, day, class_start, class_end, professor_load(prof_id, course_id, course(course_name)), room(room_name)'
+        sched_cols = 'schedule_id, professor_load_id, section, semester, major, program_id, day, class_start, class_end, professor_load(prof_id, course_id, course(course_name)), room(room_name)'
         query = supabase.table('schedule').select(sched_cols).eq('archive', False)
-        if not is_super_admin and program:
-            query = query.eq('program', program)
+        if not is_super_admin and user_prog_id:
+            query = query.eq('program_id', user_prog_id)
 
         sched_rows = query.execute().data or []
 
@@ -4840,10 +5225,11 @@ def view_professor_schedule(professor_id):
 
         if user_role in ('super_admin', 'admin'):
             if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
+                query = query.eq('program_id', _find_program_id_by_name(program_filter) or -1)
         else:
-            if program:
-                query = query.eq('program', program)
+            user_program_id = _get_user_program_id()
+            if user_program_id:
+                query = query.eq('program_id', user_program_id)
 
         if year_filter:
             query = query.like('section', f'{year_filter}%')
@@ -5002,10 +5388,11 @@ def export_professor_schedule(professor_id):
 
         if user_role in ('super_admin', 'admin'):
             if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
+                query = query.eq('program_id', _find_program_id_by_name(program_filter) or -1)
         else:
-            if program:
-                query = query.eq('program', program)
+            user_program_id = _get_user_program_id()
+            if user_program_id:
+                query = query.eq('program_id', user_program_id)
 
         if year_filter:
             query = query.like('section', f'{year_filter}%')
@@ -5238,13 +5625,14 @@ def room_schedule():
         all_room_options = []
 
     try:
-        sched_cols = 'schedule_id, professor_load_id, room_id, section, semester, major, program, day, class_start, class_end'
+        sched_cols = 'schedule_id, professor_load_id, room_id, section, semester, major, program_id, day, class_start, class_end'
         query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
-        if not is_super_admin and program:
-            query = query.eq('program', program)
+        if not is_super_admin and user_prog_id:
+            query = query.eq('program_id', user_prog_id)
         elif is_super_admin and program_filter and program_filter.lower() != 'all':
-            query = query.eq('program', program_filter)
+            p_id = int(program_filter) if program_filter.isdigit() else _find_program_id_by_name(program_filter)
+            query = query.eq('program_id', p_id or -1)
 
         sched_rows = query.execute().data or []
 
@@ -5390,10 +5778,11 @@ def view_room_schedule(room_id):
 
         if user_role in ('super_admin', 'admin'):
             if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
+                query = query.eq('program_id', _find_program_id_by_name(program_filter) or -1)
         else:
-            if program:
-                query = query.eq('program', program)
+            user_program_id = _get_user_program_id()
+            if user_program_id:
+                query = query.eq('program_id', user_program_id)
 
         if year_filter:
             query = query.like('section', f'{year_filter}%')
@@ -5532,10 +5921,11 @@ def export_room_schedule(room_id):
 
         if user_role in ('super_admin', 'admin'):
             if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
+                query = query.eq('program_id', _find_program_id_by_name(program_filter) or -1)
         else:
-            if program:
-                query = query.eq('program', program)
+            user_program_id = _get_user_program_id()
+            if user_program_id:
+                query = query.eq('program_id', user_program_id)
 
         if year_filter:
             query = query.like('section', f'{year_filter}%')
@@ -5688,11 +6078,12 @@ def schedules():
     program_filter = (request.args.get('program') or '').strip()
 
     program = session.get('program', '')
+    user_program_id = _get_user_program_id()
     user_role = (session.get('role') or 'scheduler').lower()
 
     try:
         sched_cols = (
-            'schedule_id, professor_load_id, section, semester, major, program, day, class_start, class_end, session_type, room_id, '
+            'schedule_id, professor_load_id, section, semester, major, program_id, day, class_start, class_end, session_type, room_id, '
             'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
             'room(room_name)'
         )
@@ -5700,12 +6091,12 @@ def schedules():
 
         if user_role in ('super_admin', 'admin'):
             if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
+                query = query.eq('program_id', _find_program_id_by_name(program_filter) or -1)
         else:
             if program_filter and program_filter.lower() != 'all':
-                query = query.eq('program', program_filter)
-            elif program:
-                query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
+                query = query.eq('program_id', _find_program_id_by_name(program_filter) or -1)
+            elif user_program_id:
+                query = query.eq('program_id', user_program_id)
 
         sched_rows = query.execute().data or []
 
@@ -5835,6 +6226,7 @@ def view_schedule(section_name):
     major_filter = request.args.get('major', '')
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     program = session.get('program', '')
+    user_program_id = _get_user_program_id()
     user_role = (session.get('role') or 'scheduler').lower()
 
     preview_pool = _get_preview_for_user()
@@ -5897,8 +6289,8 @@ def view_schedule(section_name):
             'room(room_name)'
         ).eq('section', section_name).eq('archive', False)
 
-        if user_role not in ('super_admin', 'admin') and program:
-            query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
+        if user_role not in ('super_admin', 'admin') and user_program_id:
+            query = query.eq('program_id', user_program_id)
 
         if semester_filter:
             query = query.eq('semester', semester_filter)
@@ -6041,6 +6433,7 @@ def export_section_schedule(section_name):
     theme_arg = request.args.get('theme', '').strip()
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     program = session.get('program', '')
+    user_program_id = _get_user_program_id()
     user_role = (session.get('role') or 'scheduler').lower()
 
     if theme_arg:
@@ -6100,8 +6493,8 @@ def export_section_schedule(section_name):
             'room(room_name)'
         ).eq('section', section_name).eq('archive', False)
 
-        if user_role not in ('super_admin', 'admin') and program:
-            query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
+        if user_role not in ('super_admin', 'admin') and user_program_id:
+            query = query.eq('program_id', user_program_id)
 
         if semester_filter:
             query = query.eq('semester', semester_filter)
@@ -6300,7 +6693,7 @@ def delete_schedule(schedule_id):
 def delete_section_schedule(section_name):
     major = request.args.get('major', '')
     semester = request.args.get('semester', '')
-    program = session.get('program', '')
+    program_id = _get_user_program_id()
     user_role = (session.get('role') or 'scheduler').lower()
 
     handled, resp = _request_delete_if_scheduler('section_schedule', section_name, f'Section Schedule {section_name}')
@@ -6310,8 +6703,8 @@ def delete_section_schedule(section_name):
     try:
         query = supabase.table('schedule').update({'archive': True}).eq('section', section_name)
 
-        if user_role not in ('super_admin', 'admin') and program:
-            query = query.eq('program', program)
+        if user_role not in ('super_admin', 'admin') and program_id:
+            query = query.eq('program_id', program_id)
 
         if semester:
             query = query.eq('semester', semester)
@@ -6340,7 +6733,7 @@ def delete_section_schedule(section_name):
 def delete_all_schedules():
     payload = request.get_json(silent=True) or {}
     password = (payload.get('password') or '').strip()
-    program = session.get('program', '')
+    program_id = _get_user_program_id()
     user_role = (session.get('role') or 'scheduler').lower()
 
     if not password:
@@ -6361,8 +6754,8 @@ def delete_all_schedules():
             return jsonify({'success': False, 'message': 'Incorrect password.'}), 401
 
         # Super Admin can archive all schedules, scoped roles archive their program's schedules
-        if user_role not in ('super_admin', 'admin') and program:
-            supabase.table('schedule').update({'archive': True}).eq('program', program).execute()
+        if user_role not in ('super_admin', 'admin') and program_id:
+            supabase.table('schedule').update({'archive': True}).eq('program_id', program_id).execute()
         else:
             supabase.table('schedule').update({'archive': True}).neq('schedule_id', 0).execute()
     except Exception:
@@ -6382,6 +6775,7 @@ def edit_schedule(section_name):
     semester = (payload.get('semester') or '').strip()
     major = (payload.get('major') or '').strip()
     program = session.get('program', '')
+    user_program_id = _get_user_program_id()
     user_role = (session.get('role') or 'scheduler').lower()
 
     custom_section = (payload.get('section') or '').strip()
@@ -6396,8 +6790,8 @@ def edit_schedule(section_name):
             'semester': semester,
             'major': major,
         }).eq('section', section_name).eq('archive', False)
-        if program and user_role not in ('super_admin', 'admin'):
-            query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
+        if user_program_id and user_role not in ('super_admin', 'admin'):
+            query = query.eq('program_id', user_program_id)
         query.execute()
         log_activity('edit', 'schedule', f'Updated section {section_name} to {new_section_name}')
         flash('Updated successfully', 'success')
@@ -6448,11 +6842,12 @@ def edit_schedule_entry(schedule_id):
 
     try:
         query = supabase.table('schedule').select(
-            'schedule_id, professor_load_id, room_id, day, class_start, class_end, session_type, section, semester, major, program, '
+            'schedule_id, professor_load_id, room_id, day, class_start, class_end, session_type, section, semester, major, program_id, '
             'professor_load(id, prof_id, course_id, course(course_name), professor(first_name, last_name))'
         ).eq('schedule_id', schedule_id).eq('archive', False)
-        if user_role not in ('super_admin', 'admin') and program:
-            query = query.or_(f'program.eq.{program},program.is.null,program.eq.')
+        user_prog_id = _get_user_program_id()
+        if user_role not in ('super_admin', 'admin') and user_prog_id:
+            query = query.eq('program_id', user_prog_id)
 
         res = query.execute()
         existing = _first(res.data or [])
@@ -6492,8 +6887,7 @@ def edit_schedule_entry(schedule_id):
                 if professor_name.upper() in ('NONE', 'N/A', 'UNASSIGNED'):
                     target_prof_id = None
                 elif professor_name.upper() in ('TBA', 'PROFESSOR A'):
-                    fallback_p = _ensure_fallback_professor(_get_department())
-                    target_prof_id = fallback_p.get('prof_id')
+                    target_prof_id = None
                 else:
                     dept = _get_department()
                     p_query = supabase.table('professor').select('prof_id, first_name, last_name')
@@ -6507,8 +6901,7 @@ def edit_schedule_entry(schedule_id):
                             target_prof_id = p['prof_id']
                             break
                     if not target_prof_id and professor_name.lower() in ('professor a', 'tba'):
-                        fallback_p = _ensure_fallback_professor(dept)
-                        target_prof_id = fallback_p.get('prof_id')
+                        target_prof_id = None
 
             if target_course_id and target_prof_id:
                 pc_match = supabase.table('professor_load').select('professor_load_id:id').eq('prof_id', target_prof_id).eq('course_id', target_course_id).limit(1).execute()
@@ -6714,10 +7107,10 @@ def approve_delete_request(req_id):
         elif item_type == 'section_schedule':
             supabase.table('schedule').update({'archive': True}).eq('section', item_id).execute()
         elif item_type == 'all_schedules':
-            program = session.get('program', '')
+            program_id = _get_user_program_id()
             user_role = (session.get('role', '') or '').lower()
-            if user_role not in ('super_admin', 'admin') and program:
-                supabase.table('schedule').update({'archive': True}).eq('program', program).execute()
+            if user_role not in ('super_admin', 'admin') and program_id:
+                supabase.table('schedule').update({'archive': True}).eq('program_id', program_id).execute()
             else:
                 supabase.table('schedule').update({'archive': True}).neq('schedule_id', 0).execute()
 
@@ -6943,7 +7336,7 @@ def manage_irregular_student_schedule(student_id):
         'schedule_id, section, day, class_start, class_end, room_id, professor_load_id, session_type, '
         'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '
         'course(course_name), room(room_name), professor(first_name, last_name)'
-    ).eq('program', student['program']).eq('archive', False)
+    ).eq('program_id', _find_program_id_by_name(student.get('program')) or -1).eq('archive', False)
     if semester_filter:
         sched_query = sched_query.eq('semester', semester_filter)
     sched_rows = sched_query.execute().data or []
@@ -7157,283 +7550,10 @@ def unassign_irregular_section(student_id, course_id):
         return jsonify({'success': True, 'message': 'Section unassigned successfully.'})
     except Exception as err:
         return jsonify({'success': False, 'message': f'Database error: {err}'}), 500
-#-------------------------------------------------------SEMESTER_MANAGEMENT----------------------------------------------------------------------------------------------
-@app.route('/semesters')
-@dean_required
-def semesters():
-    user_prog_id = _get_user_program_id()
-    user_role = (session.get('role') or '').lower()
-    is_super_admin = user_role in ('super_admin', 'admin')
-
-    selected_program_id = request.args.get('program_id')
-    if selected_program_id:
-        try:
-            selected_program_id = int(selected_program_id)
-        except (ValueError, TypeError):
-            selected_program_id = None
-    elif not is_super_admin:
-        selected_program_id = user_prog_id
-
-    programs = _get_programs()
-    active_semester = _get_active_semester(selected_program_id)
-    sem_list = _get_semesters(selected_program_id)
-
-    prog_name = session.get('program', '')
-    if selected_program_id and programs:
-        for p in programs:
-            if p.get('id') == selected_program_id:
-                prog_name = p.get('program_name', '')
-                break
-
-    return render_template(
-        'semesters.html',
-        active_page='semesters',
-        active_semester=active_semester,
-        semesters=sem_list,
-        programs=programs,
-        selected_program_id=selected_program_id,
-        program_name=prog_name,
-        is_dean_or_admin=True,
-        is_super_admin=is_super_admin
-    )
-
-@app.route('/add_semester', methods=['POST'])
-@dean_required
-def add_semester():
-    user_prog_id = _get_user_program_id()
-    user_role = (session.get('role') or '').lower()
-    is_super_admin = user_role in ('super_admin', 'admin')
-    user_id = session.get('user_id')
-
-    school_year = request.form.get('school_year', '').strip()
-    term = request.form.get('term', '').strip()
-    is_active = request.form.get('is_active') in ('true', '1', 'on')
-
-    prog_id = request.form.get('program_id') if is_super_admin else user_prog_id
-    try:
-        prog_id = int(prog_id) if prog_id else user_prog_id
-    except (ValueError, TypeError):
-        prog_id = user_prog_id
-
-    if not school_year or not term:
-        flash('School year and term are required.', 'danger')
-        return redirect(url_for('semesters'))
-
-    try:
-        if is_active and prog_id:
-            supabase.table('semester').update({'is_active': False}).eq('program_id', prog_id).execute()
-
-        insert_payload = {
-            'school_year': school_year,
-            'term': term,
-            'is_active': is_active,
-            'program_id': prog_id,
-        }
-        if user_id:
-            try:
-                insert_payload['created_by'] = str(user_id)
-            except Exception:
-                pass
-
-        res = supabase.table('semester').insert(insert_payload).execute()
-        new_sem = _first(res.data or [])
-        if new_sem:
-            sem_id = new_sem.get('id')
-            # Initialize default section config for 1st-4th years (4 sections each)
-            for yl in [1, 2, 3, 4]:
-                try:
-                    supabase.table('section_config').insert({
-                        'semester_id': sem_id,
-                        'year_level': yl,
-                        'number_of_sections': 4
-                    }).execute()
-                except Exception:
-                    pass
-            # Initialize default timeslots Monday-Friday
-            standard_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-            for d in standard_days:
-                try:
-                    supabase.table('timeslot').insert({
-                        'semester_id': sem_id,
-                        'day': d,
-                        'start_time': '07:00:00',
-                        'end_time': '20:00:00',
-                        'lunch_time': '12:00:00'
-                    }).execute()
-                except Exception:
-                    pass
-
-        log_activity('create', 'semester', f'{school_year} - {term}')
-        flash('Semester created successfully.', 'success')
-    except Exception as err:
-        flash(f'Error creating semester: {err}', 'danger')
-
-    return redirect(url_for('semesters'))
-
-@app.route('/edit_semester/<int:semester_id>', methods=['POST'])
-@dean_required
-def edit_semester(semester_id):
-    school_year = request.form.get('school_year', '').strip()
-    term = request.form.get('term', '').strip()
-    is_active = request.form.get('is_active') in ('true', '1', 'on')
-
-    if not school_year or not term:
-        flash('School year and term are required.', 'danger')
-        return redirect(url_for('semesters'))
-
-    try:
-        sem_res = supabase.table('semester').select('*').eq('id', semester_id).execute()
-        sem = _first(sem_res.data or [])
-        if not sem:
-            flash('Semester not found.', 'danger')
-            return redirect(url_for('semesters'))
-
-        prog_id = sem.get('program_id')
-        if is_active and prog_id:
-            supabase.table('semester').update({'is_active': False}).eq('program_id', prog_id).execute()
-
-        supabase.table('semester').update({
-            'school_year': school_year,
-            'term': term,
-            'is_active': is_active
-        }).eq('id', semester_id).execute()
-
-        log_activity('edit', 'semester', f'{school_year} - {term} (ID {semester_id})')
-        flash('Semester updated successfully.', 'success')
-    except Exception as err:
-        flash(f'Error updating semester: {err}', 'danger')
-
-    return redirect(url_for('semesters'))
-
-@app.route('/activate_semester/<int:semester_id>', methods=['GET', 'POST'])
-@dean_required
-def activate_semester(semester_id):
-    try:
-        sem_res = supabase.table('semester').select('*').eq('id', semester_id).execute()
-        sem = _first(sem_res.data or [])
-        if not sem:
-            flash('Semester not found.', 'danger')
-            return redirect(url_for('semesters'))
-
-        prog_id = sem.get('program_id')
-        if prog_id:
-            supabase.table('semester').update({'is_active': False}).eq('program_id', prog_id).execute()
-        supabase.table('semester').update({'is_active': True}).eq('id', semester_id).execute()
-
-        log_activity('activate', 'semester', f"ID {semester_id} ({sem.get('term')} S.Y. {sem.get('school_year')})")
-        flash(f"Activated {sem.get('term')} S.Y. {sem.get('school_year')}.", 'success')
-    except Exception as err:
-        flash(f'Error activating semester: {err}', 'danger')
-
-    return redirect(url_for('semesters'))
-
-@app.route('/delete_semester/<int:semester_id>', methods=['GET', 'POST'])
-@dean_required
-def delete_semester(semester_id):
-    try:
-        supabase.table('semester').delete().eq('id', semester_id).execute()
-        log_activity('delete', 'semester', f'ID {semester_id}')
-        flash('Semester deleted successfully.', 'success')
-    except Exception as err:
-        flash(f'Error deleting semester: {err}', 'danger')
-
-    return redirect(url_for('semesters'))
-
-#-------------------------------------------------------SECTION_CONFIG_MODULE----------------------------------------------------------------------------------------------
-@app.route('/section_config')
-@dean_required
-def section_config():
-    user_prog_id = _get_user_program_id()
-    semesters_list = _get_semesters(user_prog_id)
-
-    req_sem_id = request.args.get('semester_id')
-    selected_sem = None
-    if req_sem_id:
-        try:
-            req_sem_id = int(req_sem_id)
-            selected_sem = next((s for s in semesters_list if s.get('id') == req_sem_id), None)
-        except (ValueError, TypeError):
-            selected_sem = None
-
-    if not selected_sem:
-        selected_sem = _get_active_semester(user_prog_id)
-
-    configs = {}
-    assigned_counts = {1: 0, 2: 0, 3: 0, 4: 0}
-
-    if selected_sem:
-        sem_id = selected_sem.get('id')
-        configs = _get_section_configs(sem_id)
-
-        try:
-            c_query = supabase.table('course').select('course_id, year_level, semester_id')
-            if user_prog_id:
-                try:
-                    c_query = c_query.eq('program_id', user_prog_id)
-                except Exception:
-                    pass
-            courses = c_query.execute().data or []
-
-            pl_rows = supabase.table('professor_load').select('course_id, sections').execute().data or []
-            pl_course_sections = {}
-            for pl in pl_rows:
-                cid = pl.get('course_id')
-                sec = int(pl.get('sections') or 1)
-                pl_course_sections[cid] = pl_course_sections.get(cid, 0) + sec
-
-            for yl in [1, 2, 3, 4]:
-                yl_courses = [c for c in courses if int(c.get('year_level') or 1) == yl]
-                if yl_courses:
-                    assigned_counts[yl] = max((pl_course_sections.get(c['course_id'], 0) for c in yl_courses), default=0)
-        except Exception as err:
-            logging.debug(f"Error calculating assigned_counts: {err}")
-
-    return render_template(
-        'section_config.html',
-        active_page='section_config',
-        semester=selected_sem,
-        semesters=semesters_list,
-        configs=configs,
-        assigned_counts=assigned_counts,
-    )
-
-@app.route('/save_section_config', methods=['POST'])
-@dean_required
-def save_section_config():
-    sem_id = request.form.get('semester_id')
-    if not sem_id:
-        flash('Semester ID is required.', 'danger')
-        return redirect(url_for('section_config'))
-
-    try:
-        sem_id = int(sem_id)
-        for yl in [1, 2, 3, 4]:
-            sec_val = request.form.get(f'sections_{yl}', '4').strip()
-            try:
-                num_sec = max(0, int(sec_val))
-            except (ValueError, TypeError):
-                num_sec = 4
-
-            try:
-                res = supabase.table('section_config').select('id').eq('semester_id', sem_id).eq('year_level', yl).execute()
-                row = _first(res.data or [])
-                if row:
-                    supabase.table('section_config').update({'number_of_sections': num_sec}).eq('id', row['id']).execute()
-                else:
-                    supabase.table('section_config').insert({
-                        'semester_id': sem_id,
-                        'year_level': yl,
-                        'number_of_sections': num_sec
-                    }).execute()
-            except Exception as upsert_err:
-                logging.warning(f"Error upserting section_config for yl {yl}: {upsert_err}")
-
-        log_activity('edit', 'section_config', f'Semester {sem_id}')
-        flash('Section configurations updated successfully.', 'success')
-    except Exception as err:
-        flash(f'Error saving section config: {err}', 'danger')
-
-    return redirect(url_for('section_config', semester_id=sem_id))
+#-------------------------------------------------------SEMESTER_AND_SECTION_CONFIG_REMOVED----------------------------------------------------------------------------------------------
+# Deprecated semester and section_config management removed (Change 1).
+# Semesters are now standardized text attributes ("1st Semester", "2nd Semester") on courses and schedules.
+# Section counts are computed directly from professor_load.
 
 #-------------------------------------------------------TIMESLOT_MODULE----------------------------------------------------------------------------------------------
 @app.route('/timeslot')
@@ -7544,19 +7664,17 @@ def check_schedule_exists():
     year_level = (request.args.get('year_level') or '').strip()
     semester = (request.args.get('semester') or '').strip()
     major = (request.args.get('major') or '').strip()
-    program = session.get('program', '')
+    program_id = _get_user_program_id()
     user_role = (session.get('role') or 'scheduler').lower()
 
     if not semester:
         return jsonify({'exists': False})
 
     try:
-        query = supabase.table('schedule').select('section, program, major').eq('semester', semester).eq('archive', False)
+        query = supabase.table('schedule').select('section, program_id, major').eq('semester', semester).eq('archive', False)
 
-        if user_role not in ('super_admin', 'admin') and program:
-            query = query.eq('program', program)
-        elif program:
-            query = query.or_(f'program.eq.{program},program.is.null')
+        if program_id:
+            query = query.eq('program_id', program_id)
 
         rows = query.execute().data or []
         matching = []
@@ -7580,7 +7698,7 @@ def check_schedule_exists():
             'exists': exists,
             'year_level': year_level or 'All',
             'semester': semester,
-            'program': program,
+            'program': session.get('program', ''),
             'major': major,
             'total_entries': total_entries,
             'total_sections': total_sections,
@@ -7593,6 +7711,7 @@ def check_schedule_exists():
 @app.route('/generate_schedule', methods=['GET', 'POST'])
 @login_required
 def generate_schedule():
+    generation_warnings = []
     semesters = ['1st Semester', '2nd Semester']
 
     if request.method == 'GET':
@@ -7620,19 +7739,45 @@ def generate_schedule():
 
         # Normalize semester aliases
         if semester in ('1st Semester', '1st', '1'):
-            sem_aliases = ['1st Semester', '1st', '1']
             standard_semester = '1st Semester'
         elif semester in ('2nd Semester', '2nd', '2'):
-            sem_aliases = ['2nd Semester', '2nd', '2']
             standard_semester = '2nd Semester'
         else:
-            sem_aliases = [semester]
             standard_semester = semester
 
+        if standard_semester not in SEMESTER_CHOICES:
+            flash(f"Invalid semester '{semester}'. Must be '1st Semester' or '2nd Semester'.", 'danger')
+            return redirect(url_for('generate_schedule'))
+
+        user_prog_id = _get_user_program_id()
         _ensure_course_semester_column()
 
+        # Compute counts and validate strictly from professor_load
+        calc_result = calculate_semester_section_counts(program_id=user_prog_id, semester=standard_semester, department=department)
+
+        # Archive rule check: If active schedule has the SAME semester, block generation
+        active_sched = calc_result.get('active_schedule', {})
+        if active_sched.get('exists') and active_sched.get('same_semester'):
+            flash(f"An active schedule for {standard_semester} already exists. Archive it first to generate a new one.", 'danger')
+            return redirect(url_for('generate_schedule'))
+
+        # If active schedule exists for DIFFERENT semester, soft-archive it
+        if active_sched.get('exists') and not active_sched.get('same_semester'):
+            try:
+                arch_q = supabase.table('schedule').update({'archive': True}).eq('archive', False)
+                if user_prog_id:
+                    arch_q = arch_q.eq('program_id', user_prog_id)
+                arch_q.execute()
+            except Exception as e:
+                logging.warning(f"Failed to soft-archive different semester active schedule: {e}")
+
+        if not calc_result.get('valid'):
+            for err in calc_result.get('errors', []):
+                flash(f"Cannot generate schedule: {err}", 'danger')
+            return redirect(url_for('generate_schedule'))
+
         # Fetch curriculum for all four year levels for this semester
-        query = supabase.table('course').select('*').in_('semester', sem_aliases)
+        query = supabase.table('course').select('*').eq('semester', standard_semester)
         if is_viewer:
             query = query.eq('program', program)
         elif not is_admin and program:
@@ -7641,7 +7786,7 @@ def generate_schedule():
         all_courses = query.order('year_level').order('course_name').execute().data or []
         if not all_courses:
             all_c = (supabase.table('course').select('*').execute().data) or []
-            all_courses = [c for c in all_c if str(c.get('semester') or '').strip().lower() in [s.lower() for s in sem_aliases]]
+            all_courses = [c for c in all_c if str(c.get('semester') or '').strip().lower() == standard_semester.lower()]
 
         if not all_courses:
             flash(f"No courses found for {standard_semester}.", 'warning')
@@ -7666,145 +7811,36 @@ def generate_schedule():
                     deduped.append(c)
             courses_by_year[yl] = deduped
 
-        # Generate sections for all active year levels (4th year excluded for 2nd Semester)
+        # Build sections derived from professor_load
         all_sections = []
-        active_years = [1, 2, 3] if standard_semester == '2nd Semester' else [1, 2, 3, 4]
+        for yl_info in calc_result.get('breakdown', []):
+            yl = yl_info['year_level']
+            is_spec = yl_info.get('is_specialized', False)
 
-        for y in active_years:
-            if not courses_by_year.get(y):
-                continue
-
-            raw_stu = (request.form.get(f'students[{y}]') or 
-                       request.form.get(f'students_{y}') or 
-                       request.form.get(f'number_of_students_{y}') or 
-                       request.form.get('number_of_students'))
-            raw_sec = (request.form.get(f'sections[{y}]') or 
-                       request.form.get(f'sections_{y}') or 
-                       request.form.get(f'number_of_sections_{y}') or 
-                       request.form.get('number_of_sections'))
-
-            if raw_stu:
-                try:
-                    stu_count = int(raw_stu)
-                except (ValueError, TypeError):
-                    stu_count = random.randint(300, 400)
+            if not is_spec:
+                sec_names = yl_info.get('section_names', [])
+                for s_name in sec_names:
+                    all_sections.append({
+                        'section': s_name,
+                        'section_name': s_name,
+                        'year_level': str(yl),
+                        'student_count': 40,
+                        'semester': standard_semester,
+                        'major': None
+                    })
             else:
-                stu_count = random.randint(300, 400)
-
-            if raw_sec:
-                try:
-                    sec_count = int(raw_sec)
-                except (ValueError, TypeError):
-                    sec_count = math.ceil(stu_count / 30)
-            else:
-                sec_count = math.ceil(stu_count / 30)
-
-            sec_count = max(1, sec_count)
-            distinct_majors = []
-            for c in courses_by_year.get(y, []):
-                m = c.get('major')
-                if m and str(m).strip().lower() not in ('general', 'none', 'null', ''):
-                    m_clean = str(m).strip()
-                    if m_clean.lower() in ('web', 'web dev', 'web development'):
-                        m_clean = 'Web Development'
-                    elif m_clean.lower() in ('database', 'database systems', 'database system'):
-                        m_clean = 'Database Systems'
-                    elif m_clean.lower() == 'networking':
-                        m_clean = 'Networking'
-                    if m_clean not in distinct_majors:
-                        distinct_majors.append(m_clean)
-
-            if standard_semester == '2nd Semester' and y == 3:
-                raw_db = (request.form.get('sections_major[3][database]') or
-                          request.form.get('sections[3][database]') or
-                          request.form.get('sections_database') or
-                          request.form.get('database_sections'))
-                raw_web = (request.form.get('sections_major[3][web]') or
-                           request.form.get('sections[3][web]') or
-                           request.form.get('sections_web') or
-                           request.form.get('web_sections'))
-                raw_net = (request.form.get('sections_major[3][networking]') or
-                           request.form.get('sections[3][networking]') or
-                           request.form.get('sections_networking') or
-                           request.form.get('networking_sections'))
-
-                if raw_db or raw_web or raw_net:
-                    try:
-                        db_cnt = max(1, int(raw_db)) if raw_db else 5
-                    except (ValueError, TypeError):
-                        db_cnt = 5
-                    try:
-                        web_cnt = max(1, int(raw_web)) if raw_web else 4
-                    except (ValueError, TypeError):
-                        web_cnt = 4
-                    try:
-                        net_cnt = max(1, int(raw_net)) if raw_net else 4
-                    except (ValueError, TypeError):
-                        net_cnt = 4
-                    sections_by_major = {
-                        'Database Systems': db_cnt,
-                        'Web Development': web_cnt,
-                        'Networking': net_cnt,
-                    }
-                else:
-                    base_sec = sec_count // 3
-                    rem_sec = sec_count % 3
-                    sections_by_major = {
-                        'Database Systems': max(1, base_sec + (1 if rem_sec > 0 else 0)),
-                        'Web Development': max(1, base_sec + (1 if rem_sec > 1 else 0)),
-                        'Networking': max(1, base_sec),
-                    }
-                yr_sections = _generate_sections(y, stu_count, sections_by_major=sections_by_major)
-            elif standard_semester == '1st Semester' and y == 4:
-                raw_db = (request.form.get('sections_major[4][database]') or
-                          request.form.get('sections[4][database]') or
-                          request.form.get('sections_4y_database') or
-                          request.form.get('sections_4_database') or
-                          request.form.get('database_sections_4'))
-                raw_web = (request.form.get('sections_major[4][web]') or
-                           request.form.get('sections[4][web]') or
-                           request.form.get('sections_4y_web') or
-                           request.form.get('sections_4_web') or
-                           request.form.get('web_sections_4'))
-                raw_net = (request.form.get('sections_major[4][networking]') or
-                           request.form.get('sections[4][networking]') or
-                           request.form.get('sections_4y_networking') or
-                           request.form.get('sections_4_networking') or
-                           request.form.get('networking_sections_4'))
-
-                if raw_db or raw_web or raw_net:
-                    try:
-                        db_cnt = max(1, int(raw_db)) if raw_db else 5
-                    except (ValueError, TypeError):
-                        db_cnt = 5
-                    try:
-                        web_cnt = max(1, int(raw_web)) if raw_web else 4
-                    except (ValueError, TypeError):
-                        web_cnt = 4
-                    try:
-                        net_cnt = max(1, int(raw_net)) if raw_net else 4
-                    except (ValueError, TypeError):
-                        net_cnt = 4
-                    sections_by_major = {
-                        'Database Systems': db_cnt,
-                        'Web Development': web_cnt,
-                        'Networking': net_cnt,
-                    }
-                else:
-                    base_sec = sec_count // 3
-                    rem_sec = sec_count % 3
-                    sections_by_major = {
-                        'Database Systems': max(1, base_sec + (1 if rem_sec > 0 else 0)),
-                        'Web Development': max(1, base_sec + (1 if rem_sec > 1 else 0)),
-                        'Networking': max(1, base_sec),
-                    }
-                yr_sections = _generate_sections(y, stu_count, sections_by_major=sections_by_major)
-            else:
-                yr_sections = _generate_sections(y, stu_count, sec_count, majors=distinct_majors)
-
-            for s in yr_sections:
-                s['semester'] = standard_semester
-                all_sections.append(s)
+                for grp in yl_info.get('specialization_groups', []):
+                    spec_name = grp['specialization']
+                    grp_sec_names = grp.get('section_names', [])
+                    for s_name in grp_sec_names:
+                        all_sections.append({
+                            'section': s_name,
+                            'section_name': s_name,
+                            'year_level': str(yl),
+                            'student_count': 40,
+                            'semester': standard_semester,
+                            'major': spec_name
+                        })
 
         if not all_sections:
             all_sections = [{'section': '1A', 'section_name': '1A', 'year_level': '1', 'student_count': 40, 'semester': standard_semester, 'major': None}]
@@ -7833,11 +7869,17 @@ def generate_schedule():
             if pid and cid:
                 professor_load_map[(pid, cid)] = pcid
             p = _rel(row, 'professor')
+            if not p and pid:
+                for ap in (all_profs_res.data or []):
+                    if ap.get('prof_id') == pid:
+                        p = ap
+                        break
             if p:
                 # Use sections/quota from professor_load; default to 999 if not set (meaning unlimited)
                 sec_val = int(row.get('sections') or 0)
                 if sec_val == 0:
                     sec_val = 999
+                print(f"DEBUG appending to professors_by_course: cid={cid}")
                 professors_by_course.setdefault(cid, []).append({
                     'professor_load_id': pcid,
                     'course_id': cid,
@@ -7850,13 +7892,12 @@ def generate_schedule():
                     'quota': sec_val,
                 })
 
-        # Ensure dedicated fallback professor pool starting with "Professor A"
-        fallback_prof_obj = _ensure_fallback_professor_by_index(0, department)
-        fallback_prof_id = fallback_prof_obj.get('prof_id')
-        fallback_prof_name = f"{fallback_prof_obj.get('first_name', 'Professor')} {fallback_prof_obj.get('last_name', 'A')}".strip() or "Professor A"
-        fallback_prof_obj['time_designation'] = 5
-        active_fallback_profs = [fallback_prof_obj]
+        
 
+
+        print('DEBUG professors_by_course:', professors_by_course)
+        print('DEBUG pc_data:', pc_data)
+        print('DEBUG all_profs_res.data:', all_profs_res.data)
         all_prof_data = all_profs_res.data or []
         all_professors_pool = []
         for p in all_prof_data:
@@ -7870,85 +7911,6 @@ def generate_schedule():
                 'sections': 0,
                 'quota': 999,
             })
-
-        # Ensure initial fallback professor is in all_professors_pool if not already present
-        if not any(p.get('prof_id') == fallback_prof_id for p in all_professors_pool):
-            all_professors_pool.append({
-                'prof_id': fallback_prof_id,
-                'first_name': fallback_prof_obj.get('first_name', 'Professor'),
-                'last_name': fallback_prof_obj.get('last_name', 'A'),
-                'time_designation': 5,
-                'max_hours': int(_ranking_constraints(fallback_prof_obj)['max_hours']),
-                'department': fallback_prof_obj.get('department'),
-            })
-
-        # Subject-Oriented Fallback Professor Assignment:
-        # Like real faculty, fallback professors ("Professor A", "Professor B", ...)
-        # are assigned specific subjects/courses across multiple sections (at most 2 preparations per professor, <= 40h).
-        # This ensures Professor A teaches their assigned subjects across sections 1A, 1B, 1C, etc.,
-        # rather than being confined to only one section or arbitrary slots.
-        fallback_prof_index = 0
-        fallback_prof_preparations = {}     # prof_id -> int
-        fallback_prof_committed_hours = {}  # prof_id -> float
-
-        seen_course_ids = set()
-        deduped_curriculum_courses = []
-        for c in all_courses:
-            cid = c.get('course_id')
-            if cid and cid not in seen_course_ids:
-                seen_course_ids.add(cid)
-                deduped_curriculum_courses.append(c)
-
-        for course in deduped_curriculum_courses:
-            cid = course['course_id']
-            # If regular faculty are already assigned in professor_load, keep regular faculty as primary
-            if professors_by_course.get(cid):
-                continue
-
-            yl = int(course.get('year_level') or 1)
-            cmajor = course.get('major')
-            matching_secs = [
-                s for s in all_sections
-                if int(s.get('year_level') or 1) == yl and _major_matches(cmajor, s.get('major'))
-            ]
-            sec_count = max(1, len(matching_secs))
-            dur = float(course.get('lecture_hours') or 0.0) + float(course.get('lab_hours') or 0.0)
-            total_sec_h = dur * sec_count
-
-            current_fprof = _ensure_fallback_professor_by_index(fallback_prof_index, department)
-            cur_fpid = current_fprof['prof_id']
-            cur_preps = fallback_prof_preparations.get(cur_fpid, 0)
-            cur_h = fallback_prof_committed_hours.get(cur_fpid, 0.0)
-
-            # Max 2 course preparations per professor, or advance if workload exceeds 40h
-            if cur_preps >= 2 or (cur_preps >= 1 and cur_h + total_sec_h > 40.0):
-                fallback_prof_index += 1
-                current_fprof = _ensure_fallback_professor_by_index(fallback_prof_index, department)
-                cur_fpid = current_fprof['prof_id']
-
-            if not any(p.get('prof_id') == cur_fpid for p in active_fallback_profs):
-                current_fprof['sections'] = 999
-                current_fprof['quota'] = 999
-                active_fallback_profs.append(current_fprof)
-
-            fprof_entry = {
-                'professor_load_id': None,
-                'course_id': cid,
-                'prof_id': cur_fpid,
-                'first_name': current_fprof.get('first_name', 'Professor'),
-                'last_name': current_fprof.get('last_name'),
-                'max_hours': int(_ranking_constraints(current_fprof)['max_hours']),
-                'department': current_fprof.get('department'),
-                'sections': 999,
-                'quota': 999,
-            }
-            professors_by_course.setdefault(cid, []).append(fprof_entry)
-
-            if not any(p.get('prof_id') == cur_fpid for p in all_professors_pool):
-                all_professors_pool.append(fprof_entry)
-
-            fallback_prof_preparations[cur_fpid] = cur_preps + 1
-            fallback_prof_committed_hours[cur_fpid] = cur_h + total_sec_h
 
         # Fetch rooms
         if is_viewer and department:
@@ -7986,13 +7948,14 @@ def generate_schedule():
         preview_entries = []
 
         # Load existing bookings from DB to avoid collision across different programs in the SAME semester
-        existing_rows = (supabase.table('schedule').select('section, room_id, day, class_start, class_end, professor_load_id, professor_load(prof_id), semester, program, major').eq('archive', False).execute().data) or []
+        current_program_id = _get_user_program_id()
+        existing_rows = (supabase.table('schedule').select('section, room_id, day, class_start, class_end, professor_load_id, professor_load(prof_id), semester, program_id, major').eq('archive', False).execute().data) or []
         for existing in existing_rows:
             # ONLY consider rows for the EXACT same semester that belong to a DIFFERENT program
             # (different semesters do not run simultaneously, so they must NOT block rooms or professors)
             if existing.get('semester') != standard_semester:
                 continue
-            if not program or existing.get('program') == program or (not existing.get('program') and not program):
+            if not current_program_id or existing.get('program_id') == current_program_id:
                 continue
             sec_n = existing.get('section')
             sec_m = existing.get('major')
@@ -8023,13 +7986,7 @@ def generate_schedule():
         room_tba_count = 0
 
         def _is_fallback_prof(prof):
-            if not prof:
-                return False
-            fn = str(prof.get('first_name') or '').strip().lower()
-            ln = str(prof.get('last_name') or '').strip().upper()
-            if fn == 'professor' and len(ln) <= 2 and ln.isalpha():
-                return True
-            return any(p.get('prof_id') == prof.get('prof_id') for p in active_fallback_profs)
+            return False
 
         def _can_prof_teach_on_day(prof_dict, check_day):
             pid = prof_dict.get('prof_id')
@@ -8064,59 +8021,14 @@ def generate_schedule():
             professor_load_map[(p_id, c_id)] = lid
             return lid
 
-        def _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id=None):
-            """Find an existing conflict-free fallback professor (under max_hours),
-            or dynamically instantiate the next sequential fallback professor ('Professor B', 'Professor C', ...)
-            strictly ensuring zero overlapping schedule conflicts.
-            """
-            # 1. If course_id is provided, first prioritize the designated fallback instructor for this course
-            if course_id and professors_by_course.get(course_id):
-                for prof in professors_by_course[course_id]:
-                    if _is_fallback_prof(prof):
-                        pid = prof['prof_id']
-                        curr_h = professor_hours.get(pid, 0.0)
-                        max_h = prof.get('max_hours') or 40
-                        if curr_h + duration <= max_h and not _has_conflict(day, block_start, block_end, professor_bookings.get(pid, [])):
-                            return prof
-
-            # 2. Search existing fallback professors that are conflict-free AND within max_hours
-            for prof in active_fallback_profs:
-                pid = prof['prof_id']
-                curr_h = professor_hours.get(pid, 0.0)
-                max_h = prof.get('max_hours') or 40
-                if curr_h + duration <= max_h and not _has_conflict(day, block_start, block_end, professor_bookings.get(pid, [])):
-                    return prof
-
-            # 3. If all existing fallback professors are booked at this timeslot or at capacity, create next sequential letter
-            next_idx = len(active_fallback_profs)
-            new_prof = _ensure_fallback_professor_by_index(next_idx, department)
-            new_prof['sections'] = 999
-            new_prof['quota'] = 999
-            new_prof['time_designation'] = 5
-            active_fallback_profs.append(new_prof)
-
-            # Ensure new fallback professor is in all_professors_pool
-            if not any(p.get('prof_id') == new_prof.get('prof_id') for p in all_professors_pool):
-                all_professors_pool.append({
-                    'prof_id': new_prof.get('prof_id'),
-                    'first_name': new_prof.get('first_name', 'Professor'),
-                    'last_name': new_prof.get('last_name'),
-                    'time_designation': 5,
-                    'max_hours': int(new_prof.get('max_hours') or 40),
-                    'department': new_prof.get('department'),
-                    'sections': 999,
-                    'quota': 999,
-                })
-
-            return new_prof
-
+        
         # Workload-aware scoring for candidate professors
         def _score_candidate_professor(prof, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=False):
             pk = prof['prof_id']
             curr_h = professor_hours.get(pk, 0.0)
             max_h = prof.get('max_hours') or 40
             day_h = prof_day_hours.get((pk, day), 0.0)
-            course_sec = professor_load_count.get((pk, course_id), 0)
+            course_sec = len(professor_load_count.get((pk, course_id), set()))
             is_primary = 1 if pk in primary_prof_ids else 0
             is_fallback = _is_fallback_prof(prof)
             exceeds_cap = 1 if (curr_h + duration > max_h) else 0
@@ -8156,7 +8068,7 @@ def generate_schedule():
 
         # Helper to schedule a single unpaired session (or half of a split paired session)
         def _schedule_single_session(session_type, duration, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
-            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step
+            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step, generation_warnings
             if duration <= 0:
                 return True
 
@@ -8173,23 +8085,21 @@ def generate_schedule():
                 logging.info(
                     f"[CANDIDATE] {p.get('first_name', '')} {p.get('last_name', '')} (ID {p['prof_id']}): "
                     f"quota={p.get('quota', 999)}, hours={professor_hours.get(p['prof_id'], 0.0)}/{p.get('max_hours', 40)}, "
-                    f"assigned={professor_load_count.get((p['prof_id'], course_id), 0)}/{p.get('quota', 999)}"
+                    f"assigned={len(professor_load_count.get((p['prof_id'], course_id), set()))}/{p.get('quota', 999)}"
                 )
 
             # STRICT room filtering: Lecture courses -> ONLY lecture rooms; Lab courses -> ONLY lab rooms
-            cand_rooms = lecture_rooms if session_type == 'Lecture' else lab_rooms
+            cand_rooms = lecture_rooms if session_type in ('Lecture', 'ILP') else lab_rooms
             logging.debug(f"[ROOM_FILTER] Course '{course.get('course_name')}' ({session_type}) filtered to {len(cand_rooms)} matching rooms.")
 
             # Passes: from most constrained & preferred to broadest fallback (relax faculty & rules, NEVER room type)
             passes = [
-                {'strict_rules': True,  'prof_pool': 'primary'},
-                {'strict_rules': True,  'prof_pool': 'all'},
-                {'strict_rules': False, 'prof_pool': 'primary'},
-                {'strict_rules': False, 'prof_pool': 'all'},
+                {'strict_rules': True},
+                {'strict_rules': False},
             ]
 
             for p_config in passes:
-                prof_pool = primary_profs if p_config['prof_pool'] == 'primary' else (primary_profs + other_profs)
+                prof_pool = primary_profs
 
                 all_days = sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99))
                 scored_days = []
@@ -8216,7 +8126,14 @@ def generate_schedule():
                     if len(day_slots) < duration:
                         continue
 
-                    for start_index in range(0, len(day_slots) - duration + 1):
+                    # For ILP, sort start_indices to prioritize last-hour slots (after checking Monday 07:00 explicitly or relying on day sorting)
+                    start_indices = list(range(0, len(day_slots) - duration + 1))
+                    if session_type == 'ILP':
+                        # Sort so that if it's Monday and 07:00 is available, it's first. Otherwise, prioritize last slot of the day.
+                        start_indices.sort(key=lambda idx: -100 if day == 'Monday' and idx == 0 else -idx)
+
+                    for start_index in start_indices:
+
                         block_slots = day_slots[start_index:start_index + duration]
                         if not _is_contiguous_block(block_slots):
                             continue
@@ -8230,14 +8147,27 @@ def generate_schedule():
 
                         if _has_conflict(day, block_start, block_end, section_bookings[sec_key]):
                             continue
+                        if block_start < timedelta(hours=8) and session_type != 'ILP':
+                            continue
 
+
+                        print(f"DEBUG CHECKING PROFS FOR {course['course_name']} {session_type} on {day} {block_start}-{block_end} PASS {p_config['strict_rules']}")
+                        for p in prof_pool:
+                            print(f"  Prof {p.get('last_name')}:")
+                            print(f"    max_hours check: {professor_hours.get(p['prof_id'], 0.0) + duration} <= {p.get('max_hours', 40)}")
+                            print(f"    conflict check: {not _has_conflict(day, block_start, block_end, professor_bookings.get(p['prof_id'], []))}")
+                            print(f"    DEBUG: section_name={section_name}, prof_load_count={professor_load_count.get((p['prof_id'], course_id), set())}")
+                            print(f"    quota check: {len(professor_load_count.get((p['prof_id'], course_id), set()))} < {p.get('quota', 999)}")
+                            print(f"    day check: {not p_config['strict_rules'] or _can_prof_teach_on_day(p, day)}")
                         cand_profs = [
                             p for p in prof_pool
                             if professor_hours.get(p['prof_id'], 0.0) + duration <= (p.get('max_hours') or 40)
                             and not _has_conflict(day, block_start, block_end, professor_bookings.get(p['prof_id'], []))
-                            and professor_load_count.get((p['prof_id'], course_id), 0) < p.get('quota', 999)
+                            and (len(professor_load_count.get((p['prof_id'], course_id), set())) < p.get('quota', 999) or section_name in professor_load_count.get((p['prof_id'], course_id), set()))
                             and (not p_config['strict_rules'] or _can_prof_teach_on_day(p, day))
+                            and _check_professor_cutoff_conflict(p['prof_id'], day, block_start, block_end, session_type) is None
                         ]
+                        print(f"    cand_profs = {[p['prof_id'] for p in cand_profs]}")
                         assigned_prof = None
                         assigned_room = None
                         if cand_profs:
@@ -8245,33 +8175,30 @@ def generate_schedule():
                                 cand_rooms, day, block_start, block_end,
                                 room_bookings, room_usage, room_last_used, room_order
                             )
-                            if not assigned_room:
+                            print(f"    assigned_room = {assigned_room}")
+                            if not assigned_room and session_type != 'ILP':
                                 continue
                             cand_profs.sort(key=lambda p: _score_candidate_professor(
                                 p, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=False
                             ))
                             assigned_prof = cand_profs[0]
-                        elif p_config['prof_pool'] == 'all' and (not primary_profs or not p_config['strict_rules']):
-                            assigned_room = _select_least_used_room(
-                                cand_rooms, day, block_start, block_end,
-                                room_bookings, room_usage, room_last_used, room_order
-                            )
-                            if not assigned_room:
-                                continue
-                            assigned_prof = _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id)
 
-                        if not assigned_prof or not assigned_room:
+
+                        if not assigned_prof:
+                            continue
+                        if not assigned_room and session_type != 'ILP':
                             continue
 
                         # ASSIGNMENT SUCCESS
                         pk = assigned_prof['prof_id']
-                        rk = assigned_room['room_id']
+                        rk = assigned_room['room_id'] if assigned_room else None
+                        room_name = assigned_room.get('room_name') if assigned_room else 'TBA'
                         prof_full_name = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip()
                         assigned_professor_load_id = _resolve_load_id(assigned_prof, course_id)
 
                         logging.debug(
                             f"[ROOM_ASSIGNED] Course: {course.get('course_name')} | Session: {session_type} | "
-                            f"Room: {assigned_room.get('room_name')} ({assigned_room.get('room_type')})"
+                            f"Room: {room_name}"
                         )
 
                         preview_entries.append({
@@ -8282,7 +8209,7 @@ def generate_schedule():
                             'professor_name': prof_full_name,
                             'section': section_name,
                             'room_id': rk,
-                            'room_name': assigned_room.get('room_name'),
+                            'room_name': room_name,
                             'day': day,
                             'start': block_start,
                             'end': block_end,
@@ -8301,7 +8228,7 @@ def generate_schedule():
                         professor_hours[pk] = professor_hours.get(pk, 0.0) + duration
                         prof_day_hours[(pk, day)] = prof_day_hours.get((pk, day), 0.0) + duration
                         prof_scheduled_days.setdefault(pk, set()).add(day)
-                        professor_load_count[(pk, course_id)] = professor_load_count.get((pk, course_id), 0) + 1
+                        professor_load_count.setdefault((pk, course_id), set()).add(section_name)
                         prof_section_count[pk] = prof_section_count.get(pk, 0) + 1
 
                         courses_per_day[day] = courses_per_day.get(day, 0) + 1
@@ -8317,7 +8244,13 @@ def generate_schedule():
                 day_slots = slot_groups[day]
                 if len(day_slots) < duration:
                     continue
-                for start_index in range(0, len(day_slots) - duration + 1):
+                # For ILP, sort start_indices to prioritize last-hour slots (after checking Monday 07:00 explicitly or relying on day sorting)
+                start_indices = list(range(0, len(day_slots) - duration + 1))
+                if session_type == 'ILP':
+                    # Sort so that if it's Monday and 07:00 is available, it's first. Otherwise, prioritize last slot of the day.
+                    start_indices.sort(key=lambda idx: -100 if day == 'Monday' and idx == 0 else -idx)
+
+                for start_index in start_indices:
                     block_slots = day_slots[start_index:start_index + duration]
                     if not _is_contiguous_block(block_slots):
                         continue
@@ -8329,11 +8262,13 @@ def generate_schedule():
                     primary_cand_profs = [
                         p for p in primary_profs
                         if not _has_conflict(day, block_start, block_end, professor_bookings.get(p['prof_id'], []))
+                        and _check_professor_cutoff_conflict(p['prof_id'], day, block_start, block_end, session_type) is None
                     ]
-                    regular_profs = [p for p in (primary_profs + other_profs) if not _is_fallback_prof(p)]
+                    regular_profs = primary_profs
                     conflict_free_profs = [
                         p for p in (primary_cand_profs or regular_profs)
                         if not _has_conflict(day, block_start, block_end, professor_bookings.get(p['prof_id'], []))
+                        and _check_professor_cutoff_conflict(p['prof_id'], day, block_start, block_end, session_type) is None
                     ]
                     assigned_prof = None
                     assigned_room = _select_least_used_room(
@@ -8360,8 +8295,7 @@ def generate_schedule():
                             ))
                             assigned_prof = conflict_free_profs[0]
                     else:
-                        # Fallback to sequential conflict-free professor (Professor A, B, C, ...)
-                        assigned_prof = _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id)
+                        assigned_prof = None
 
                     # If no conflict-free professor, reject slot to prevent double-booking
                     if not assigned_prof:
@@ -8374,9 +8308,7 @@ def generate_schedule():
 
                     assigned_professor_load_id = _resolve_load_id(assigned_prof, course_id) if pk else None
 
-                    if _is_fallback_prof(assigned_prof):
-                        prof_tba_count += 1
-                        logging.info(f"[SCHEDULER PROF FALLBACK] Assigned {prof_name} for {section_name} - {course.get('course_name')} {session_type} on {day} {block_start}-{block_end}")
+
                     if not rk:
                         room_tba_count += 1
                         logging.warning(f"[SCHEDULER ROOM FAIL] No matching {session_type} room available for {section_name} - {course.get('course_name')} on {day} {block_start}-{block_end}. Evaluated {len(cand_rooms)} {session_type} rooms.")
@@ -8410,7 +8342,7 @@ def generate_schedule():
                         professor_hours[pk] = professor_hours.get(pk, 0.0) + duration
                         prof_day_hours[(pk, day)] = prof_day_hours.get((pk, day), 0.0) + duration
                         prof_scheduled_days.setdefault(pk, set()).add(day)
-                        professor_load_count[(pk, course_id)] = professor_load_count.get((pk, course_id), 0) + 1
+                        professor_load_count.setdefault((pk, course_id), set()).add(section_name)
                         prof_section_count[pk] = prof_section_count.get(pk, 0) + 1
 
                     courses_per_day[day] = courses_per_day.get(day, 0) + 1
@@ -8418,11 +8350,72 @@ def generate_schedule():
                     total_sessions_scheduled += 1
                     return True
 
+            # If all slots failed, assign TBA to the first slot where the section and a room are free
+            for day in sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99)):
+                for start_index in range(0, len(slot_groups[day]) - duration + 1):
+                    block_slots = slot_groups[day][start_index:start_index + duration]
+                    if not _is_contiguous_block(block_slots):
+                        continue
+                    block_start = block_slots[0]['start_time']
+                    block_end = block_slots[-1]['end_time']
+                    
+                    if _has_conflict(day, block_start, block_end, section_bookings[sec_key]):
+                        continue
+                    if block_start < timedelta(hours=8) and session_type != 'ILP':
+                        continue
+                        
+                    assigned_room = _select_least_used_room(
+                        cand_rooms, day, block_start, block_end,
+                        room_bookings, room_usage, room_last_used, room_order
+                    )
+                    
+                    rk = assigned_room['room_id'] if assigned_room else None
+                    if not rk: continue
+                    
+                    room_name = assigned_room.get('room_name')
+                    pk = None
+                    prof_name = 'TBA'
+                    prof_tba_count += 1
+                    assigned_professor_load_id = None
+                    
+                    preview_entries.append({
+                        'professor_load_id': assigned_professor_load_id,
+                        'course_id': course_id,
+                        'course_name': course.get('course_name'),
+                        'prof_id': pk,
+                        'professor_name': prof_name,
+                        'section': section_name,
+                        'room_id': rk,
+                        'room_name': room_name,
+                        'day': day,
+                        'start': block_start,
+                        'end': block_end,
+                        'session_type': session_type,
+                        'semester': standard_semester,
+                        'major': sec_major or course.get('major'),
+                        'program': course.get('program') or program or session.get('program', ''),
+                    })
+                    
+                    section_bookings[sec_key].append((day, block_start, block_end))
+                    room_bookings.setdefault(rk, []).append((day, block_start, block_end))
+                    assignment_step += 1
+                    room_usage[rk] = room_usage.get(rk, 0) + 1
+                    room_last_used[rk] = assignment_step
+                    
+                    courses_per_day[day] = courses_per_day.get(day, 0) + 1
+                    days_tried[day] = days_tried.get(day, 0) + 1
+                    total_sessions_scheduled += 1
+                    
+                    generation_warnings.append(
+                        f"{session_type} for {course.get('course_name')} could not be placed for Professor {primary_profs[0].get('last_name', 'X') if primary_profs else 'X'} and was set to TBA"
+                    )
+                    return True
+
             return False
 
         # Helper to schedule a paired block (Lecture + Lab)
         def _schedule_paired_block(lec_dur, lab_dur, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
-            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step
+            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step, generation_warnings
             total_dur = lec_dur + lab_dur
             course_id = course['course_id']
             primary_profs = professors_by_course.get(course_id, [])
@@ -8437,18 +8430,16 @@ def generate_schedule():
                 logging.info(
                     f"[CANDIDATE] {p.get('first_name', '')} {p.get('last_name', '')} (ID {p['prof_id']}): "
                     f"quota={p.get('quota', 999)}, hours={professor_hours.get(p['prof_id'], 0.0)}/{p.get('max_hours', 40)}, "
-                    f"assigned={professor_load_count.get((p['prof_id'], course_id), 0)}/{p.get('quota', 999)}"
+                    f"assigned={len(professor_load_count.get((p['prof_id'], course_id), set()))}/{p.get('quota', 999)}"
                 )
 
             passes = [
-                {'strict_rules': True,  'prof_pool': 'primary'},
-                {'strict_rules': True,  'prof_pool': 'all'},
-                {'strict_rules': False, 'prof_pool': 'primary'},
-                {'strict_rules': False, 'prof_pool': 'all'},
+                {'strict_rules': True},
+                {'strict_rules': False},
             ]
 
             for p_config in passes:
-                prof_pool = primary_profs if p_config['prof_pool'] == 'primary' else (primary_profs + other_profs)
+                prof_pool = primary_profs
 
                 all_days = sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99))
                 scored_days = []
@@ -8491,13 +8482,16 @@ def generate_schedule():
 
                         if _has_conflict(day, lec_start, lab_end, section_bookings[sec_key]):
                             continue
+                        if lec_start < timedelta(hours=8):
+                            continue
 
                         cand_profs = [
                             p for p in prof_pool
                             if professor_hours.get(p['prof_id'], 0.0) + total_dur <= (p.get('max_hours') or 40)
                             and not _has_conflict(day, lec_start, lab_end, professor_bookings.get(p['prof_id'], []))
-                            and professor_load_count.get((p['prof_id'], course_id), 0) < p.get('quota', 999)
+                            and (len(professor_load_count.get((p['prof_id'], course_id), set())) < p.get('quota', 999) or section_name in professor_load_count.get((p['prof_id'], course_id), set()))
                             and (not p_config['strict_rules'] or _can_prof_teach_on_day(p, day))
+                            and _check_professor_cutoff_conflict(p['prof_id'], day, lec_start, lab_end, 'Lecture') is None
                         ]
                         assigned_prof = None
                         assigned_lec_room = None
@@ -8520,20 +8514,7 @@ def generate_schedule():
                                 p, course_id, total_dur, day, primary_prof_ids, tolerance=2.0, allow_overload=False
                             ))
                             assigned_prof = cand_profs[0]
-                        elif p_config['prof_pool'] == 'all' and (not primary_profs or not p_config['strict_rules']):
-                            assigned_lec_room = _select_least_used_room(
-                                lecture_rooms, day, lec_start, lec_end,
-                                room_bookings, room_usage, room_last_used, room_order
-                            )
-                            if not assigned_lec_room:
-                                continue
-                            assigned_lab_room = _select_least_used_room(
-                                lab_rooms, day, lab_start, lab_end,
-                                room_bookings, room_usage, room_last_used, room_order
-                            )
-                            if not assigned_lab_room:
-                                continue
-                            assigned_prof = _find_or_create_fallback_professor(day, lec_start, lab_end, total_dur, course_id)
+
 
                         if not assigned_prof or not assigned_lec_room or not assigned_lab_room:
                             continue
@@ -8599,7 +8580,7 @@ def generate_schedule():
                         professor_hours[pk] = professor_hours.get(pk, 0.0) + total_dur
                         prof_day_hours[(pk, day)] = prof_day_hours.get((pk, day), 0.0) + total_dur
                         prof_scheduled_days.setdefault(pk, set()).add(day)
-                        professor_load_count[(pk, course_id)] = professor_load_count.get((pk, course_id), 0) + 1
+                        professor_load_count.setdefault((pk, course_id), set()).add(section_name)
                         prof_section_count[pk] = prof_section_count.get(pk, 0) + 1
 
                         courses_per_day[day] = courses_per_day.get(day, 0) + 1
@@ -8709,6 +8690,10 @@ def generate_schedule():
 
         _set_preview_for_user(preview_entries)
         flash('Schedule generated successfully across all 4 year levels.', 'success')
+
+        if generation_warnings:
+            for w in generation_warnings:
+                flash(w, 'warning')
 
         preview_context = _build_preview_context(preview_entries)
         return render_template(
@@ -8966,6 +8951,7 @@ def confirm_preview():
         # Determine the semester, program, and sections from preview
         sem_val = (preview[0].get('semester') or '').strip()
         prog_val = (preview[0].get('program') or session.get('program') or '').strip()
+        program_id = _find_program_id_by_name(prog_val)
         sections_in_preview = list({e.get('section') for e in preview if e.get('section')})
 
         # Prepare payload rows
@@ -8973,6 +8959,7 @@ def confirm_preview():
         for entry in preview:
             entry_sem = (entry.get('semester') or sem_val).strip()
             entry_prog = entry.get('program') or prog_val or session.get('program', '')
+            entry_program_id = _find_program_id_by_name(entry_prog) or program_id
             professor_load_id = entry.get('professor_load_id')
             prof_id = entry.get('prof_id')
             course_id = entry.get('course_id')
@@ -8984,12 +8971,8 @@ def confirm_preview():
                     pc_chk_row = _first(pc_chk.data or [])
                     if pc_chk_row:
                         professor_load_id = pc_chk_row.get('professor_load_id')
-                    else:
-                        pc_ins = supabase.table('professor_load').insert({'prof_id': int(prof_id), 'course_id': int(course_id)}).execute()
-                        if pc_ins.data:
-                            professor_load_id = pc_ins.data[0].get('professor_load_id')
                 except Exception as pc_err:
-                    logging.warning(f"[confirm_preview] Could not resolve/create professor_load for prof_id={prof_id}, course_id={course_id}: {pc_err}")
+                    logging.warning(f"[confirm_preview] Could not resolve professor_load for prof_id={prof_id}, course_id={course_id}: {pc_err}")
 
             rows.append({
                 'professor_load_id': int(professor_load_id) if professor_load_id not in (None, '', 0, '0') else None,
@@ -9001,7 +8984,7 @@ def confirm_preview():
                 'section': entry.get('section'),
                 'semester': entry_sem,
                 'major': entry.get('major'),
-                'program': entry_prog,
+                'program_id': entry_program_id,
                 'archive': False,
             })
 
@@ -9024,6 +9007,7 @@ def confirm_preview():
                 rpc_res = supabase.rpc('confirm_schedule_transaction', {
                     'p_semester': sem_val,
                     'p_program': prog_val,
+                    'p_program_id': program_id,
                     'p_rows': rows,
                     'p_clear_scope': True,
                     'p_archived_by': archived_by
@@ -9043,13 +9027,16 @@ def confirm_preview():
                 rpc_success = False
 
         if not rpc_success:
+            if not program_id:
+                raise ValueError(f"Could not find a program record for '{prog_val}'.")
+
             # Fallback: Soft-archive existing active records for this program by setting archive = True
             try:
                 old_update = supabase.table('schedule').update({'archive': True}).eq('archive', False)
                 if sem_val:
                     old_update = old_update.eq('semester', sem_val)
                 if prog_val and str(prog_val).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                    old_update = old_update.or_(f'program.eq.{prog_val},program.is.null,program.eq.')
+                    old_update = old_update.eq('program_id', program_id)
                 old_update.execute()
             except Exception as arc_err:
                 logging.warning(f"[confirm_preview] Fallback soft-archive warning: {arc_err}")
@@ -9100,6 +9087,36 @@ def discard_preview():
     return redirect(url_for('home'))
 
 
+@app.route('/archive_schedule', methods=['POST'])
+@login_required
+def archive_schedule():
+    """Archive currently active schedule for the program so a new one can be generated."""
+    user_prog_id = _get_user_program_id()
+    user_program = session.get('program', '')
+    user_role = (session.get('role') or 'scheduler').lower()
+    redirect_target = request.form.get('redirect_to') or request.args.get('redirect_to') or url_for('schedules')
+
+    if not user_prog_id and user_program:
+        user_prog_id = _find_program_id_by_name(user_program)
+
+    try:
+        query = supabase.table('schedule').update({'archive': True}).eq('archive', False)
+
+        if user_prog_id and user_role not in ('super_admin', 'admin'):
+            query = query.eq('program_id', user_prog_id)
+
+        res = query.execute()
+        count = len(res.data or []) if hasattr(res, 'data') and res.data else 0
+        log_activity('archive', 'schedule', f'Archived active schedule ({count} classes)')
+        flash('Active schedule has been archived successfully.', 'success')
+    except Exception as err:
+        logging.exception(f"Error archiving schedule: {err}")
+        flash(f'Error archiving schedule: {err}', 'danger')
+
+    session.pop('active_semester', None)
+    return redirect(redirect_target)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # SCHEDULE ARCHIVE & RESTORATION (Based on schedule.archive = True)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -9113,6 +9130,7 @@ def schedule_archive():
     user_program = session.get('program', '')
 
     effective_program = user_program if (user_role not in ('super_admin', 'admin') and user_program) else program_filter
+    effective_program_id = _find_program_id_by_name(effective_program) if effective_program else None
 
     batches_list = []
     try:
@@ -9162,9 +9180,9 @@ def schedule_archive():
             page_size = 1000
             start = 0
             while True:
-                query = supabase.table('schedule').select('schedule_id, semester, program, section, major, archive').eq('archive', True)
-                if effective_program:
-                    query = query.eq('program', effective_program)
+                query = supabase.table('schedule').select('schedule_id, semester, program_id, program:program_id(program_name), section, major, archive').eq('archive', True)
+                if effective_program_id:
+                    query = query.eq('program_id', effective_program_id)
                 if semester_filter:
                     query = query.eq('semester', semester_filter)
                 chunk_res = query.range(start, start + page_size - 1).execute()
@@ -9177,7 +9195,7 @@ def schedule_archive():
             batches_map = {}
             for r in all_rows:
                 sem = r.get('semester') or '1st Semester'
-                prog = r.get('program') or ''
+                prog = (_rel(r, 'program') or {}).get('program_name') or ''
                 bid = str(r.get('batch_id') or f"{sem.replace(' ', '_')}__{prog or 'all'}")
                 if bid not in batches_map:
                     batches_map[bid] = {
@@ -9230,7 +9248,7 @@ def schedule_archive():
 def view_schedule_archive_batch(batch_id):
     try:
         query = supabase.table('schedule').select(
-            '*, professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), course(course_name), professor(first_name, last_name), room(room_name)'
+            '*, program:program_id(program_name), professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), course(course_name), professor(first_name, last_name), room(room_name)'
         ).eq('archive', True)
 
         if '__' in batch_id:
@@ -9238,7 +9256,7 @@ def view_schedule_archive_batch(batch_id):
             sem_name = sem_part.replace('_', ' ')
             query = query.eq('semester', sem_name)
             if prog_part and prog_part != 'all':
-                query = query.eq('program', prog_part)
+                query = query.eq('program_id', _find_program_id_by_name(prog_part) or -1)
         else:
             query = query.or_(f"batch_id.eq.{batch_id},semester.eq.{batch_id}")
 
@@ -9261,7 +9279,7 @@ def view_schedule_archive_batch(batch_id):
         batch_info = {
             'batch_id': batch_id,
             'semester': first_row.get('semester') or '1st Semester',
-            'program': first_row.get('program') or '',
+            'program': (_rel(first_row, 'program') or {}).get('program_name') or '',
             'archived_at_fmt': arch_at_fmt,
             'archived_by': first_row.get('archived_by') or 'Scheduler',
             'archive_reason': first_row.get('archive_reason') or 'Archived schedule',
@@ -9347,6 +9365,7 @@ def view_schedule_archive_batch(batch_id):
 
 
 @app.route('/restore_schedule_archive/<batch_id>', methods=['POST'])
+@app.route('/restore_schedule/<batch_id>', methods=['POST'])
 @login_required
 def restore_schedule_archive(batch_id):
     user_role = (session.get('role') or 'scheduler').lower()
@@ -9383,11 +9402,11 @@ def restore_schedule_archive(batch_id):
                 target_sem = sem_part.replace('_', ' ')
                 target_prog = '' if prog_part == 'all' else prog_part
             else:
-                sample_q = supabase.table('schedule').select('semester, program').eq('archive', True)
+                sample_q = supabase.table('schedule').select('semester, program_id, program:program_id(program_name)').eq('archive', True)
                 sample_rows = sample_q.execute().data or []
                 if sample_rows:
                     target_sem = sample_rows[0].get('semester') or '1st Semester'
-                    target_prog = sample_rows[0].get('program') or ''
+                    target_prog = (_rel(sample_rows[0], 'program') or {}).get('program_name') or ''
 
             sem_part_clean = target_sem.strip()
             if sem_part_clean in ('1st Semester', '1st', '1'):
@@ -9397,16 +9416,25 @@ def restore_schedule_archive(batch_id):
             else:
                 t_sem_aliases = [sem_part_clean]
 
-            # 1. Soft-archive currently active schedules for target semester ONLY (set archive = True)
-            archive_curr_q = supabase.table('schedule').update({'archive': True}).in_('semester', t_sem_aliases).eq('archive', False)
-            if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                archive_curr_q = archive_curr_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
+            # 1. Soft-archive ANY currently active schedule for this program (set archive = True)
+            user_prog_id = _get_user_program_id()
+            archive_curr_q = supabase.table('schedule').update({'archive': True}).eq('archive', False)
+            if user_prog_id:
+                archive_curr_q = archive_curr_q.eq('program_id', user_prog_id)
+            elif target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
+                archive_curr_q = archive_curr_q.eq('program_id', _find_program_id_by_name(target_prog) or -1)
             archive_curr_q.execute()
 
-            # 2. Reactivate archived schedules for target semester ONLY (set archive = False)
-            restore_q = supabase.table('schedule').update({'archive': False}).in_('semester', t_sem_aliases).eq('archive', True)
-            if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-                restore_q = restore_q.or_(f'program.eq.{target_prog},program.is.null,program.eq.')
+            # 2. Reactivate archived schedules for target batch (set archive = False)
+            restore_q = supabase.table('schedule').update({'archive': False})
+            if '__' in batch_id:
+                restore_q = restore_q.eq('semester', target_sem).eq('archive', True)
+                if user_prog_id:
+                    restore_q = restore_q.eq('program_id', user_prog_id)
+                elif target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
+                    restore_q = restore_q.eq('program_id', _find_program_id_by_name(target_prog) or -1)
+            else:
+                restore_q = restore_q.or_(f"batch_id.eq.{batch_id},semester.eq.{batch_id}")
             restore_res = restore_q.execute()
             restored_count = len(restore_res.data or []) if restore_res and restore_res.data else 'all'
 
@@ -9446,7 +9474,7 @@ def delete_schedule_archive(batch_id):
         if target_sem:
             del_q = del_q.eq('semester', target_sem)
         if target_prog and str(target_prog).strip().lower() not in ('global / all programs', 'all', 'all programs', 'null', ''):
-            del_q = del_q.eq('program', target_prog)
+            del_q = del_q.eq('program_id', _find_program_id_by_name(target_prog) or -1)
         del_q.execute()
 
         log_activity('delete', 'schedule', f'Deleted archived schedule batch {batch_id}')
