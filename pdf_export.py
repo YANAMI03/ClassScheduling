@@ -1,47 +1,97 @@
 import io
+import os
 import re
 from datetime import datetime, timedelta
-from reportlab.lib.pagesizes import letter, landscape
+
+from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfgen import canvas
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 
-class NumberedCanvas(canvas.Canvas):
-    """Two-pass canvas to dynamically compute and print 'Page X of Y' on all pages."""
+# ---------------------------------------------------------------------------
+# Font Registration (Windows TTF fonts with graceful Helvetica fallback)
+# ---------------------------------------------------------------------------
+_FONT_UNIV   = 'Helvetica-Bold'
+_FONT_TITLE  = 'Helvetica-Bold'
+_FONT_BODY   = 'Helvetica'
+_FONT_ITALIC = 'Helvetica-Oblique'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._saved_page_states = []
+try:
+    if os.path.exists('C:/Windows/Fonts/trebucbd.ttf'):
+        pdfmetrics.registerFont(TTFont('TrebuchetMS-Bold', 'C:/Windows/Fonts/trebucbd.ttf'))
+        _FONT_UNIV = 'TrebuchetMS-Bold'
+    if os.path.exists('C:/Windows/Fonts/arialbd.ttf'):
+        pdfmetrics.registerFont(TTFont('Arial-Bold', 'C:/Windows/Fonts/arialbd.ttf'))
+        _FONT_TITLE = 'Arial-Bold'
+    if os.path.exists('C:/Windows/Fonts/arial.ttf'):
+        pdfmetrics.registerFont(TTFont('Arial', 'C:/Windows/Fonts/arial.ttf'))
+        _FONT_BODY = 'Arial'
+    if os.path.exists('C:/Windows/Fonts/ariali.ttf'):
+        pdfmetrics.registerFont(TTFont('Arial-Italic', 'C:/Windows/Fonts/ariali.ttf'))
+        _FONT_ITALIC = 'Arial-Italic'
+except Exception:
+    pass
 
-    def showPage(self):
-        self._saved_page_states.append(dict(self.__dict__))
-        self._startPage()
+# ---------------------------------------------------------------------------
+# Asset Paths (Extracted from official HEADER_FOOTER.pdf)
+# ---------------------------------------------------------------------------
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_STATIC = os.path.join(_HERE, 'static', 'images')
 
-    def save(self):
-        num_pages = len(self._saved_page_states)
-        for state in self._saved_page_states:
-            self.__dict__.update(state)
-            self.draw_footer(num_pages)
-            super().showPage()
-        super().save()
+LOGO_HEADER_LOGOS   = os.path.join(_STATIC, 'pdf_header_logos.png')
+LOGO_HEADER_DIVIDER = os.path.join(_STATIC, 'pdf_header_divider.png')
+LOGO_CICT_SEAL      = os.path.join(_STATIC, 'pdf_cict_seal.png')
+LOGO_FOOTER_BANNER  = os.path.join(_STATIC, 'pdf_footer_banner.png')
 
-    def draw_footer(self, page_count):
-        self.saveState()
-        self.setFont("Helvetica", 7.5)
-        self.setFillColor(colors.HexColor("#64748B"))
-        footer_text = f"Class Scheduling System  •  Page {self._pageNumber} of {page_count}"
-        self.drawRightString(792 - 26, 14, footer_text)
-        self.drawString(26, 14, "Official Institutional Timetable  •  Confidential")
-        self.restoreState()
+# ---------------------------------------------------------------------------
+# Colors (Official NEUST Schedule Scheme)
+# ---------------------------------------------------------------------------
+COL_LECTURE     = colors.HexColor('#D9D9D9')  # Light gray fill for lecture classes
+COL_LAB         = colors.HexColor('#FFE699')  # Light orange / soft amber fill for laboratory classes
+COL_TIME_BG     = colors.HexColor('#F2F2F2')  # Neutral light gray for time column
+COL_HDR_BG      = colors.HexColor('#D9D9D9')  # Light gray for table header
+COL_UNIV_BLUE   = colors.HexColor('#001F5F')  # Deep navy for university header text
+COL_BAR_BLUE    = colors.HexColor('#003366')  # Deep blue for full-width CICT banner
+COL_FOOTER_LINE = colors.HexColor('#7E7E7E')  # Thin gray divider above footer banner
 
+# ---------------------------------------------------------------------------
+# Page Dimensions (Philippine Legal / Folio: 8.5" x 13" = 612 x 936 pt, Portrait)
+# ---------------------------------------------------------------------------
+PAGE_WIDTH  = 612.0
+PAGE_HEIGHT = 936.0
+
+_BASE_START_H = 7   # 7:00 AM (PRD operational start)
+_BASE_END_H   = 20  # 8:00 PM (PRD operational end: 13 one-hour slots)
+_DAYS         = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+# ---------------------------------------------------------------------------
+# Mode Titles & Labels
+# ---------------------------------------------------------------------------
+_MODE_TITLE = {
+    'professor': 'PROFESSOR SCHEDULE',
+    'teacher':   'PROFESSOR SCHEDULE',
+    'section':   'SECTION SCHEDULE',
+    'room':      'ROOM UTILIZATION',
+}
+
+_MODE_LABEL = {
+    'professor': 'PROFESSOR:',
+    'teacher':   'PROFESSOR:',
+    'section':   'SECTION:',
+    'room':      'ROOM NUMBER:',
+}
+
+
+# ---------------------------------------------------------------------------
+# Time & String Parsing Utilities
+# ---------------------------------------------------------------------------
 
 def _parse_time_to_seconds(val):
     """Convert any time-like value to total seconds from midnight.
-    Correctly handles timedelta, time, 12-hour strings ('01:00 PM'), and 24-hour strings ('13:00:00').
+    Handles timedelta, datetime.time, 12-hour strings ('01:00 PM'), and 24-hour strings ('13:00:00').
     """
     if val is None:
         return None
@@ -105,424 +155,626 @@ def _split_course_code_name(course_name):
     return c_str, ''
 
 
+def _safe_str(val):
+    """Normalize any value to stripped string, converting None/'none'/'null' to empty string."""
+    if val is None:
+        return ''
+    s = str(val).strip()
+    return '' if s.lower() in ('none', 'null') else s
+
+
+def _fmt_h(h):
+    """Format an integer hour (0-24) to a 12-hour string (e.g. 7 -> '7:00', 13 -> '1:00')."""
+    display = h % 12
+    if display == 0:
+        display = 12
+    return f"{display}:00"
+
+
+def _row_label(h):
+    """Row header label formatted with line breaks like the official printed sheet."""
+    return f"{_fmt_h(h)}<br/>to<br/>{_fmt_h(h + 1)}"
+
+
+def _normalize_semester(s):
+    """Normalize semester string to standard NEUST display text."""
+    if not s:
+        return '1st Semester'
+    s_clean = str(s).strip()
+    if '1' in s_clean or 'first' in s_clean.lower():
+        return '1st Semester'
+    if '2' in s_clean or 'second' in s_clean.lower():
+        return '2nd Semester'
+    if 'mid' in s_clean.lower() or 'summer' in s_clean.lower():
+        return 'Midyear'
+    return s_clean
+
+
+def _normalize_academic_year(ay_str, sem_str=None):
+    """Extract or derive academic year string (e.g. '2026-2027')."""
+    for candidate in (ay_str, sem_str):
+        if candidate:
+            m = re.search(r'(\d{4})\s*[-–]\s*(\d{4})', str(candidate))
+            if m:
+                return f"{m.group(1)}-{m.group(2)}"
+    y = datetime.now().year
+    if datetime.now().month < 8:
+        y -= 1
+    return f"{y}-{y + 1}"
+
+
+def _format_instructor_name(name):
+    """Format instructor name cleanly; uses initials+surname for long names."""
+    if not name:
+        return 'TBA'
+    raw = str(name).strip()
+    if not raw or raw.lower() in ('none', 'null'):
+        return 'TBA'
+
+    # Separate suffix if any (e.g. Jr., III)
+    suffix = ''
+    m = re.search(r'[, ]+(Jr\.?|Sr\.?|III|II|IV)$', raw, flags=re.IGNORECASE)
+    if m:
+        suffix = ', ' + m.group(1).strip()
+        raw = raw[:m.start()].strip()
+
+    tokens = [t for t in re.split(r'[\s.]+', raw) if t]
+    if not tokens:
+        return 'TBA'
+    if len(tokens) == 1:
+        return tokens[0] + suffix
+
+    if len(raw) <= 16:
+        return raw + suffix
+
+    surname = tokens[-1]
+    initials = ''.join(t[0].upper() for t in tokens[:-1])
+    return f"{initials}{surname}{suffix}"
+
+
+def _cell_color(session_type):
+    """Map session type string to ReportLab Color object.
+    Laboratory -> Light Orange, Lecture / other -> Light Gray.
+    """
+    st = (session_type or '').strip().lower()
+    if 'lab' in st:
+        return COL_LAB
+    return COL_LECTURE
+
+
+def _cell_text(entry, mode='room'):
+    """
+    Build the three-line centered cell text for a schedule entry.
+    Lines are separated by newlines (\n) converted to <br/> in Paragraphs.
+
+    Line 1: Course code (e.g. IT-WS07)
+    Line 2: Professor name (section export) / Section (professor export)
+    Line 3: Room name (or Section if room TBA)
+    """
+    c_raw = _safe_str(entry.get('course_code') or entry.get('course_name') or entry.get('course'))
+    code, _ = _split_course_code_name(c_raw)
+    course_code = code if code else (c_raw or 'TBA')
+
+    prof = _format_instructor_name(_safe_str(entry.get('professor') or entry.get('professor_name')))
+    sec = _safe_str(entry.get('section')) or 'TBA'
+    room = _safe_str(entry.get('room_name') or entry.get('room')) or 'TBA'
+
+    if mode == 'professor':
+        return f"{course_code}\n{sec}\n{room}"
+    elif mode == 'section':
+        return f"{course_code}\n{prof}\n{room}"
+    else:  # room
+        return f"{course_code}\n{prof}\n{sec}"
+
+
+# ---------------------------------------------------------------------------
+# Header (Exact Reproduction of HEADER_FOOTER.pdf)
+# ---------------------------------------------------------------------------
+
+def _draw_header(c, pw=PAGE_WIDTH, ph=PAGE_HEIGHT):
+    """
+    Draw the exact official NEUST CICT header at the top of the page.
+    Returns the bottom Y coordinate of the header block (841.70 pt).
+    """
+    # 1. Dual logos (Bagong Pilipinas + NEUST Centennial Seal) on left
+    if os.path.exists(LOGO_HEADER_LOGOS):
+        c.drawImage(LOGO_HEADER_LOGOS, 27.825, 860.66, width=112.15, height=63.445, mask='auto')
+
+    # 2. Vertical decorative divider (Orange & Navy stripes)
+    if os.path.exists(LOGO_HEADER_DIVIDER):
+        c.drawImage(LOGO_HEADER_DIVIDER, 139.02, 859.70, width=12.595, height=76.30, mask='auto')
+
+    # 3. CICT Official Seal on right
+    if os.path.exists(LOGO_CICT_SEAL):
+        c.drawImage(LOGO_CICT_SEAL, 503.79, 868.58, width=47.929, height=47.73, mask='auto')
+
+    # 4. University Header Text
+    c.setFillColor(COL_UNIV_BLUE)
+    c.setFont(_FONT_BODY, 9.96)
+    c.drawString(153.02, 899.04, 'Republic of the Philippines')
+
+    to = c.beginText(153.02, 882.84)
+    to.setFont(_FONT_UNIV, 15.96)
+    to.setHorizScale(79.365)
+    to.setFillColor(COL_UNIV_BLUE)
+    to.textOut('NUEVA ECIJA UNIVERSITY OF SCIENCE AND TECHNOLOGY')
+    c.drawText(to)
+
+    c.setFont(_FONT_BODY, 9.96)
+    c.drawString(154.22, 871.20, 'Cabanatuan City, Nueva Ecija')
+
+    # 5. Full-width College Banner Bar
+    c.setFillColor(COL_BAR_BLUE)
+    c.rect(0, 841.80, pw, 19.95, fill=1, stroke=0)
+
+    # 6. Banner White Text (centered across full page width)
+    c.setFillColor(colors.white)
+    c.setFont(_FONT_TITLE, 14.04)
+    banner_txt = 'COLLEGE OF INFORMATION AND COMMUNICATIONS TECHNOLOGY'
+    tw = c.stringWidth(banner_txt, _FONT_TITLE, 14.04)
+    c.drawString((pw - tw) / 2, 846.36, banner_txt)
+
+    # 7. Thin black border line below bar
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.75)
+    c.line(0, 841.70, pw, 841.70)
+
+    return 841.70
+
+
+# ---------------------------------------------------------------------------
+# Title Block
+# ---------------------------------------------------------------------------
+
+def _draw_title(c, pw, top_y, entity_label, sem_str, ay_str, mode='room'):
+    """
+    Draw document title, semester, academic year, and entity label below header.
+    Returns the Y coordinate where the timetable grid begins.
+    """
+    norm_mode = 'professor' if mode in ('professor', 'teacher') else ('section' if mode == 'section' else 'room')
+    title_str = _MODE_TITLE.get(norm_mode, 'ROOM UTILIZATION')
+    label_prefix = _MODE_LABEL.get(norm_mode, 'ROOM NUMBER:')
+
+    # Mode Title (centered)
+    c.setFillColor(colors.black)
+    c.setFont(_FONT_TITLE, 11)
+    tw = c.stringWidth(title_str, _FONT_TITLE, 11)
+    c.drawString((pw - tw) / 2, top_y - 15.7, title_str)
+
+    # Semester and Academic Year (centered, italic)
+    c.setFont(_FONT_ITALIC, 9)
+    sem_text = f"{_normalize_semester(sem_str)}, Academic Year {_normalize_academic_year(ay_str, sem_str)}"
+    sw = c.stringWidth(sem_text, _FONT_ITALIC, 9)
+    c.drawString((pw - sw) / 2, top_y - 29.7, sem_text)
+
+    # Entity Label (left-aligned with table left edge at x = 36.0)
+    c.setFont(_FONT_TITLE, 9)
+    c.drawString(36.0, top_y - 45.7, f"{label_prefix}   {entity_label}")
+
+    return top_y - 53.7
+
+
+# ---------------------------------------------------------------------------
+# Timetable Grid Builder
+# ---------------------------------------------------------------------------
+
+def _build_timetable_grid(entries, mode='room', hours=None, col_w=None, row_h=None):
+    """
+    Build the weekly timetable Table.
+    - Resolves multi-hour spans with single merged cells (rowspan).
+    - Prevents overflow and double-booking overlaps.
+    - Dynamically computes font size and line height to fit cell boundaries.
+    """
+    _SPAN = object()
+    norm_mode = 'professor' if mode in ('professor', 'teacher') else ('section' if mode == 'section' else 'room')
+
+    if hours is None:
+        hours = list(range(_BASE_START_H, _BASE_END_H))
+
+    # 1. Clean & normalize incoming entries
+    seen = set()
+    cleaned = []
+    for e in entries:
+        day = _safe_str(e.get('day')).strip().title()
+        if day not in _DAYS:
+            continue
+        raw_start = e.get('start_time_raw') or e.get('start_time') or e.get('class_start') or e.get('start')
+        raw_end   = e.get('end_time_raw') or e.get('end_time') or e.get('class_end') or e.get('end')
+        st = _parse_time_to_seconds(raw_start)
+        et = _parse_time_to_seconds(raw_end)
+        if st is None or et is None or et <= st:
+            continue
+        txt = _cell_text(e, norm_mode)
+        clr = _cell_color(e.get('session_type'))
+        clr_key = clr.hexval() if hasattr(clr, 'hexval') else str(clr)
+        key = (day, st, et, txt, clr_key)
+        if key not in seen:
+            seen.add(key)
+            cleaned.append({'day': day, 'st': st, 'et': et, 'txt': txt, 'clr': clr})
+
+    # 2. Merge contiguous / overlapping entries of the same class
+    by_day = {d: [] for d in _DAYS}
+    for e in cleaned:
+        by_day[e['day']].append(e)
+
+    merged_by_day = {d: [] for d in _DAYS}
+    for d in _DAYS:
+        day_list = sorted(by_day[d], key=lambda x: (x['st'], x['et']))
+        merged = []
+        for item in day_list:
+            if not merged:
+                merged.append(dict(item))
+            else:
+                prev = merged[-1]
+                prev_hex = prev['clr'].hexval() if hasattr(prev['clr'], 'hexval') else str(prev['clr'])
+                item_hex = item['clr'].hexval() if hasattr(item['clr'], 'hexval') else str(item['clr'])
+                if item['txt'] == prev['txt'] and item_hex == prev_hex and item['st'] <= prev['et']:
+                    prev['et'] = max(prev['et'], item['et'])
+                else:
+                    merged.append(dict(item))
+        merged_by_day[d] = merged
+
+    # 3. Grid setup
+    nr = len(hours) + 1  # Header row + hour rows
+    nc = 1 + len(_DAYS)  # Time column + 6 day columns
+
+    grid = [[''] * nc for _ in range(nr)]
+    cgrid = [[None] * nc for _ in range(nr)]
+    span_map = {}
+
+    grid[0][0] = 'Time'
+    for ci, d in enumerate(_DAYS, 1):
+        grid[0][ci] = d
+
+    for ri, h in enumerate(hours, 1):
+        grid[ri][0] = _row_label(h)
+        cgrid[ri][0] = COL_TIME_BG
+
+    # 4. Place merged entries
+    for ci, day in enumerate(_DAYS, 1):
+        for item in merged_by_day[day]:
+            st = item['st']
+            et = item['et']
+            txt = item['txt']
+            clr = item['clr']
+
+            rs = re_ = None
+            for ri, h in enumerate(hours, 1):
+                h_start = h * 3600
+                h_end   = (h + 1) * 3600
+                if st < h_end and et > h_start:
+                    if rs is None:
+                        rs = ri
+                    re_ = ri
+
+            if rs is None:
+                continue
+
+            rowspan = re_ - rs + 1
+
+            if grid[rs][ci] is _SPAN:
+                anchor = rs
+                for r in range(rs - 1, 0, -1):
+                    if grid[r][ci] is not _SPAN:
+                        anchor = r
+                        break
+            else:
+                anchor = rs
+
+            cell = grid[anchor][ci]
+            if cell == '' or cell is None or cell is _SPAN:
+                grid[anchor][ci] = txt
+                cgrid[anchor][ci] = clr
+                curr_span = span_map.get((anchor, ci), 1)
+                new_span = min(nr - anchor, max(curr_span, (rs - anchor) + rowspan))
+                span_map[(anchor, ci)] = new_span
+                for r in range(anchor + 1, anchor + new_span):
+                    grid[r][ci] = _SPAN
+                    if cgrid[r][ci] is None:
+                        cgrid[r][ci] = clr
+            else:
+                existing = [x.strip() for x in cell.split('\n—\n')]
+                if txt.strip() not in existing:
+                    grid[anchor][ci] = cell + '\n—\n' + txt
+                curr_span = span_map.get((anchor, ci), 1)
+                new_span = min(nr - anchor, max(curr_span, (rs - anchor) + rowspan))
+                span_map[(anchor, ci)] = new_span
+                for r in range(anchor + 1, anchor + new_span):
+                    grid[r][ci] = _SPAN
+                    if cgrid[r][ci] is None:
+                        cgrid[r][ci] = clr
+
+    # 5. Column widths & row heights
+    if col_w is None:
+        tw = 48.0
+        dw = (540.0 - tw) / 6.0
+        col_w = [tw] + [dw] * 6
+
+    if row_h is None:
+        base_h = 40.0 if len(hours) <= 13 else max(24.0, (520.0 / len(hours)))
+        row_h = [18.0] + [base_h] * len(hours)
+
+    # 6. Build Table Data with Auto-fitting Paragraph Styles
+    tdata = []
+    base_hs = ParagraphStyle('hs', fontName=_FONT_TITLE, fontSize=8.0, leading=10.0, alignment=1)
+    base_ts = ParagraphStyle('ts', fontName=_FONT_BODY,  fontSize=6.5, leading=8.0, alignment=1)
+
+    for ri in range(nr):
+        row = []
+        for ci in range(nc):
+            raw = grid[ri][ci]
+            if raw is _SPAN:
+                row.append('')
+                continue
+            text = '' if (raw is None or raw is _SPAN) else str(raw)
+            text_html = text.replace('\n', '<br/>')
+
+            if ri == 0:
+                row.append(Paragraph(text_html, base_hs))
+            elif ci == 0:
+                row.append(Paragraph(text_html, base_ts))
+            else:
+                if not text.strip():
+                    row.append('')
+                    continue
+
+                lines_count = text_html.count('<br/>') + 1
+                curr_span = span_map.get((ri, ci), 1)
+                hour_h = row_h[ri] if ri < len(row_h) else 40.0
+                avail_h = max(10.0, (curr_span * hour_h) - 4.0)
+
+                # Strict mathematical sizing: lines_count * ld <= avail_h to prevent cell overflow
+                if lines_count * 9.0 <= avail_h:
+                    fs, ld = 7.5, 9.0
+                elif lines_count * 8.0 <= avail_h:
+                    fs, ld = 6.8, 8.0
+                elif lines_count * 7.0 <= avail_h:
+                    fs, ld = 6.0, 7.0
+                elif lines_count * 6.0 <= avail_h:
+                    fs, ld = 5.2, 6.0
+                else:
+                    ld = max(4.0, avail_h / float(lines_count))
+                    fs = max(3.5, ld * 0.82)
+
+                p_style = ParagraphStyle(
+                    f'cs_{ri}_{ci}',
+                    fontName=_FONT_BODY,
+                    fontSize=fs,
+                    leading=ld,
+                    alignment=1
+                )
+                row.append(Paragraph(text_html, p_style))
+        tdata.append(row)
+
+    # 7. TableStyle Commands
+    cmds = [
+        ('GRID',          (0, 0), (-1, -1), 0.5, colors.black),
+        ('BACKGROUND',    (0, 0), (-1,  0), COL_HDR_BG),
+        ('BACKGROUND',    (0, 1), ( 0, -1), COL_TIME_BG),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 1),
+    ]
+
+    for ri in range(1, nr):
+        for ci in range(1, nc):
+            bg = cgrid[ri][ci]
+            if bg is not None:
+                cmds.append(('BACKGROUND', (ci, ri), (ci, ri), bg))
+
+    for (anchor_r, anchor_c), span in span_map.items():
+        if span > 1:
+            end_r = min(nr - 1, anchor_r + span - 1)
+            cmds.append(('SPAN', (anchor_c, anchor_r), (anchor_c, end_r)))
+            bg = cgrid[anchor_r][anchor_c]
+            if bg is not None:
+                cmds.append(('BACKGROUND', (anchor_c, anchor_r), (anchor_c, end_r), bg))
+
+    tbl = Table(tdata, colWidths=col_w, rowHeights=row_h, repeatRows=1)
+    tbl.setStyle(TableStyle(cmds))
+    return tbl, sum(col_w), sum(row_h)
+
+
+# ---------------------------------------------------------------------------
+# Footer & Signatures (Exact Reproduction of HEADER_FOOTER.pdf)
+# ---------------------------------------------------------------------------
+
+def _draw_footer(c, pw=PAGE_WIDTH, table_bottom_y=250.0):
+    """
+    Draw 3-signatory approval block and official Vision/Mission footer banner.
+    """
+    # 1. Signatures Block
+    sig_y = min(table_bottom_y - 12.0, 240.0)
+    cw = 540.0 / 3.0
+    lw = 145.0
+    x0 = 36.0
+
+    c.setFillColor(colors.black)
+    c.setFont(_FONT_BODY, 7.5)
+    c.drawString(x0, sig_y, 'Prepared by:')
+    c.drawString(x0 + cw * 2.0 + 5.0, sig_y, 'Verified by:')
+
+    c.setFont(_FONT_TITLE, 7.5)
+    c.drawString(x0, sig_y - 18.0, 'ANDREW CAEZAR A. VILLEGAS, MSIT')
+    c.drawString(x0 + cw * 2.0 + 5.0, sig_y - 18.0, 'DR. RONALD S. SANTOS, REE')
+
+    c.setLineWidth(0.5)
+    c.line(x0, sig_y - 20.0, x0 + lw, sig_y - 20.0)
+    c.line(x0 + cw * 2.0 + 5.0, sig_y - 20.0, x0 + cw * 2.0 + 5.0 + lw, sig_y - 20.0)
+
+    c.setFont(_FONT_BODY, 7.0)
+    c.drawString(x0, sig_y - 28.0, 'Program Chair/Head')
+    c.drawString(x0 + cw * 2.0 + 5.0, sig_y - 28.0, 'College Dean/Campus Director')
+
+    c.setFont(_FONT_ITALIC, 7.0)
+    c.drawString(x0, sig_y - 36.0, 'Date Signed: _______________')
+    c.drawString(x0 + cw * 2.0 + 5.0, sig_y - 36.0, 'Date Signed: _______________')
+
+    ay = sig_y - 44.0
+    c.setFont(_FONT_BODY, 7.5)
+    abl = 'Approved by:'
+    c.drawString((pw - c.stringWidth(abl, _FONT_BODY, 7.5)) / 2.0, ay, abl)
+
+    c.setFont(_FONT_TITLE, 7.5)
+    avp_name = 'ENGR. FELICIANA P. JACOBA, Ed.D.'
+    c.drawString((pw - c.stringWidth(avp_name, _FONT_TITLE, 7.5)) / 2.0, ay - 16.0, avp_name)
+
+    c.line((pw - lw) / 2.0, ay - 18.0, (pw + lw) / 2.0, ay - 18.0)
+
+    c.setFont(_FONT_BODY, 7.0)
+    avp_title = 'Vice President for Academic Affairs'
+    c.drawString((pw - c.stringWidth(avp_title, _FONT_BODY, 7.0)) / 2.0, ay - 26.0, avp_title)
+
+    c.setFont(_FONT_ITALIC, 7.0)
+    ads = 'Date Signed: _______________'
+    c.drawString((pw - c.stringWidth(ads, _FONT_ITALIC, 7.0)) / 2.0, ay - 34.0, ads)
+
+    # 2. Form Revision Code at bottom left
+    c.setFont(_FONT_BODY, 6.0)
+    c.drawString(x0, 56.0, 'NEUST-AAF-F012')
+    c.drawString(x0, 50.0, 'Rev.01 (10.29.2024)')
+
+    # 3. Horizontal gray divider rule (from x = 68.0 to x = 548.9 at y = 49.80)
+    c.setStrokeColor(COL_FOOTER_LINE)
+    c.setLineWidth(0.5)
+    c.line(68.0, 49.80, 548.9, 49.80)
+
+    # 4. Official NEUST Vision, Mission, Global, and Accreditation Badges Banner
+    if os.path.exists(LOGO_FOOTER_BANNER):
+        c.drawImage(LOGO_FOOTER_BANNER, 0.35, -14.71, width=611.94, height=62.32, mask='auto')
+
+
+# ---------------------------------------------------------------------------
+# Public Unified Timetable PDF Generator
+# ---------------------------------------------------------------------------
+
 def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, filter_metadata=None):
-    """Generate a high-quality landscape PDF timetable for Room, Section, or Teacher/Professor schedule.
+    """
+    Generate an official NEUST timetable PDF adhering to the official HEADER_FOOTER format.
+    Fits strictly on ONE portrait page (Philippine Folio 8.5" x 13" = 612 x 936 pt).
 
     Args:
-        schedule_type: 'room', 'section', or 'professor'
-        entity_info: dict or obj with name, type, department, etc.
+        schedule_type: 'professor', 'teacher', 'section', or 'room'
+        entity_info: dict or obj with name, type, etc.
         entries: list of schedule entry dictionaries
         timeslots: optional list of timeslot records from database
-        filter_metadata: optional dict containing active filter parameters (semester, year, major, etc.)
+        filter_metadata: optional dict containing filter parameters (semester, school_year, year, major, etc.)
 
     Returns:
-        io.BytesIO: Binary PDF stream
+        io.BytesIO: Binary PDF stream seeked to 0
     """
     filter_metadata = filter_metadata or {}
-    timeslots = timeslots or []
     entries = entries or []
+    timeslots = timeslots or []
 
-    # 1. Setup Document Template (Landscape Letter: 792 x 612 pt)
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(letter),
-        leftMargin=26,
-        rightMargin=26,
-        topMargin=20,
-        bottomMargin=24,
-    )
+    norm_type = 'professor' if schedule_type in ('professor', 'teacher') else ('section' if schedule_type == 'section' else 'room')
 
-    # 2. Setup Styles
-    styles = getSampleStyleSheet()
-
-    title_style = ParagraphStyle(
-        'DocTitle',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=14,
-        leading=16,
-        textColor=colors.HexColor('#0F172A'),
-    )
-
-    meta_label_style = ParagraphStyle(
-        'MetaLabel',
-        parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=7.2,
-        leading=9.5,
-        textColor=colors.HexColor('#475569'),
-    )
-
-    col_header_style = ParagraphStyle(
-        'ColHeader',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=8,
-        leading=10,
-        alignment=1,  # Centered
-        textColor=colors.white,
-    )
-
-    time_cell_style = ParagraphStyle(
-        'TimeCell',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=6.8,
-        leading=8.5,
-        alignment=1,  # Centered
-        textColor=colors.HexColor('#1E293B'),
-    )
-
-    cell_course_code_style = ParagraphStyle(
-        'CellCourseCode',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=6.8,
-        leading=8,
-        textColor=colors.HexColor('#0F172A'),
-    )
-
-    cell_detail_style = ParagraphStyle(
-        'CellDetail',
-        parent=styles['Normal'],
-        fontName='Helvetica',
-        fontSize=6.0,
-        leading=7.2,
-        textColor=colors.HexColor('#1E293B'),
-    )
-
-    cell_tag_style = ParagraphStyle(
-        'CellTag',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=5.8,
-        leading=7.0,
-        textColor=colors.HexColor('#1D4ED8'),
-    )
-
-    lunch_cell_style = ParagraphStyle(
-        'LunchCell',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=6.5,
-        leading=8,
-        alignment=1,
-        textColor=colors.HexColor('#94A3B8'),
-    )
-
-    # 3. Resolve Titles & Metadata based on schedule_type
-    school_year = filter_metadata.get('school_year') or "A.Y. 2026-2027"
-    semester = (filter_metadata.get('semester') or '').strip()
-    year_level = (str(filter_metadata.get('year') or '')).strip()
-    major = (filter_metadata.get('major') or '').strip()
-    program = (filter_metadata.get('program') or '').strip()
-
-    if schedule_type == 'room':
-        doc_heading = "ROOM SCHEDULE"
-        room_name = entity_info.get('room_name') if isinstance(entity_info, dict) else str(entity_info)
-        raw_type = (entity_info.get('room_type') or 'Lecture') if isinstance(entity_info, dict) else 'Lecture'
-        raw_lower = str(raw_type).strip().lower()
-        if 'lab' in raw_lower:
-            room_type = 'Laboratory Room'
-        elif 'lec' in raw_lower:
-            room_type = 'Lecture Room'
-        else:
-            room_type = str(raw_type).strip() or 'General'
-        sub_heading = f"Room: {room_name}  ({room_type})"
-        meta_items = [
-            ("Semester", semester or "All Semesters"),
-            ("Academic Year", school_year),
-            ("Room Type", room_type),
-            ("Program", program or "All Programs"),
-            ("Scheduled Classes", f"{len(entries)} class{'es' if len(entries) != 1 else ''}"),
-        ]
-    elif schedule_type == 'section':
-        doc_heading = "SECTION SCHEDULE"
-        sec_name = entity_info.get('section_name') or entity_info.get('section') if isinstance(entity_info, dict) else str(entity_info)
-        sec_year = entity_info.get('year_level') if isinstance(entity_info, dict) else year_level
-        sec_sem = entity_info.get('semester') if isinstance(entity_info, dict) else semester
-        sec_maj = entity_info.get('major') if isinstance(entity_info, dict) else major
-        sub_heading = f"Section: {sec_name}"
-        meta_items = [
-            ("Year Level", f"Year {sec_year}" if sec_year else (f"Year {year_level}" if year_level else "N/A")),
-            ("Semester", sec_sem or semester or "All Semesters"),
-            ("Major", sec_maj or major or "General / Core"),
-            ("Academic Year", school_year),
-            ("Weekly Classes", f"{len(entries)} class{'es' if len(entries) != 1 else ''}"),
-        ]
-    elif schedule_type in ('teacher', 'professor'):
-        doc_heading = "TEACHER SCHEDULE"
+    # Resolve entity label
+    if norm_type == 'professor':
         if isinstance(entity_info, dict):
-            p_first = entity_info.get('first_name', '')
-            p_last = entity_info.get('last_name', '')
-            prof_name = f"{p_first} {p_last}".strip() or entity_info.get('professor_name', 'Professor')
-            dept = entity_info.get('department') or entity_info.get('program_name') or entity_info.get('program') or 'N/A'
+            first = _safe_str(entity_info.get('first_name'))
+            last  = _safe_str(entity_info.get('last_name'))
+            prof_name = f"{first} {last}".strip() or _safe_str(entity_info.get('professor_name')) or 'Professor'
         else:
-            prof_name = str(entity_info)
-            dept = 'N/A'
-        sub_heading = f"Professor: {prof_name}"
-        meta_items = [
-            ("Department", dept),
-            ("Semester", semester or "All Semesters"),
-            ("Academic Year", school_year),
-            ("Assigned Classes", f"{len(entries)} class{'es' if len(entries) != 1 else ''}"),
-            ("Program", program or "All Programs"),
-        ]
-    else:
-        doc_heading = "CLASS SCHEDULE"
-        sub_heading = "Schedule Details"
-        meta_items = [("Semester", semester or "All Semesters"), ("Academic Year", school_year)]
+            prof_name = _safe_str(entity_info) or 'Professor'
 
-    # 4. Determine Time Window and Intervals
-    earliest_sec = 7 * 3600   # 7:00 AM
-    latest_sec = 19 * 3600    # 7:00 PM
-    lunch_sec = 12 * 3600     # 12:00 PM
+        # Compute total assigned hours
+        total_secs = 0
+        for e in entries:
+            st = _parse_time_to_seconds(e.get('start_time_raw') or e.get('start_time') or e.get('class_start') or e.get('start'))
+            et = _parse_time_to_seconds(e.get('end_time_raw') or e.get('end_time') or e.get('class_end') or e.get('end'))
+            if st is not None and et is not None and et > st:
+                total_secs += (et - st)
+        total_hours = round(total_secs / 3600.0, 1)
+        if total_hours > 0:
+            hrs_disp = int(total_hours) if total_hours.is_integer() else total_hours
+            entity_label = f"{prof_name}   (Total Hours: {hrs_disp} hrs)"
+        else:
+            entity_label = prof_name
+    elif norm_type == 'section':
+        prog = filter_metadata.get('program') or ''
+        if isinstance(entity_info, dict):
+            sec_name = _safe_str(entity_info.get('section_name') or entity_info.get('section')) or 'Section'
+            prog = _safe_str(entity_info.get('program') or entity_info.get('program_name') or prog)
+        else:
+            sec_name = _safe_str(entity_info) or 'Section'
 
-    for ts in timeslots:
-        s_val = _parse_time_to_seconds(ts.get('start_time'))
-        e_val = _parse_time_to_seconds(ts.get('end_time'))
-        l_val = _parse_time_to_seconds(ts.get('lunch_time'))
-        if s_val is not None:
-            earliest_sec = min(earliest_sec, s_val)
-        if e_val is not None and e_val > earliest_sec:
-            latest_sec = max(latest_sec, e_val)
-        if l_val is not None:
-            lunch_sec = l_val
+        if prog and not sec_name.upper().startswith(prog.upper()) and len(sec_name) <= 6:
+            entity_label = f"{prog} {sec_name}"
+        else:
+            entity_label = sec_name
+    else:  # room
+        if isinstance(entity_info, dict):
+            room_name = _safe_str(entity_info.get('room_name') or entity_info.get('room')) or 'Room'
+        else:
+            room_name = _safe_str(entity_info) or 'Room'
+        entity_label = room_name
 
-    # Normalize parsed entries
-    parsed_entries = []
+    # Resolve semester and academic year
+    sem_str = filter_metadata.get('semester')
+    if not sem_str and entries:
+        for e in entries:
+            if e.get('semester'):
+                sem_str = e['semester']
+                break
+    if not sem_str and isinstance(entity_info, dict):
+        sem_str = entity_info.get('semester')
+    sem_str = sem_str or '1st Semester'
+
+    ay_str = filter_metadata.get('school_year') or _normalize_academic_year(None, sem_str)
+
+    # Determine hour range: default PRD range is 7:00 AM to 8:00 PM (hours 7 to 19, ending at 20:00)
+    start_h = _BASE_START_H
+    end_h   = _BASE_END_H
+
+    # If any entry falls outside 7..20, expand dynamically
     for e in entries:
-        raw_start = e.get('start_time_raw') or e.get('class_start') or e.get('start') or e.get('start_time')
-        raw_end = e.get('end_time_raw') or e.get('class_end') or e.get('end') or e.get('end_time')
-        st_sec = _parse_time_to_seconds(raw_start)
-        et_sec = _parse_time_to_seconds(raw_end)
-        if st_sec is not None and et_sec is not None and et_sec > st_sec:
-            earliest_sec = min(earliest_sec, st_sec)
-            latest_sec = max(latest_sec, et_sec)
-            c_code, c_title = _split_course_code_name(e.get('course_name'))
-            parsed_entries.append({
-                'day': (e.get('day') or '').strip().title(),
-                'start_sec': st_sec,
-                'end_sec': et_sec,
-                'start_fmt': _seconds_to_display_time(st_sec),
-                'end_fmt': _seconds_to_display_time(et_sec),
-                'course_code': e.get('course_code') or c_code,
-                'course_name': c_title or (c_code if not c_title else ''),
-                'raw_course': e.get('course_name') or 'TBA',
-                'professor': e.get('professor') or e.get('professor_name') or 'TBA',
-                'room': e.get('room') or e.get('room_name') or 'TBA',
-                'section': e.get('section') or 'TBA',
-                'session_type': e.get('session_type') or 'Lecture',
-            })
+        raw_start = e.get('start_time_raw') or e.get('start_time') or e.get('class_start') or e.get('start')
+        raw_end   = e.get('end_time_raw') or e.get('end_time') or e.get('class_end') or e.get('end')
+        st = _parse_time_to_seconds(raw_start)
+        et = _parse_time_to_seconds(raw_end)
+        if st is not None and st >= 0:
+            start_h = min(start_h, st // 3600)
+        if et is not None and et > 0:
+            end_h = max(end_h, (et + 3599) // 3600)
 
-    # Hourly slot generation
-    hourly_slots = []
-    slot_curr = earliest_sec
-    while slot_curr + 3600 <= latest_sec:
-        slot_next = slot_curr + 3600
-        is_lunch = (slot_curr <= lunch_sec < slot_next)
-        s_lbl = f"{_seconds_to_display_time(slot_curr)} - {_seconds_to_display_time(slot_next)}"
-        hourly_slots.append({
-            'start_sec': slot_curr,
-            'end_sec': slot_next,
-            'label': s_lbl,
-            'is_lunch': is_lunch,
-        })
-        slot_curr = slot_next
+    hours = list(range(start_h, end_h))
 
-    if not hourly_slots:
-        for h in range(7, 19):
-            s_sec = h * 3600
-            e_sec = (h + 1) * 3600
-            hourly_slots.append({
-                'start_sec': s_sec,
-                'end_sec': e_sec,
-                'label': f"{_seconds_to_display_time(s_sec)} - {_seconds_to_display_time(e_sec)}",
-                'is_lunch': (h == 12),
-            })
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
 
-    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    # 1. Draw Header
+    hdr_bottom = _draw_header(c, PAGE_WIDTH, PAGE_HEIGHT)
 
-    # 5. Build Timetable Matrix
-    table_data = []
+    # 2. Draw Title Block
+    tbl_top = _draw_title(c, PAGE_WIDTH, hdr_bottom, entity_label, sem_str, ay_str, norm_type)
 
-    # Row 0: Header
-    header_row = [Paragraph("<b>TIME</b>", col_header_style)]
-    for day in days:
-        header_row.append(Paragraph(f"<b>{day.upper()}</b>", col_header_style))
-    table_data.append(header_row)
+    # 3. Available Height Budget:
+    # Signatures need ~120 pt above footer rule (50 pt). min_tbl_bottom = 175 pt.
+    min_tbl_bottom = 175.0
+    avail_tbl_h = tbl_top - min_tbl_bottom
 
-    entries_by_day = {d: [] for d in days}
-    for pe in parsed_entries:
-        if pe['day'] in entries_by_day:
-            entries_by_day[pe['day']].append(pe)
+    # 4. Build Table
+    tbl, tbl_w, tbl_h = _build_timetable_grid(entries, norm_type, hours=hours)
 
-    num_slots = len(hourly_slots)
-    grid_matches = [[[] for _ in range(len(days))] for _ in range(num_slots)]
+    if tbl_h > avail_tbl_h and avail_tbl_h > 0:
+        scale = avail_tbl_h / tbl_h
+        base_h = 40.0 if len(hours) <= 13 else max(24.0, (520.0 / len(hours)))
+        new_rh = [18.0] + [max(14.0, base_h * scale)] * len(hours)
+        tbl, tbl_w, tbl_h = _build_timetable_grid(entries, norm_type, hours=hours, row_h=new_rh)
 
-    for d_idx, day in enumerate(days):
-        for s_idx, slot in enumerate(hourly_slots):
-            s_start = slot['start_sec']
-            s_end = slot['end_sec']
-            for pe in entries_by_day[day]:
-                if pe['start_sec'] < s_end and s_start < pe['end_sec']:
-                    grid_matches[s_idx][d_idx].append(pe)
+    tbl_x = 36.0
+    tbl_y = tbl_top - tbl_h
+    tbl.wrapOn(c, 540.0, tbl_h)
+    tbl.drawOn(c, tbl_x, tbl_y)
 
-    # Track spanned cells to avoid duplicate content in subordinate rows
-    spanned_cells = set()
-    span_commands = []
+    # 5. Draw Footer & Signatures
+    _draw_footer(c, PAGE_WIDTH, tbl_y)
 
-    for s_idx, slot in enumerate(hourly_slots):
-        for d_idx, day in enumerate(days):
-            col_idx = d_idx + 1
-            if (s_idx, d_idx) in spanned_cells:
-                continue
-
-            matches = grid_matches[s_idx][d_idx]
-            if len(matches) == 1:
-                single_entry = matches[0]
-                # Check if this exact single entry spans into subsequent contiguous rows
-                end_s_idx = s_idx
-                while end_s_idx + 1 < num_slots:
-                    next_matches = grid_matches[end_s_idx + 1][d_idx]
-                    if len(next_matches) == 1 and next_matches[0] == single_entry:
-                        end_s_idx += 1
-                    else:
-                        break
-
-                if end_s_idx > s_idx:
-                    for r_sub in range(s_idx + 1, end_s_idx + 1):
-                        spanned_cells.add((r_sub, d_idx))
-                    start_table_row = s_idx + 1
-                    end_table_row = end_s_idx + 1
-                    span_commands.append(('SPAN', (col_idx, start_table_row), (col_idx, end_table_row)))
-
-    # Now populate table_data rows
-    for s_idx, slot in enumerate(hourly_slots):
-        row_cells = [Paragraph(slot['label'], time_cell_style)]
-
-        for d_idx, day in enumerate(days):
-            col_idx = d_idx + 1
-            if (s_idx, d_idx) in spanned_cells:
-                row_cells.append("")
-                continue
-
-            matches = grid_matches[s_idx][d_idx]
-            if matches:
-                cell_flowables = []
-                for idx_m, m in enumerate(matches):
-                    if idx_m > 0:
-                        cell_flowables.append(Spacer(1, 2))
-
-                    code_txt = f"<b>{m['course_code']}</b>"
-                    if m['course_name']:
-                        code_txt += f"  <font size=5.6 color='#334155'>{m['course_name'][:26]}</font>"
-                    cell_flowables.append(Paragraph(code_txt, cell_course_code_style))
-
-                    if schedule_type == 'room':
-                        line2 = f"Sec: <b>{m['section']}</b>  •  Prof: <b>{m['professor']}</b>"
-                    elif schedule_type == 'section':
-                        line2 = f"Prof: <b>{m['professor']}</b>  •  Room: <b>{m['room']}</b>"
-                    elif schedule_type in ('teacher', 'professor'):
-                        line2 = f"Sec: <b>{m['section']}</b>  •  Room: <b>{m['room']}</b>"
-                    else:
-                        line2 = f"Sec: {m['section']} • Room: {m['room']} • Prof: {m['professor']}"
-
-                    cell_flowables.append(Paragraph(line2, cell_detail_style))
-
-                    line3 = f"{m['session_type']}  |  {m['start_fmt']} - {m['end_fmt']}"
-                    cell_flowables.append(Paragraph(line3, cell_tag_style))
-
-                row_cells.append(cell_flowables)
-            elif slot['is_lunch']:
-                row_cells.append(Paragraph("LUNCH BREAK", lunch_cell_style))
-            else:
-                row_cells.append("")
-
-        table_data.append(row_cells)
-
-    # 6. Column Widths & Table Styling
-    col_widths = [76] + [110] * 6
-
-    t_style = [
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E3A8A')),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#F8FAFC')),
-        ('VALIGN', (0, 1), (0, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-    ]
-
-    for s_idx, slot in enumerate(hourly_slots):
-        table_row_idx = s_idx + 1
-        for d_idx, day in enumerate(days):
-            col_idx = d_idx + 1
-            matches = grid_matches[s_idx][d_idx]
-            if matches:
-                t_style.append(('BACKGROUND', (col_idx, table_row_idx), (col_idx, table_row_idx), colors.HexColor('#EFF6FF')))
-                t_style.append(('VALIGN', (col_idx, table_row_idx), (col_idx, table_row_idx), 'TOP'))
-            elif slot['is_lunch']:
-                t_style.append(('BACKGROUND', (col_idx, table_row_idx), (col_idx, table_row_idx), colors.HexColor('#F1F5F9')))
-
-    for span_cmd in span_commands:
-        t_style.append(span_cmd)
-
-    timetable_table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    timetable_table.setStyle(TableStyle(t_style))
-
-    # 7. Header Layout Construction
-    now_str = datetime.now().strftime("%b %d, %Y  %I:%M %p")
-
-    header_table_data = [
-        [
-            Paragraph(f"<font size=7.5 color='#1D4ED8'><b>CLASS SCHEDULING MANAGEMENT SYSTEM</b></font><br/><b><font size=13 color='#0F172A'>{doc_heading}</font></b><br/><font size=9.5 color='#1D4ED8'><b>{sub_heading}</b></font>", title_style),
-            Paragraph(f"<font color='#64748B'><b>Export Date:</b></font><br/>{now_str}<br/><font color='#16A34A'><b>Official Timetable</b></font>", ParagraphStyle('RHead', parent=meta_label_style, alignment=2))
-        ]
-    ]
-    header_table = Table(header_table_data, colWidths=[550, 186])
-    header_table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-    ]))
-
-    meta_cells = []
-    for label, val in meta_items:
-        txt = f"<font color='#475569'><b>{label}:</b></font>  <font color='#0F172A'><b>{val}</b></font>"
-        meta_cells.append(Paragraph(txt, meta_label_style))
-
-    while len(meta_cells) < 5:
-        meta_cells.append(Paragraph("", meta_label_style))
-
-    meta_table = Table([meta_cells[:5]], colWidths=[736 / 5] * 5)
-    meta_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8FAFC')),
-        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
-
-    # 8. Assemble Elements
-    story = [
-        header_table,
-        Spacer(1, 3),
-        meta_table,
-        Spacer(1, 6),
-        timetable_table,
-    ]
-
-    # 9. Build Document
-    doc.build(story, canvasmaker=NumberedCanvas)
-    buffer.seek(0)
-    return buffer
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf

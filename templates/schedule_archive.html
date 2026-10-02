@@ -23,8 +23,8 @@
 <!-- Filters Card -->
 <div class="card-custom mb-4 shadow-sm">
     <form method="get" action="{{ url_for('schedule_archive') }}" class="row g-3 align-items-end">
-        <div class="col-md-5">
-            <label class="form-label" for="semesterFilter">Semester</label>
+        <div class="col-md-3">
+            <label class="form-label fw-semibold small text-muted" for="semesterFilter">Semester</label>
             <select id="semesterFilter" name="semester" class="form-select">
                 <option value="">All Semesters</option>
                 {% for sem in semester_options %}
@@ -32,8 +32,8 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-4">
-            <label class="form-label" for="programFilter">Program</label>
+        <div class="col-md-3">
+            <label class="form-label fw-semibold small text-muted" for="programFilter">Program</label>
             <select id="programFilter" name="program" class="form-select">
                 <option value="">All Programs</option>
                 {% for prog in program_options %}
@@ -41,13 +41,37 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3">
-            <button type="submit" class="btn btn-primary w-100">
-                <i class="bx bx-filter me-1"></i> Filter Archive
+        <div class="col-md-2">
+            <label class="form-label fw-semibold small text-muted" for="dateFromFilter">Archived From</label>
+            <input type="date" id="dateFromFilter" name="date_from" value="{{ date_from }}" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label fw-semibold small text-muted" for="dateToFilter">Archived To</label>
+            <input type="date" id="dateToFilter" name="date_to" value="{{ date_to }}" class="form-control">
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-grow-1" id="filterArchiveBtn">
+                <i class="bx bx-filter me-1"></i> Filter
             </button>
+            {% if has_active_filters %}
+            <a href="{{ url_for('schedule_archive') }}" class="btn btn-outline-secondary" id="clearArchiveFiltersBtn" title="Clear all filters">
+                <i class="bx bx-reset"></i> Clear
+            </a>
+            {% endif %}
         </div>
     </form>
 </div>
+
+<!-- Error State Alert -->
+{% if fetch_error %}
+<div class="alert alert-danger d-flex align-items-center mb-4 shadow-sm" role="alert">
+    <i class="bx bx-error-circle fs-3 me-3 text-danger flex-shrink-0"></i>
+    <div>
+        <h5 class="alert-heading mb-1 fw-bold">Failed to load archived schedules</h5>
+        <p class="mb-0 small text-dark">{{ error_message or 'An error occurred while connecting to the schedule archive database. Please check the system logs.' }}</p>
+    </div>
+</div>
+{% endif %}
 
 <!-- Archive Batches -->
 {% if archive_batches %}
@@ -74,7 +98,11 @@
                             </div>
                             <div>
                                 <span class="fw-semibold d-block text-dark">{{ batch.archived_at_fmt }}</span>
+                                {% if batch.batch_id == 'legacy' %}
+                                <span class="badge bg-secondary-subtle text-secondary border" style="font-size: 0.7rem;">Legacy</span>
+                                {% else %}
                                 <code class="small text-muted" style="font-size: 0.75rem;" title="{{ batch.batch_id }}">ID: {{ batch.batch_id[:8] }}...</code>
+                                {% endif %}
                             </div>
                         </div>
                     </td>
@@ -128,19 +156,29 @@
         </table>
     </div>
 </div>
-{% else %}
+{% elif not fetch_error %}
 <div class="card-custom shadow-sm text-center py-5">
     <div class="py-4">
         <div class="text-muted mb-3">
             <i class="bx bx-archive" style="font-size: 3.5rem; opacity: 0.5;"></i>
         </div>
+        {% if has_active_filters %}
+        <h5 class="fw-semibold text-secondary">No Archived Schedules Match Your Filters</h5>
+        <p class="text-muted small mx-auto" style="max-width: 480px;">
+            We couldn't find any archived schedules matching the selected semester, program, or date range. Try clearing your filters or selecting a broader date range.
+        </p>
+        <a href="{{ url_for('schedule_archive') }}" class="btn btn-outline-primary mt-2">
+            <i class="bx bx-reset me-1"></i> Clear Filters
+        </a>
+        {% else %}
         <h5 class="fw-semibold text-secondary">No Archived Schedules Found</h5>
         <p class="text-muted small mx-auto" style="max-width: 480px;">
-            Whenever a newly generated schedule is confirmed, the previous active schedule is automatically archived here so you can review or restore it at any time.
+            Whenever a newly generated schedule is confirmed or an active schedule is manually archived, it will be safely saved here so you can review or restore it at any time.
         </p>
         <a href="/schedules" class="btn btn-outline-primary mt-2">
             <i class="bx bx-grid-alt me-1"></i> View Current Schedules
         </a>
+        {% endif %}
     </div>
 </div>
 {% endif %}
