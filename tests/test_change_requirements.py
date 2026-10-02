@@ -922,10 +922,9 @@ def test_checklist_schedule_generation_enforces_cutoffs(monkeypatch):
     with client.session_transaction() as sess:
         pid_reg = sess.get('preview_id')
     entries_reg = app_module._get_preview_for_user(preview_id=pid_reg)
-    assert len(entries_reg) == 1
-    # Marie Curie could not be assigned because every slot ends after 16:00 cutoff -> fallback TBA assigned!
-    assert entries_reg[0]['prof_id'] != 20
-    assert 'Professor' in entries_reg[0]['professor_name'] or 'TBA' in entries_reg[0]['professor_name']
+    # Marie Curie could not be assigned because every slot ends after 16:00 cutoff.
+    # Under the strict generation rule, no fallback TBA or placeholder is created; session remains unscheduled.
+    assert len(entries_reg) == 0
 
     # Subtest B: LOHB faculty with has_cutoff = False
     profs_lohb = [
