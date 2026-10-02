@@ -12,6 +12,7 @@ import math
 import random
 import uuid
 import re
+from collections import Counter
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -761,115 +762,13 @@ _fallback_prof_cache: dict = {}
 
 
 def _ensure_fallback_professor_by_index(index=0, department=None):
-    """Ensure a dedicated fallback professor ('Professor A', 'Professor B', ...) exists in the professor table and return it."""
-    cache_key = (index, department)
-    req_ctx = has_request_context()
-    if req_ctx and cache_key in _fallback_prof_cache:
-        return _fallback_prof_cache[cache_key]
-
-    letter = _index_to_letter(index)
-    prog_id = _find_program_id_by_name(department)
-    if not prog_id and req_ctx:
-        prog_id = _get_user_program_id()
-    if not prog_id:
-        programs = _get_programs()
-        if programs:
-            prog_id = programs[0].get('id')
-
-    fallback_prof = {
-        'prof_id': 999900 + index,
-        'first_name': 'Professor',
-        'last_name': letter,
-        'department': department or 'BSIT',
-        'program_name': department or 'BSIT',
-        'program_id': prog_id,
-        'time_designation': 5,
-        'max_hours': 40,
-        'academic_ranking_id': None,
-    }
-    try:
-        query = supabase.table('professor').select('*').ilike('first_name', 'Professor').ilike('last_name', letter)
-        if prog_id:
-            try:
-                res = query.eq('program_id', prog_id).execute()
-                data = res.data or []
-            except Exception:
-                res = supabase.table('professor').select('*').ilike('first_name', 'Professor').ilike('last_name', letter).execute()
-                data = res.data or []
-        else:
-            res = query.execute()
-            data = res.data or []
-
-        matching = [
-            r for r in data
-            if str(r.get('first_name', '')).strip().lower() == 'professor'
-            and str(r.get('last_name', '')).strip().upper() == letter.upper()
-        ]
-        if matching:
-            existing = matching[0]
-            existing.update(_ranking_constraints(existing))
-            existing['department'] = department or 'BSIT'
-            existing['program_name'] = department or 'BSIT'
-            if not existing.get('prof_id'):
-                existing['prof_id'] = fallback_prof.get('prof_id') or (999900 + index)
-            if not existing.get('max_hours'):
-                existing['max_hours'] = 40
-            if req_ctx:
-                _fallback_prof_cache[cache_key] = existing
-            return existing
-
-        ranking = None
-        if prog_id:
-            try:
-                ranking_res = supabase.table('academic_ranking').select('academic_ranking_id, max_hours').eq('program_id', prog_id).limit(1).execute()
-                ranking = _first(ranking_res.data or [])
-            except Exception:
-                pass
-        if not ranking:
-            try:
-                ranking_res = supabase.table('academic_ranking').select('academic_ranking_id, max_hours').limit(1).execute()
-                ranking = _first(ranking_res.data or [])
-            except Exception:
-                ranking = None
-
-        ins_payload = {
-            'first_name': 'Professor',
-            'last_name': letter,
-            'academic_ranking_id': ranking.get('academic_ranking_id') if ranking else None,
-        }
-        if prog_id:
-            ins_payload['program_id'] = prog_id
-
-        ins_res = supabase.table('professor').insert(ins_payload).execute()
-        if ins_res.data:
-            matching_ins = [
-                r for r in ins_res.data
-                if str(r.get('first_name', '')).strip().lower() == 'professor'
-                and str(r.get('last_name', '')).strip().upper() == letter.upper()
-            ]
-            if matching_ins:
-                created = matching_ins[0]
-                created.update(_ranking_constraints(created))
-                created['department'] = department or 'BSIT'
-                created['program_name'] = department or 'BSIT'
-                if not created.get('prof_id'):
-                    created['prof_id'] = fallback_prof.get('prof_id') or (999900 + index)
-                if not created.get('max_hours'):
-                    created['max_hours'] = 40
-                if req_ctx:
-                    _fallback_prof_cache[cache_key] = created
-                return created
-    except Exception as err:
-        logging.warning(f"[_ensure_fallback_professor_by_index] Error querying/inserting fallback professor Professor {letter}: {err}")
-
-    if req_ctx:
-        _fallback_prof_cache[cache_key] = fallback_prof
-    return fallback_prof
+    """Fallback professors are prohibited. Return None without querying or inserting records."""
+    return None
 
 
 def _ensure_fallback_professor(department=None):
-    """Ensure a dedicated 'Professor A' record exists in the professor table and return it."""
-    return _ensure_fallback_professor_by_index(0, department)
+    """Fallback professors are prohibited. Return None without querying or inserting records."""
+    return None
 
 #-------------------------------------------------------PROGRAM_TO_DEPARTMENT----------------------------------------------------------------------------------------------
 def _get_department(program=None):
@@ -995,6 +894,7 @@ def _clear_preview_for_user(user_id=None, preview_id=None):
 def _clear_preview_generation_state():
     _clear_preview_for_user()
     session['generated_sections'] = []
+    session.pop('unscheduled_loads', None)
     session.modified = True
     # Clear per-run caches so stale results from a previous generation don't carry over
     _fallback_prof_cache.clear()
@@ -1009,20 +909,21 @@ def _major_matches(course_major, selected_major):
     normalized_course = str(course_major).strip().lower()
     normalized_selected = str(selected_major).strip().lower()
 
-    if normalized_course in ['general', 'none', '']:
+    if normalized_course in ['general', 'none', '', 'all']:
         return True
 
-    aliases = {
-        'database systems': ['database', 'database systems', 'database system'],
-        'database': ['database', 'database systems', 'database system'],
-        'web development': ['web', 'web development', 'web dev'],
-        'web': ['web', 'web development', 'web dev'],
-        'networking': ['networking'],
-        'general': ['general', 'none', '']
-    }
+    track_groups = [
+        {'database systems', 'database system', 'database', 'dst', '(dst)'},
+        {'web systems', 'web system', 'web development', 'web dev', 'web', 'wst', '(wst)'},
+        {'networking', 'network', 'net', 'nst', '(nst)'},
+        {'general', 'none', '', 'all'}
+    ]
 
-    if normalized_selected in aliases:
-        return normalized_course in aliases[normalized_selected]
+    for grp in track_groups:
+        course_in_grp = normalized_course in grp or any(alias in normalized_course for alias in ['(wst)', '(dst)', '(nst)'] if alias in grp)
+        selected_in_grp = normalized_selected in grp or any(alias in normalized_selected for alias in ['(wst)', '(dst)', '(nst)'] if alias in grp)
+        if course_in_grp and selected_in_grp:
+            return True
 
     return normalized_course == normalized_selected
 def _normalize_major_key(major):
@@ -1266,7 +1167,7 @@ def _build_preview_context(preview_entries=None):
         for row in assignments:
             p = _rel(row, 'professor') or {}
             c = _rel(row, 'course') or {}
-            prof_name = f"{p.get('first_name','') or ''} {p.get('last_name','') or ''}".strip() or 'Professor A'
+            prof_name = f"{p.get('first_name','') or ''} {p.get('last_name','') or ''}".strip() or ''
             prof_entry = {'id': p.get('prof_id'), 'name': prof_name}
             if row.get('course_id'):
                 course_key = str(row['course_id'])
@@ -1339,6 +1240,7 @@ def _build_preview_context(preview_entries=None):
         'professor_load_assignments': professor_load_assignments,
         'all_professor_loads': professor_loads,
         'room_utilization': room_utilization,
+        'unscheduled_loads': session.get('unscheduled_loads', []),
     }
 
 
@@ -4866,11 +4768,11 @@ def _calculate_schedule_availability(entries, timeslots=None, context=None):
                 row['days'][d] = {
                     'type': 'occupied',
                     'is_partial': is_partial,
-                    'course_name': ent.get('course_name') or 'Scheduled Class',
-                    'professor': ent.get('professor') or ent.get('professor_name') or (prof_name if entity_type == 'professor' else 'Professor A'),
+                    'course_name': ent.get('course_name') or ent.get('course') or '',
+                    'professor': ent.get('professor') or ent.get('professor_name') or (prof_name if entity_type == 'professor' else ''),
                     'section': ent.get('section') or (section_name if entity_type == 'section' else ''),
                     'session_type': ent.get('session_type') or 'Lecture',
-                    'room_name': ent.get('room_name') or ent.get('room') or (room_name if entity_type == 'room' else 'TBA'),
+                    'room_name': ent.get('room_name') or ent.get('room') or (room_name if entity_type == 'room' else ''),
                     'semester': ent.get('semester') or '',
                     'major': ent.get('major') or '',
                     'year_level': ent.get('year_level') or '',
@@ -4951,9 +4853,9 @@ def _calculate_schedule_availability(entries, timeslots=None, context=None):
             end_fmt = _format_time(timedelta(seconds=e_sec))
             clean_time_range = f"{start_fmt} - {end_fmt}"
 
-            assigned_prof = ent.get('professor') or ent.get('professor_name') or (prof_name if entity_type == 'professor' else 'Professor A')
+            assigned_prof = ent.get('professor') or ent.get('professor_name') or (prof_name if entity_type == 'professor' else '')
             assigned_sec = ent.get('section') or (section_name if entity_type == 'section' else '')
-            assigned_room = ent.get('room_name') or ent.get('room') or (room_name if entity_type == 'room' else 'TBA')
+            assigned_room = ent.get('room_name') or ent.get('room') or (room_name if entity_type == 'room' else '')
 
             blocks.append({
                 'id': ent.get('schedule_id') or ent.get('id') or f"occ_{d}_{clamped_s}",
@@ -4961,7 +4863,7 @@ def _calculate_schedule_availability(entries, timeslots=None, context=None):
                 'type': 'occupied',
                 'professor_load_id': ent.get('professor_load_id'),
                 'room_id': ent.get('room_id'),
-                'course_name': ent.get('course_name') or 'Scheduled Class',
+                'course_name': ent.get('course_name') or ent.get('course') or '',
                 'section': assigned_sec,
                 'professor': assigned_prof,
                 'professor_name': assigned_prof,
@@ -6140,8 +6042,8 @@ def view_room_schedule(room_id):
             et_fmt = _format_time(et) or str(et or '')
             entries.append({
                 'schedule_id': p_entry.get('id'),
-                'course_name': p_entry.get('course_name') or 'TBA',
-                'professor': p_entry.get('professor_name') or 'Professor A',
+                'course_name': p_entry.get('course_name') or '',
+                'professor': p_entry.get('professor_name') or '',
                 'day': p_entry.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -6189,8 +6091,8 @@ def view_room_schedule(room_id):
             et_fmt = _format_time(et_raw) or str(et_raw or '')
             entries.append({
                 'schedule_id': row['schedule_id'],
-                'course_name': c.get('course_name'),
-                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                'course_name': c.get('course_name') or '',
+                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or '',
                 'day': row['day'],
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -6283,8 +6185,8 @@ def export_room_schedule(room_id):
             et_fmt = _format_time(et) or str(et or '')
             entries.append({
                 'schedule_id': p_entry.get('id'),
-                'course_name': p_entry.get('course_name') or 'TBA',
-                'professor': p_entry.get('professor_name') or 'Professor A',
+                'course_name': p_entry.get('course_name') or '',
+                'professor': p_entry.get('professor_name') or '',
                 'day': p_entry.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -6330,8 +6232,8 @@ def export_room_schedule(room_id):
             et_fmt = _format_time(et_raw) or str(et_raw or '')
             entries.append({
                 'schedule_id': row.get('schedule_id'),
-                'course_name': c.get('course_name') or 'TBA',
-                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                'course_name': c.get('course_name') or '',
+                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or '',
                 'day': row.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -6400,8 +6302,8 @@ def api_room_availability(room_id):
                     et = p_entry.get('end')
                     entries.append({
                         'schedule_id': p_entry.get('id'),
-                        'course_name': p_entry.get('course_name') or 'TBA',
-                        'professor': p_entry.get('professor_name') or 'Professor A',
+                        'course_name': p_entry.get('course_name') or '',
+                        'professor': p_entry.get('professor_name') or '',
                         'day': p_entry.get('day'),
                         'start_time': _format_time(st),
                         'end_time': _format_time(et),
@@ -6424,8 +6326,8 @@ def api_room_availability(room_id):
                 et_raw = row.get('class_end')
                 entries.append({
                     'schedule_id': row.get('schedule_id'),
-                    'course_name': c.get('course_name'),
-                    'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                    'course_name': c.get('course_name') or '',
+                    'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or '',
                     'day': row.get('day'),
                     'start_time': _format_time(st_raw),
                     'end_time': _format_time(et_raw),
@@ -6551,7 +6453,7 @@ def schedules():
                 p = _rel(pc, 'professor') or _rel(r, 'professor') or {}
                 fname = p.get('first_name') or ''
                 lname = p.get('last_name') or ''
-                prof_name = f"{fname} {lname}".strip() or 'Professor A'
+                prof_name = f"{fname} {lname}".strip() or ''
                 start_fmt = _format_time(r.get('class_start'))
                 end_fmt = _format_time(r.get('class_end'))
                 sections_by_key[key]['entries'].append({
@@ -6559,9 +6461,9 @@ def schedules():
                     'schedule_id': r.get('schedule_id'),
                     'professor_load_id': r.get('professor_load_id'),
                     'course_id': pc.get('course_id') or r.get('course_id'),
-                    'course_name': c.get('course_name') or 'TBA',
+                    'course_name': c.get('course_name') or '',
                     'professor_name': prof_name,
-                    'room_name': rm.get('room_name') or 'TBA',
+                    'room_name': rm.get('room_name') or '',
                     'day': r.get('day') or '',
                     'start': start_fmt,
                     'end': end_fmt,
@@ -6639,7 +6541,7 @@ def view_schedule(section_name):
             et = p_entry.get('end')
             st_fmt = _format_time(st) or str(st or '')
             et_fmt = _format_time(et) or str(et or '')
-            prof_name = p_entry.get('professor_name') or 'Professor A'
+            prof_name = p_entry.get('professor_name') or ''
 
             entries.append({
                 'schedule_id': p_entry.get('id'),
@@ -6656,16 +6558,16 @@ def view_schedule(section_name):
                 'session_type': p_entry.get('session_type') or 'Lecture',
                 'semester': sem,
                 'major': maj,
-                'course_name': p_entry.get('course_name') or 'TBA',
-                'room_name': p_entry.get('room_name') or 'TBA',
+                'course_name': p_entry.get('course_name') or '',
+                'room_name': p_entry.get('room_name') or '',
                 'first_name': '',
                 'last_name': '',
                 'professor': prof_name,
                 'professor_name': prof_name,
                 'section': section_name,
                 'year_level': _year_of_section(section_name),
-                'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else 'TBA',
-                'timeslot_display': f"{p_entry.get('day')} | {st_fmt} - {et_fmt}" if st_fmt and et_fmt else 'TBA',
+                'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else '',
+                'timeslot_display': f"{p_entry.get('day')} | {st_fmt} - {et_fmt}" if st_fmt and et_fmt else '',
             })
     else:
         query = supabase.table('schedule').select(
@@ -6691,7 +6593,7 @@ def view_schedule(section_name):
             p = _rel(pc, 'professor') or _rel(row, 'professor') or {}
             first_name = p.get('first_name') or ''
             last_name = p.get('last_name') or ''
-            prof_name = f"{first_name} {last_name}".strip() or 'Professor A'
+            prof_name = f"{first_name} {last_name}".strip() or ''
             st_raw = row.get('class_start')
             et_raw = row.get('class_end')
             st_fmt = _format_time(st_raw) or str(st_raw or '')
@@ -6774,7 +6676,7 @@ def view_schedule(section_name):
         pcid = pc_item.get('professor_load_id')
         p_obj = _rel(pc_item, 'professor') or {}
         c_obj = _rel(pc_item, 'course') or {}
-        p_name = f"{p_obj.get('first_name') or ''} {p_obj.get('last_name') or ''}".strip() or 'Professor A'
+        p_name = f"{p_obj.get('first_name') or ''} {p_obj.get('last_name') or ''}".strip() or ''
         c_name = c_obj.get('course_name') or f"Course #{pc_item.get('course_id')}"
         all_professor_loads.append({
             'professor_load_id': pcid,
@@ -6851,7 +6753,7 @@ def export_section_schedule(section_name):
             et = p_entry.get('end')
             st_fmt = _format_time(st) or str(st or '')
             et_fmt = _format_time(et) or str(et or '')
-            prof_name = p_entry.get('professor_name') or 'Professor A'
+            prof_name = p_entry.get('professor_name') or ''
 
             entries.append({
                 'schedule_id': p_entry.get('id'),
@@ -6863,9 +6765,9 @@ def export_section_schedule(section_name):
                 'session_type': p_entry.get('session_type') or 'Lecture',
                 'semester': sem,
                 'major': maj,
-                'course_name': p_entry.get('course_name') or 'TBA',
-                'room': p_entry.get('room_name') or 'TBA',
-                'room_name': p_entry.get('room_name') or 'TBA',
+                'course_name': p_entry.get('course_name') or '',
+                'room': p_entry.get('room_name') or '',
+                'room_name': p_entry.get('room_name') or '',
                 'professor': prof_name,
                 'professor_name': prof_name,
                 'section': section_name,
@@ -6906,10 +6808,10 @@ def export_section_schedule(section_name):
                 'session_type': row.get('session_type') or 'Lecture',
                 'semester': row.get('semester'),
                 'major': row.get('major'),
-                'course_name': c.get('course_name') or 'TBA',
-                'room': r.get('room_name') or 'TBA',
-                'room_name': r.get('room_name') or 'TBA',
-                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                'course_name': c.get('course_name') or '',
+                'room': r.get('room_name') or '',
+                'room_name': r.get('room_name') or '',
+                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or '',
                 'section': section_name,
                 'year_level': _year_of_section(section_name),
             })
@@ -7000,7 +6902,7 @@ def export_section_schedule_pdf(section_name):
             et = p_entry.get('end')
             st_fmt = _format_time(st) or str(st or '')
             et_fmt = _format_time(et) or str(et or '')
-            prof_name = p_entry.get('professor_name') or 'Professor A'
+            prof_name = p_entry.get('professor_name') or ''
 
             entries.append({
                 'schedule_id': p_entry.get('id'),
@@ -7012,9 +6914,9 @@ def export_section_schedule_pdf(section_name):
                 'session_type': p_entry.get('session_type') or 'Lecture',
                 'semester': sem,
                 'major': maj,
-                'course_name': p_entry.get('course_name') or 'TBA',
-                'room': p_entry.get('room_name') or 'TBA',
-                'room_name': p_entry.get('room_name') or 'TBA',
+                'course_name': p_entry.get('course_name') or '',
+                'room': p_entry.get('room_name') or '',
+                'room_name': p_entry.get('room_name') or '',
                 'professor': prof_name,
                 'professor_name': prof_name,
                 'section': section_name,
@@ -7055,11 +6957,11 @@ def export_section_schedule_pdf(section_name):
                 'session_type': row.get('session_type') or 'Lecture',
                 'semester': row.get('semester'),
                 'major': row.get('major'),
-                'course_name': c.get('course_name') or 'TBA',
-                'room': r.get('room_name') or 'TBA',
-                'room_name': r.get('room_name') or 'TBA',
-                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
-                'professor_name': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                'course_name': c.get('course_name') or '',
+                'room': r.get('room_name') or '',
+                'room_name': r.get('room_name') or '',
+                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or '',
+                'professor_name': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or '',
                 'section': section_name,
                 'year_level': _year_of_section(section_name),
             })
@@ -7159,17 +7061,17 @@ def api_section_availability(section_name):
                 et_fmt = _format_time(et) or str(et or '')
                 entries.append({
                     'schedule_id': p_entry.get('id'),
-                    'course_name': p_entry.get('course_name') or 'TBA',
-                    'room_name': p_entry.get('room_name') or 'TBA',
+                    'course_name': p_entry.get('course_name') or '',
+                    'room_name': p_entry.get('room_name') or '',
                     'day': p_entry.get('day'),
                     'start_time': st_fmt,
                     'end_time': et_fmt,
                     'start_time_raw': st,
                     'end_time_raw': et,
-                    'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else 'TBA',
+                    'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else '',
                     'section': section_name,
                     'session_type': p_entry.get('session_type') or 'Lecture',
-                    'professor': p_entry.get('professor_name') or 'Professor A',
+                    'professor': p_entry.get('professor_name') or '',
                 })
     else:
         rows = (supabase.table('schedule').select(
@@ -7186,17 +7088,17 @@ def api_section_availability(section_name):
             et_fmt = _format_time(et_raw) or str(et_raw or '')
             entries.append({
                 'schedule_id': row['schedule_id'],
-                'course_name': c.get('course_name') or 'TBA',
-                'room_name': r.get('room_name') or 'TBA',
+                'course_name': c.get('course_name') or '',
+                'room_name': r.get('room_name') or '',
                 'day': row.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
                 'start_time_raw': st_raw,
                 'end_time_raw': et_raw,
-                'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else 'TBA',
+                'time_range': f"{st_fmt} - {et_fmt}" if st_fmt and et_fmt else '',
                 'section': section_name,
                 'session_type': row.get('session_type') or 'Lecture',
-                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or 'Professor A',
+                'professor': f"{p.get('first_name','')} {p.get('last_name','')}".strip() or '',
             })
 
     try:
@@ -8031,7 +7933,7 @@ def view_irregular_student_schedule(student_id):
             'end_time': e_fmt,
             'time_range': f"{sch.get('day')} | {s_fmt} - {e_fmt}" if sch.get('day') and s_fmt else 'TBA',
             'room': rm.get('room_name') or 'TBA',
-            'professor': f"{pf} {pl}".strip() or 'Professor A',
+            'professor': f"{pf} {pl}".strip() or '',
             'session_type': sch.get('session_type') or 'Lecture',
         })
 
@@ -8365,12 +8267,12 @@ def generate_schedule():
             courses_by_year.setdefault(yl, []).append(c)
 
         for yl in courses_by_year:
-            seen_cnames = set()
+            seen_cids = set()
             deduped = []
             for c in courses_by_year[yl]:
-                cname = c.get('course_name')
-                if cname not in seen_cnames:
-                    seen_cnames.add(cname)
+                cid = c.get('course_id') or c.get('course_name')
+                if cid not in seen_cids:
+                    seen_cids.add(cid)
                     deduped.append(c)
             courses_by_year[yl] = deduped
 
@@ -8453,10 +8355,6 @@ def generate_schedule():
                     'quota': sec_val,
                 })
 
-        fallback_prof_obj = _ensure_fallback_professor_by_index(0, department)
-        fallback_prof_id = fallback_prof_obj.get('prof_id') or 999900
-        active_fallback_profs = [fallback_prof_obj]
-
         all_prof_data = all_profs_res.data or []
         all_professors_pool = []
         for p in all_prof_data:
@@ -8470,79 +8368,6 @@ def generate_schedule():
                 'sections': 0,
                 'quota': 999,
             })
-
-        if not any(p.get('prof_id') == fallback_prof_id for p in all_professors_pool):
-            all_professors_pool.append({
-                'prof_id': fallback_prof_id,
-                'first_name': fallback_prof_obj.get('first_name', 'Professor'),
-                'last_name': fallback_prof_obj.get('last_name', 'A'),
-                'time_designation': 5,
-                'max_hours': int(fallback_prof_obj.get('max_hours') or 40),
-                'program_id': fallback_prof_obj.get('program_id'),
-                'sections': 0,
-                'quota': 999,
-            })
-
-        # Subject-Oriented Fallback Professor Assignment:
-        fallback_prof_index = 0
-        fallback_prof_preparations = {}
-        fallback_prof_committed_hours = {}
-
-        seen_course_ids = set()
-        deduped_curriculum_courses = []
-        for c in all_courses:
-            cid = c.get('course_id')
-            if cid and cid not in seen_course_ids:
-                seen_course_ids.add(cid)
-                deduped_curriculum_courses.append(c)
-
-        for course in deduped_curriculum_courses:
-            cid = course['course_id']
-            if professors_by_course.get(cid):
-                continue
-
-            yl = int(course.get('year_level') or 1)
-            cmajor = course.get('major')
-            matching_secs = [
-                s for s in all_sections
-                if int(s.get('year_level') or 1) == yl and _major_matches(cmajor, s.get('major'))
-            ]
-            sec_count = max(1, len(matching_secs))
-            dur = float(course.get('lecture_hours') or 0.0) + float(course.get('lab_hours') or 0.0)
-            total_sec_h = dur * sec_count
-
-            current_fprof = _ensure_fallback_professor_by_index(fallback_prof_index, department)
-            cur_fpid = current_fprof.get('prof_id') or (999900 + fallback_prof_index)
-            cur_preps = fallback_prof_preparations.get(cur_fpid, 0)
-            cur_h = fallback_prof_committed_hours.get(cur_fpid, 0.0)
-
-            if cur_preps >= 2 or (cur_preps >= 1 and cur_h + total_sec_h > 40.0):
-                fallback_prof_index += 1
-                current_fprof = _ensure_fallback_professor_by_index(fallback_prof_index, department)
-                cur_fpid = current_fprof.get('prof_id') or (999900 + fallback_prof_index)
-
-            if not any(p.get('prof_id') == cur_fpid for p in active_fallback_profs):
-                active_fallback_profs.append(current_fprof)
-
-            fprof_entry = {
-                'professor_load_id': None,
-                'course_id': cid,
-                'prof_id': cur_fpid,
-                'first_name': current_fprof.get('first_name', 'Professor'),
-                'last_name': current_fprof.get('last_name'),
-                'time_designation': 5,
-                'max_hours': int(current_fprof.get('max_hours') or 40),
-                'program_id': current_fprof.get('program_id'),
-                'sections': sec_count,
-                'quota': sec_count,
-            }
-            professors_by_course.setdefault(cid, []).append(fprof_entry)
-
-            if not any(p.get('prof_id') == cur_fpid for p in all_professors_pool):
-                all_professors_pool.append(fprof_entry)
-
-            fallback_prof_preparations[cur_fpid] = cur_preps + 1
-            fallback_prof_committed_hours[cur_fpid] = cur_h + total_sec_h
 
         # Fetch rooms
         if user_prog_id:
@@ -8673,55 +8498,6 @@ def generate_schedule():
         prof_tba_count = 0
         room_tba_count = 0
 
-        def _is_fallback_prof(prof):
-            if not prof:
-                return False
-            fn = str(prof.get('first_name') or '').strip().lower()
-            ln = str(prof.get('last_name') or '').strip().upper()
-            if fn == 'professor' and len(ln) <= 2 and ln.isalpha():
-                return True
-            return any(p.get('prof_id') == prof.get('prof_id') for p in active_fallback_profs)
-
-        def _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id=None):
-            if course_id and professors_by_course.get(course_id):
-                for prof in professors_by_course[course_id]:
-                    if _is_fallback_prof(prof):
-                        pid = prof.get('prof_id')
-                        if not pid:
-                            continue
-                        curr_h = professor_hours.get(pid, 0.0)
-                        max_h = prof.get('max_hours') or 40
-                        if curr_h + duration <= max_h and not _has_conflict(day, block_start, block_end, professor_bookings.get(pid, [])):
-                            return prof
-
-            for prof in active_fallback_profs:
-                pid = prof.get('prof_id')
-                if not pid:
-                    continue
-                curr_h = professor_hours.get(pid, 0.0)
-                max_h = prof.get('max_hours') or 40
-                if curr_h + duration <= max_h and not _has_conflict(day, block_start, block_end, professor_bookings.get(pid, [])):
-                    return prof
-
-            next_idx = len(active_fallback_profs)
-            new_prof = _ensure_fallback_professor_by_index(next_idx, department)
-            active_fallback_profs.append(new_prof)
-
-            new_prof_entry = {
-                'prof_id': new_prof.get('prof_id'),
-                'first_name': new_prof.get('first_name', 'Professor'),
-                'last_name': new_prof.get('last_name'),
-                'time_designation': 5,
-                'max_hours': int(new_prof.get('max_hours') or 40),
-                'program_id': new_prof.get('program_id'),
-                'sections': 0,
-                'quota': 999,
-            }
-            if not any(p.get('prof_id') == new_prof.get('prof_id') for p in all_professors_pool):
-                all_professors_pool.append(new_prof_entry)
-
-            return new_prof_entry
-
         def _can_prof_teach_on_day(prof_dict, check_day):
             pid = prof_dict.get('prof_id')
             if not pid:
@@ -8735,108 +8511,53 @@ def generate_schedule():
         def _resolve_load_id(prof, c_id):
             if not prof:
                 return None
+            lid = prof.get('professor_load_id')
+            if lid:
+                return lid
             p_id = prof.get('prof_id')
             if not p_id:
                 return None
-            lid = prof.get('professor_load_id') or professor_load_map.get((p_id, c_id))
+            lid = professor_load_map.get((p_id, c_id))
             if not lid:
-                # Only hit the DB once per (prof, course) pair — subsequent calls use the cached result
                 try:
-                    pc_chk = supabase.table('professor_load').select('professor_load_id:id').eq('prof_id', int(p_id)).eq('course_id', int(c_id)).execute()
+                    pc_chk = supabase.table('professor_load').select('id').eq('prof_id', int(p_id)).eq('course_id', int(c_id)).execute()
                     pc_chk_row = _first(pc_chk.data or [])
                     if pc_chk_row:
-                        lid = pc_chk_row.get('professor_load_id')
+                        lid = pc_chk_row.get('id')
                 except Exception:
                     pass
-            if not lid:
-                try:
-                    lid = int(p_id) * 1000 + int(c_id)
-                except Exception:
-                    lid = 1
-            # Cache result (including synthetic IDs) so future calls skip the DB
-            professor_load_map[(p_id, c_id)] = lid
+            if lid:
+                professor_load_map[(p_id, c_id)] = lid
             return lid
 
-        
-        # Workload-aware scoring for candidate professors
-        def _score_candidate_professor(prof, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=False):
-            pk = prof['prof_id']
-            curr_h = professor_hours.get(pk, 0.0)
-            max_h = prof.get('max_hours') or 40
-            day_h = prof_day_hours.get((pk, day), 0.0)
-            course_sec = len(professor_load_count.get((pk, course_id), set()))
-            is_primary = 1 if pk in primary_prof_ids else 0
-            is_fallback = _is_fallback_prof(prof)
-            exceeds_cap = 1 if (curr_h + duration > max_h) else 0
-            overload_amount = max(0.0, (curr_h + duration) - max_h)
-            tier = int(curr_h // tolerance)
-            utilization = (curr_h / max_h) if max_h > 0 else 1.0
-            sec_count = prof_section_count.get(pk, 0)
-            new_day = 0 if day in prof_scheduled_days.get(pk, set()) else 1
-
-            # Qualification tier:
-            # 0: Regular primary qualified faculty (top priority)
-            # 1: Primary fallback professor assigned to this course (e.g. Professor A for CC-100)
-            # 2: Regular non-primary faculty
-            # 3: Non-primary fallback faculty
-            if is_primary and not is_fallback:
-                qual_rank = 0
-            elif is_primary and is_fallback:
-                qual_rank = 1
-            elif not is_fallback:
-                qual_rank = 2
-            else:
-                qual_rank = 3
-
-            return (
-                qual_rank,                                # 1. Qualification / assignment tier
-                exceeds_cap,                              # 2. Within max_hours cap (0) before exceeding (1)
-                overload_amount if allow_overload else 0, # 3. Minimize overload if fallback allowed
-                new_day,                                  # 4. Respect day caps / prefer existing days
-                tier,                                     # 5. Workload tier (±2h tolerance grouping)
-                course_sec,                               # 6. Course rotation (avoid repeatedly assigning same prof)
-                day_h,                                    # 7. Daily spreading (avoid clustering on one day)
-                curr_h,                                   # 8. Exact current hours
-                utilization,                              # 9. Capacity utilization ratio
-                sec_count,                                # 10. Total sections count
-                pk                                        # 11. Deterministic tie-break
-            )
-
         # Helper to schedule a single unpaired session (or half of a split paired session)
-        def _schedule_single_session(session_type, duration, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
-            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step, generation_warnings
+        def _schedule_single_session(session_type, duration, course, assigned_prof, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
+            nonlocal total_sessions_scheduled, assignment_step, generation_warnings
             if duration <= 0:
                 return True
 
             course_id = course['course_id']
-            primary_profs = professors_by_course.get(course_id, [])
-            primary_prof_ids = {p['prof_id'] for p in primary_profs}
-            other_profs = [p for p in all_professors_pool if p['prof_id'] not in primary_prof_ids]
+            if not assigned_prof:
+                generation_warnings.append(f"No professor load for Section {section_name} - {course.get('course_name')}: session skipped")
+                return False
 
-            logging.info(
-                f"[SECTION FILL] {section_name} - {course.get('course_name')} ({session_type}, {duration}h): "
-                f"{len(primary_profs)} primary prof(s), {len(other_profs)} other prof(s)"
-            )
-            for p in primary_profs:
-                logging.info(
-                    f"[CANDIDATE] {p.get('first_name', '')} {p.get('last_name', '')} (ID {p['prof_id']}): "
-                    f"quota={p.get('quota', 999)}, hours={professor_hours.get(p['prof_id'], 0.0)}/{p.get('max_hours', 40)}, "
-                    f"assigned={len(professor_load_count.get((p['prof_id'], course_id), set()))}/{p.get('quota', 999)}"
-                )
+            pk = assigned_prof.get('prof_id')
+            assigned_professor_load_id = assigned_prof.get('professor_load_id')
+            if not assigned_professor_load_id:
+                assigned_professor_load_id = _resolve_load_id(assigned_prof, course_id)
+            if not assigned_professor_load_id:
+                generation_warnings.append(f"No valid professor_load row for {section_name} - {course.get('course_name')}: session skipped")
+                return False
 
-            # STRICT room filtering: Lecture courses -> ONLY lecture rooms; Lab courses -> ONLY lab rooms
+            # STRICT room filtering: ILP and Lecture MUST strictly use lecture rooms only!
             cand_rooms = lecture_rooms if session_type in ('Lecture', 'ILP') else lab_rooms
-            logging.debug(f"[ROOM_FILTER] Course '{course.get('course_name')}' ({session_type}) filtered to {len(cand_rooms)} matching rooms.")
 
-            # Passes: from most constrained & preferred to broadest fallback (relax faculty & rules, NEVER room type)
             passes = [
                 {'strict_rules': True},
                 {'strict_rules': False},
             ]
 
             for p_config in passes:
-                prof_pool = primary_profs
-
                 all_days = sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99))
                 scored_days = []
                 for day in all_days:
@@ -8850,9 +8571,8 @@ def generate_schedule():
                         strict=p_config['strict_rules']
                     )
                     if s >= 0:
-                        if primary_profs:
-                            min_prof_day_h = min(prof_day_hours.get((p['prof_id'], day), 0.0) for p in primary_profs)
-                            s -= int(min_prof_day_h * 15)
+                        min_prof_day_h = prof_day_hours.get((pk, day), 0.0)
+                        s -= int(min_prof_day_h * 15)
                         scored_days.append((s, day))
                 scored_days.sort(key=lambda x: x[0], reverse=True)
 
@@ -8862,14 +8582,11 @@ def generate_schedule():
                     if len(day_slots) < duration:
                         continue
 
-                    # For ILP, sort start_indices to prioritize last-hour slots (after checking Monday 07:00 explicitly or relying on day sorting)
                     start_indices = list(range(0, len(day_slots) - duration + 1))
                     if session_type == 'ILP':
-                        # Sort so that if it's Monday and 07:00 is available, it's first. Otherwise, prioritize last slot of the day.
                         start_indices.sort(key=lambda idx: -100 if day == 'Monday' and idx == 0 else -idx)
 
                     for start_index in start_indices:
-
                         block_slots = day_slots[start_index:start_index + duration]
                         if not _is_contiguous_block(block_slots):
                             continue
@@ -8886,55 +8603,27 @@ def generate_schedule():
                         if block_start < timedelta(hours=8) and session_type != 'ILP':
                             continue
 
-
-                        cand_profs = [
-                            p for p in prof_pool
-                            if professor_hours.get(p['prof_id'], 0.0) + duration <= (p.get('max_hours') or 40)
-                            and not _has_conflict(day, block_start, block_end, professor_bookings.get(p['prof_id'], []))
-                            and (len(professor_load_count.get((p['prof_id'], course_id), set())) < p.get('quota', 999) or section_name in professor_load_count.get((p['prof_id'], course_id), set()))
-                            and (not p_config['strict_rules'] or _can_prof_teach_on_day(p, day))
-                            and _check_professor_cutoff_conflict(p['prof_id'], day, block_start, block_end, session_type,
-                                                                 prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is None
-                        ]
-                        assigned_prof = None
-                        assigned_room = None
-                        if cand_profs:
-                            assigned_room = _select_least_used_room(
-                                cand_rooms, day, block_start, block_end,
-                                room_bookings, room_usage, room_last_used, room_order
-                            )
-                            if not assigned_room and session_type != 'ILP':
-                                continue
-                            cand_profs.sort(key=lambda p: _score_candidate_professor(
-                                p, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=False
-                            ))
-                            assigned_prof = cand_profs[0]
-                        elif not p_config['strict_rules']:
-                            assigned_room = _select_least_used_room(
-                                cand_rooms, day, block_start, block_end,
-                                room_bookings, room_usage, room_last_used, room_order
-                            )
-                            if not assigned_room and session_type != 'ILP':
-                                continue
-                            assigned_prof = _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id)
-
-
-                        if not assigned_prof:
+                        if professor_hours.get(pk, 0.0) + duration > (assigned_prof.get('max_hours') or 40):
                             continue
-                        if not assigned_room and session_type != 'ILP':
+                        if _has_conflict(day, block_start, block_end, professor_bookings.get(pk, [])):
+                            continue
+                        if p_config['strict_rules'] and not _can_prof_teach_on_day(assigned_prof, day):
+                            continue
+                        if _check_professor_cutoff_conflict(pk, day, block_start, block_end, session_type,
+                                                             prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is not None:
+                            continue
+
+                        assigned_room = _select_least_used_room(
+                            cand_rooms, day, block_start, block_end,
+                            room_bookings, room_usage, room_last_used, room_order
+                        )
+                        if not assigned_room:
                             continue
 
                         # ASSIGNMENT SUCCESS
-                        pk = assigned_prof['prof_id']
-                        rk = assigned_room['room_id'] if assigned_room else None
-                        room_name = assigned_room.get('room_name') if assigned_room else 'TBA'
+                        rk = assigned_room['room_id']
+                        room_name = assigned_room.get('room_name') or ''
                         prof_full_name = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip()
-                        assigned_professor_load_id = _resolve_load_id(assigned_prof, course_id)
-
-                        logging.debug(
-                            f"[ROOM_ASSIGNED] Course: {course.get('course_name')} | Session: {session_type} | "
-                            f"Room: {room_name}"
-                        )
 
                         preview_entries.append({
                             'professor_load_id': assigned_professor_load_id,
@@ -8963,8 +8652,6 @@ def generate_schedule():
                         professor_hours[pk] = professor_hours.get(pk, 0.0) + duration
                         prof_day_hours[(pk, day)] = prof_day_hours.get((pk, day), 0.0) + duration
                         prof_scheduled_days.setdefault(pk, set()).add(day)
-                        professor_load_count.setdefault((pk, course_id), set()).add(section_name)
-                        prof_section_count[pk] = prof_section_count.get(pk, 0) + 1
 
                         courses_per_day[day] = courses_per_day.get(day, 0) + 1
                         days_tried[day] = days_tried.get(day, 0) + 1
@@ -8974,200 +8661,27 @@ def generate_schedule():
                         total_sessions_scheduled += 1
                         return True
 
-            # Full Grid Relaxation (Any remaining day/time) - STRICT ROOM TYPE PRESERVED
-            for day in sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99)):
-                day_slots = slot_groups[day]
-                if len(day_slots) < duration:
-                    continue
-                # For ILP, sort start_indices to prioritize last-hour slots (after checking Monday 07:00 explicitly or relying on day sorting)
-                start_indices = list(range(0, len(day_slots) - duration + 1))
-                if session_type == 'ILP':
-                    # Sort so that if it's Monday and 07:00 is available, it's first. Otherwise, prioritize last slot of the day.
-                    start_indices.sort(key=lambda idx: -100 if day == 'Monday' and idx == 0 else -idx)
-
-                for start_index in start_indices:
-                    block_slots = day_slots[start_index:start_index + duration]
-                    if not _is_contiguous_block(block_slots):
-                        continue
-                    block_start = block_slots[0]['start_time']
-                    block_end = block_slots[-1]['end_time']
-                    if _has_conflict(day, block_start, block_end, section_bookings[sec_key]):
-                        continue
-
-                    primary_cand_profs = [
-                        p for p in primary_profs
-                        if not _has_conflict(day, block_start, block_end, professor_bookings.get(p['prof_id'], []))
-                        and _check_professor_cutoff_conflict(p['prof_id'], day, block_start, block_end, session_type,
-                                                             prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is None
-                    ]
-                    regular_profs = primary_profs
-                    conflict_free_profs = [
-                        p for p in (primary_cand_profs or regular_profs)
-                        if not _has_conflict(day, block_start, block_end, professor_bookings.get(p['prof_id'], []))
-                        and _check_professor_cutoff_conflict(p['prof_id'], day, block_start, block_end, session_type,
-                                                             prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is None
-                    ]
-                    assigned_prof = None
-                    assigned_room = _select_least_used_room(
-                        cand_rooms, day, block_start, block_end,
-                        room_bookings, room_usage, room_last_used, room_order
-                    )
-                    if not assigned_room:
-                        continue
-
-                    if conflict_free_profs:
-                        under_cap_profs = [
-                            p for p in conflict_free_profs
-                            if professor_hours.get(p['prof_id'], 0.0) + duration <= (p.get('max_hours') or 40)
-                        ]
-                        if under_cap_profs:
-                            under_cap_profs.sort(key=lambda p: _score_candidate_professor(
-                                p, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=False
-                            ))
-                            assigned_prof = under_cap_profs[0]
-                        else:
-                            # All available reach limit: fallback to least-overloaded professor
-                            conflict_free_profs.sort(key=lambda p: _score_candidate_professor(
-                                p, course_id, duration, day, primary_prof_ids, tolerance=2.0, allow_overload=True
-                            ))
-                    else:
-                        assigned_prof = _find_or_create_fallback_professor(day, block_start, block_end, duration, course_id)
-
-                    # If no conflict-free professor, reject slot to prevent double-booking
-                    if not assigned_prof:
-                        continue
-
-                    pk = assigned_prof['prof_id']
-                    prof_name = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip() or fallback_prof_name
-                    rk = assigned_room['room_id'] if assigned_room else None
-                    room_name = assigned_room.get('room_name') if assigned_room else None
-
-                    assigned_professor_load_id = _resolve_load_id(assigned_prof, course_id) if pk else None
-
-
-                    if not rk:
-                        room_tba_count += 1
-                        logging.warning(f"[SCHEDULER ROOM FAIL] No matching {session_type} room available for {section_name} - {course.get('course_name')} on {day} {block_start}-{block_end}. Evaluated {len(cand_rooms)} {session_type} rooms.")
-
-                    preview_entries.append({
-                        'professor_load_id': assigned_professor_load_id,
-                        'course_id': course_id,
-                        'course_name': course.get('course_name'),
-                        'prof_id': pk,
-                        'professor_name': prof_name,
-                        'section': section_name,
-                        'room_id': rk,
-                        'room_name': room_name,
-                        'day': day,
-                        'start': block_start,
-                        'end': block_end,
-                        'session_type': session_type,
-                        'semester': standard_semester,
-                        'major': sec_major or course.get('major'),
-                        'program': course.get('program') or program or session.get('program', ''),
-                    })
-
-                    section_bookings[sec_key].append((day, block_start, block_end))
-                    if rk:
-                        room_bookings.setdefault(rk, []).append((day, block_start, block_end))
-                        assignment_step += 1
-                        room_usage[rk] = room_usage.get(rk, 0) + 1
-                        room_last_used[rk] = assignment_step
-                    if pk:
-                        professor_bookings.setdefault(pk, []).append((day, block_start, block_end))
-                        professor_hours[pk] = professor_hours.get(pk, 0.0) + duration
-                        prof_day_hours[(pk, day)] = prof_day_hours.get((pk, day), 0.0) + duration
-                        prof_scheduled_days.setdefault(pk, set()).add(day)
-                        professor_load_count.setdefault((pk, course_id), set()).add(section_name)
-                        prof_section_count[pk] = prof_section_count.get(pk, 0) + 1
-
-                    courses_per_day[day] = courses_per_day.get(day, 0) + 1
-                    days_tried[day] = days_tried.get(day, 0) + 1
-                    total_sessions_scheduled += 1
-                    return True
-
-            # If all slots failed, assign TBA to the first slot where the section and a room are free
-            for day in sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99)):
-                for start_index in range(0, len(slot_groups[day]) - duration + 1):
-                    block_slots = slot_groups[day][start_index:start_index + duration]
-                    if not _is_contiguous_block(block_slots):
-                        continue
-                    block_start = block_slots[0]['start_time']
-                    block_end = block_slots[-1]['end_time']
-                    
-                    if _has_conflict(day, block_start, block_end, section_bookings[sec_key]):
-                        continue
-                    if block_start < timedelta(hours=8) and session_type != 'ILP':
-                        continue
-                        
-                    assigned_room = _select_least_used_room(
-                        cand_rooms, day, block_start, block_end,
-                        room_bookings, room_usage, room_last_used, room_order
-                    )
-                    
-                    rk = assigned_room['room_id'] if assigned_room else None
-                    if not rk: continue
-                    
-                    room_name = assigned_room.get('room_name')
-                    pk = None
-                    prof_name = 'TBA'
-                    prof_tba_count += 1
-                    assigned_professor_load_id = None
-                    
-                    preview_entries.append({
-                        'professor_load_id': assigned_professor_load_id,
-                        'course_id': course_id,
-                        'course_name': course.get('course_name'),
-                        'prof_id': pk,
-                        'professor_name': prof_name,
-                        'section': section_name,
-                        'room_id': rk,
-                        'room_name': room_name,
-                        'day': day,
-                        'start': block_start,
-                        'end': block_end,
-                        'session_type': session_type,
-                        'semester': standard_semester,
-                        'major': sec_major or course.get('major'),
-                        'program': course.get('program') or program or session.get('program', ''),
-                    })
-                    
-                    section_bookings[sec_key].append((day, block_start, block_end))
-                    room_bookings.setdefault(rk, []).append((day, block_start, block_end))
-                    assignment_step += 1
-                    room_usage[rk] = room_usage.get(rk, 0) + 1
-                    room_last_used[rk] = assignment_step
-                    
-                    courses_per_day[day] = courses_per_day.get(day, 0) + 1
-                    days_tried[day] = days_tried.get(day, 0) + 1
-                    total_sessions_scheduled += 1
-                    
-                    generation_warnings.append(
-                        f"{session_type} for {course.get('course_name')} could not be placed for Professor {primary_profs[0].get('last_name', 'X') if primary_profs else 'X'} and was set to TBA"
-                    )
-                    return True
-
+            generation_warnings.append(
+                f"{session_type} for {course.get('course_name')} (Section {section_name}) could not be scheduled in a matching room without conflict and remains unscheduled"
+            )
             return False
 
         # Helper to schedule a paired block (Lecture + Lab)
-        def _schedule_paired_block(lec_dur, lab_dur, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
-            nonlocal total_sessions_scheduled, prof_tba_count, room_tba_count, assignment_step, generation_warnings
+        def _schedule_paired_block(lec_dur, lab_dur, course, assigned_prof, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used):
+            nonlocal total_sessions_scheduled, assignment_step, generation_warnings
             total_dur = lec_dur + lab_dur
             course_id = course['course_id']
-            primary_profs = professors_by_course.get(course_id, [])
-            primary_prof_ids = {p['prof_id'] for p in primary_profs}
-            other_profs = [p for p in all_professors_pool if p['prof_id'] not in primary_prof_ids]
+            if not assigned_prof:
+                generation_warnings.append(f"No professor load for Section {section_name} - {course.get('course_name')}: paired block skipped")
+                return False
 
-            logging.info(
-                f"[SECTION FILL] {section_name} - {course.get('course_name')} (paired, {total_dur}h): "
-                f"{len(primary_profs)} primary prof(s), {len(other_profs)} other prof(s)"
-            )
-            for p in primary_profs:
-                logging.info(
-                    f"[CANDIDATE] {p.get('first_name', '')} {p.get('last_name', '')} (ID {p['prof_id']}): "
-                    f"quota={p.get('quota', 999)}, hours={professor_hours.get(p['prof_id'], 0.0)}/{p.get('max_hours', 40)}, "
-                    f"assigned={len(professor_load_count.get((p['prof_id'], course_id), set()))}/{p.get('quota', 999)}"
-                )
+            pk = assigned_prof.get('prof_id')
+            assigned_professor_load_id = assigned_prof.get('professor_load_id')
+            if not assigned_professor_load_id:
+                assigned_professor_load_id = _resolve_load_id(assigned_prof, course_id)
+            if not assigned_professor_load_id:
+                generation_warnings.append(f"No valid professor_load row for {section_name} - {course.get('course_name')}: paired block skipped")
+                return False
 
             passes = [
                 {'strict_rules': True},
@@ -9175,8 +8689,6 @@ def generate_schedule():
             ]
 
             for p_config in passes:
-                prof_pool = primary_profs
-
                 all_days = sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99))
                 scored_days = []
                 for day in all_days:
@@ -9190,9 +8702,8 @@ def generate_schedule():
                         strict=p_config['strict_rules']
                     )
                     if s >= 0:
-                        if primary_profs:
-                            min_prof_day_h = min(prof_day_hours.get((p['prof_id'], day), 0.0) for p in primary_profs)
-                            s -= int(min_prof_day_h * 15)
+                        min_prof_day_h = prof_day_hours.get((pk, day), 0.0)
+                        s -= int(min_prof_day_h * 15)
                         scored_days.append((s, day))
                 scored_days.sort(key=lambda x: x[0], reverse=True)
 
@@ -9221,45 +8732,31 @@ def generate_schedule():
                         if lec_start < timedelta(hours=8):
                             continue
 
-                        cand_profs = [
-                            p for p in prof_pool
-                            if professor_hours.get(p['prof_id'], 0.0) + total_dur <= (p.get('max_hours') or 40)
-                            and not _has_conflict(day, lec_start, lab_end, professor_bookings.get(p['prof_id'], []))
-                            and (len(professor_load_count.get((p['prof_id'], course_id), set())) < p.get('quota', 999) or section_name in professor_load_count.get((p['prof_id'], course_id), set()))
-                            and (not p_config['strict_rules'] or _can_prof_teach_on_day(p, day))
-                            and _check_professor_cutoff_conflict(p['prof_id'], day, lec_start, lab_end, 'Lecture',
-                                                                 prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is None
-                        ]
-                        assigned_prof = None
-                        assigned_lec_room = None
-                        assigned_lab_room = None
+                        if professor_hours.get(pk, 0.0) + total_dur > (assigned_prof.get('max_hours') or 40):
+                            continue
+                        if _has_conflict(day, lec_start, lab_end, professor_bookings.get(pk, [])):
+                            continue
+                        if p_config['strict_rules'] and not _can_prof_teach_on_day(assigned_prof, day):
+                            continue
+                        if _check_professor_cutoff_conflict(pk, day, lec_start, lab_end, 'Lecture',
+                                                             prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is not None:
+                            continue
 
-                        if cand_profs:
-                            assigned_lec_room = _select_least_used_room(
-                                lecture_rooms, day, lec_start, lec_end,
-                                room_bookings, room_usage, room_last_used, room_order
-                            )
-                            if not assigned_lec_room:
-                                continue
-                            assigned_lab_room = _select_least_used_room(
-                                lab_rooms, day, lab_start, lab_end,
-                                room_bookings, room_usage, room_last_used, room_order
-                            )
-                            if not assigned_lab_room:
-                                continue
-                            cand_profs.sort(key=lambda p: _score_candidate_professor(
-                                p, course_id, total_dur, day, primary_prof_ids, tolerance=2.0, allow_overload=False
-                            ))
-                            assigned_prof = cand_profs[0]
-
-
-                        if not assigned_prof or not assigned_lec_room or not assigned_lab_room:
+                        assigned_lec_room = _select_least_used_room(
+                            lecture_rooms, day, lec_start, lec_end,
+                            room_bookings, room_usage, room_last_used, room_order
+                        )
+                        if not assigned_lec_room:
+                            continue
+                        assigned_lab_room = _select_least_used_room(
+                            lab_rooms, day, lab_start, lab_end,
+                            room_bookings, room_usage, room_last_used, room_order
+                        )
+                        if not assigned_lab_room:
                             continue
 
                         # SUCCESSFUL PAIRED ASSIGNMENT
-                        pk = assigned_prof['prof_id']
                         prof_name = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip()
-                        assigned_professor_load_id = _resolve_load_id(assigned_prof, course_id)
                         lec_rk = assigned_lec_room['room_id']
                         lab_rk = assigned_lab_room['room_id']
 
@@ -9310,15 +8807,9 @@ def generate_schedule():
                         room_usage[lab_rk] = room_usage.get(lab_rk, 0) + 1
                         professor_bookings.setdefault(pk, []).append((day, lab_start, lab_end))
 
-                        if _is_fallback_prof(assigned_prof):
-                            prof_tba_count += 2
-                            logging.info(f"[SCHEDULER PROF FALLBACK] Assigned {prof_name} (paired) for {section_name} - {course.get('course_name')} on {day} {lec_start}-{lab_end}")
-
                         professor_hours[pk] = professor_hours.get(pk, 0.0) + total_dur
                         prof_day_hours[(pk, day)] = prof_day_hours.get((pk, day), 0.0) + total_dur
                         prof_scheduled_days.setdefault(pk, set()).add(day)
-                        professor_load_count.setdefault((pk, course_id), set()).add(section_name)
-                        prof_section_count[pk] = prof_section_count.get(pk, 0) + 1
 
                         courses_per_day[day] = courses_per_day.get(day, 0) + 1
                         days_tried[day] = days_tried.get(day, 0) + 1
@@ -9328,11 +8819,94 @@ def generate_schedule():
                         total_sessions_scheduled += 2
                         return True
 
-            # If contiguous 4-hour paired block could not be placed, split into separate Lecture and Laboratory sessions
+            # If contiguous 4-hour paired block could not be placed, split into separate Laboratory and Lecture sessions
+            # Laboratory is scheduled first because lab rooms (7) are significantly scarcer than lecture rooms (12)
             logging.info(f"[SCHEDULER] Splitting paired session for {section_name} - {course.get('course_name')} ({lec_dur}h Lecture, {lab_dur}h Lab) into independent slots.")
-            ok_lec = _schedule_single_session('Lecture', lec_dur, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used)
-            ok_lab = _schedule_single_session('Laboratory', lab_dur, course, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used)
+            ok_lab = _schedule_single_session('Laboratory', lab_dur, course, assigned_prof, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used)
+            ok_lec = _schedule_single_session('Lecture', lec_dur, course, assigned_prof, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used)
             return ok_lec and ok_lab
+
+        # Pre-assign (section, course) -> professor_load row strictly based on professor_load
+        section_course_assignment = {}
+
+        # Map each professor to any specialized track they teach in this year level
+        prof_track_affinity = {}
+        for c in all_courses:
+            c_yl = int(c.get('year_level') or 1)
+            c_spec = c.get('specialization') or c.get('major')
+            if c_spec and str(c_spec).strip().lower() not in ('general', 'none', ''):
+                for l in professors_by_course.get(c['course_id'], []):
+                    prof_track_affinity[(l['prof_id'], c_yl)] = str(c_spec).strip()
+
+        for course in all_courses:
+            cid = course['course_id']
+            yl = int(course.get('year_level') or 1)
+            cmajor = course.get('specialization') or course.get('major')
+
+            matching_secs = [
+                s for s in all_sections
+                if int(s.get('year_level') or 1) == yl and _major_matches(cmajor, s.get('major'))
+            ]
+
+            loads = professors_by_course.get(cid, [])
+            if not loads:
+                generation_warnings.append(f"No professor load for {course.get('course_name')}: no classes generated")
+                continue
+
+            is_general_course = (not cmajor or str(cmajor).strip().lower() in ('general', 'none', ''))
+
+            if is_general_course and any(s.get('major') for s in matching_secs):
+                # General course in specialized term: match professors to sections with their track affinity first
+                assigned_sec_names = set()
+                unassigned_loads = []
+
+                for l in loads:
+                    aff = prof_track_affinity.get((l['prof_id'], yl))
+                    cnt = l.get('sections') or 1
+                    placed_cnt = 0
+                    if aff:
+                        for s in matching_secs:
+                            if placed_cnt >= cnt:
+                                break
+                            if s['section'] not in assigned_sec_names and _major_matches(aff, s.get('major')):
+                                section_course_assignment[(s['section'], cid)] = l
+                                assigned_sec_names.add(s['section'])
+                                placed_cnt += 1
+                    rem = cnt - placed_cnt
+                    if rem > 0:
+                        unassigned_loads.append((l, rem))
+
+                rem_secs = [s for s in matching_secs if s['section'] not in assigned_sec_names]
+                unassigned_loads.sort(key=lambda item: item[0].get('sections', 1))
+                for s in reversed(rem_secs):
+                    if unassigned_loads:
+                        l, rem = unassigned_loads[0]
+                        section_course_assignment[(s['section'], cid)] = l
+                        assigned_sec_names.add(s['section'])
+                        if rem == 1:
+                            unassigned_loads.pop(0)
+                        else:
+                            unassigned_loads[0] = (l, rem - 1)
+
+                if len(assigned_sec_names) < len(matching_secs):
+                    for s in matching_secs:
+                        if s['section'] not in assigned_sec_names:
+                            generation_warnings.append(f"No professor load for Section {s['section']} - {course.get('course_name')}: no classes generated")
+            else:
+                sec_idx = 0
+                for l in loads:
+                    cnt = l.get('sections') or 1
+                    for _ in range(cnt):
+                        if sec_idx < len(matching_secs):
+                            sec = matching_secs[sec_idx]
+                            section_course_assignment[(sec['section'], cid)] = l
+                            sec_idx += 1
+                        else:
+                            break
+
+                if sec_idx < len(matching_secs):
+                    for s in matching_secs[sec_idx:]:
+                        generation_warnings.append(f"No professor load for Section {s['section']} - {course.get('course_name')}: no classes generated")
 
         # Main assignment loop across all sections in the batch
         for section in all_sections:
@@ -9340,13 +8914,15 @@ def generate_schedule():
             yr = int(section.get('year_level') or 1)
             sec_major = section.get('major')
             sec_key = (section_name, sec_major)
+            # Derive section courses directly from section_course_assignment so no pre-assigned course is dropped
             section_courses = [
                 c for c in courses_by_year.get(yr, [])
-                if _major_matches(c.get('major'), sec_major)
+                if (section_name, c.get('course_id')) in section_course_assignment
             ]
-            # Prioritize most constrained courses (fewest qualified faculty) first
+            # Prioritize 3-hour single lecture blocks, then by faculty constraint tightness
             section_courses.sort(
                 key=lambda c: (
+                    -int(c.get('lecture_hours') or 0) if int(c.get('lab_hours') or 0) == 0 else 0,
                     len(professors_by_course.get(c.get('course_id'), [])),
                     c.get('course_id', 0)
                 )
@@ -9358,6 +8934,7 @@ def generate_schedule():
             days_tried = {}
 
             for course in section_courses:
+                assigned_prof = section_course_assignment.get((section_name, course['course_id']))
                 subject_session_queue = _build_subject_session_queue(course)
 
                 for session_item in subject_session_queue:
@@ -9365,21 +8942,21 @@ def generate_schedule():
                     if session_item.get('paired'):
                         _schedule_paired_block(
                             session_item['lec_duration'], session_item['lab_duration'],
-                            course, section_name, yr, sec_major, sec_key,
+                            course, assigned_prof, section_name, yr, sec_major, sec_key,
                             courses_per_day, late_days, days_tried, two_course_day_used
                         )
                     else:
                         _schedule_single_session(
                             session_item['session_type'], session_item['duration'],
-                            course, section_name, yr, sec_major, sec_key,
+                            course, assigned_prof, section_name, yr, sec_major, sec_key,
                             courses_per_day, late_days, days_tried, two_course_day_used
                         )
 
             logging.info(
                 f"[SECTION FILL SUMMARY] Section {section_name}: "
-                f"{total_sessions_scheduled} session(s) scheduled so far, "
-                f"prof_tba_count={prof_tba_count}, room_tba_count={room_tba_count}"
+                f"{total_sessions_scheduled} session(s) scheduled so far"
             )
+
 
         # Audit & Utilization Metrics Logging
         total_faculty_capacity = sum(int(p.get('max_hours') or 40) for p in all_professors_pool)
@@ -9416,6 +8993,69 @@ def generate_schedule():
             for err in validation_errors:
                 logging.error(f"[GENERATION ROOM VALIDATION ERROR] {err}")
             raise ValueError(f"Generated schedule failed room-type validation: {validation_errors[0]}")
+
+        # Comprehensive professor_load audit: compare expected vs placed sessions for every professor_load row
+        courses_by_id = {c['course_id']: c for c in all_courses}
+        sched_by_lid = Counter(e.get('professor_load_id') for e in preview_entries if e.get('professor_load_id'))
+
+        unscheduled_loads = []
+        for pl_row in pc_data:
+            pcid = pl_row.get('professor_load_id') or pl_row.get('id')
+            cid = pl_row.get('course_id')
+            pid = pl_row.get('prof_id')
+            c_info = courses_by_id.get(cid)
+            if not c_info:
+                continue
+            if str(c_info.get('semester') or '').strip().lower() != standard_semester.lower():
+                continue
+
+            p_info = _rel(pl_row, 'professor') or _all_profs_by_id.get(pid) or {}
+            prof_name = f"{p_info.get('first_name', '')} {p_info.get('last_name', '')}".strip() or f"Prof #{pid}"
+            c_name = c_info.get('course_name') or f"Course #{cid}"
+
+            sec_count = int(pl_row.get('sections') or 0)
+            lec_h = int(c_info.get('lecture_hours') or 0)
+            lab_h = int(c_info.get('lab_hours') or 0)
+            ilp_h = int(float(c_info.get('ilp_hours') or 0))
+
+            expected_per_sec = (1 if lec_h > 0 else 0) + (1 if lab_h > 0 else 0) + (1 if ilp_h > 0 else 0)
+            total_expected_sessions = expected_per_sec * sec_count
+            actual_sessions = sched_by_lid.get(pcid, 0)
+
+            if actual_sessions < total_expected_sessions or (total_expected_sessions == 0 and sec_count > 0):
+                assigned_secs = [
+                    sec_name for (sec_name, sec_cid), l_item in section_course_assignment.items()
+                    if sec_cid == cid and (l_item.get('professor_load_id') == pcid or (l_item.get('prof_id') == pid and l_item.get('course_id') == cid))
+                ]
+                sec_disp = ", ".join(sorted(set(assigned_secs))) if assigned_secs else "Unassigned (No matching section)"
+
+                if total_expected_sessions == 0:
+                    reason_desc = "Course has 0 hours defined in curriculum"
+                elif not assigned_secs:
+                    reason_desc = "No matching section found for curriculum year level or specialization track"
+                elif actual_sessions == 0:
+                    reason_desc = "No free room, professor timeslot conflict, or daily cutoff prevented placement"
+                else:
+                    reason_desc = f"Partial placement: {actual_sessions} placed, {total_expected_sessions - actual_sessions} session(s) blocked by room or faculty conflicts"
+
+                unscheduled_loads.append({
+                    'professor_load_id': pcid,
+                    'prof_id': pid,
+                    'professor': prof_name,
+                    'course_id': cid,
+                    'course': c_name,
+                    'section': sec_disp,
+                    'placed': actual_sessions,
+                    'required': total_expected_sessions,
+                    'reason': reason_desc
+                })
+
+        session['unscheduled_loads'] = unscheduled_loads
+        if unscheduled_loads:
+            for item in unscheduled_loads:
+                generation_warnings.append(
+                    f"Unscheduled Load: {item['professor']} - {item['course']} ({item['section']}): {item['placed']}/{item['required']} sessions placed. Reason: {item['reason']}"
+                )
 
         for idx, entry in enumerate(preview_entries, start=1):
             entry['id'] = idx
@@ -9499,7 +9139,7 @@ def edit_preview_entry():
         c = _rel(pc_row, 'course') or {}
         course_name = c.get('course_name') or f"Course #{course_id_int}"
         p = _rel(pc_row, 'professor') or {}
-        prof_name = f"{p.get('first_name','') or ''} {p.get('last_name','') or ''}".strip() or 'Professor A'
+        prof_name = f"{p.get('first_name','') or ''} {p.get('last_name','') or ''}".strip() or ''
 
         section = (data.get('section') or target_entry.get('section') or '').strip()
         if not section:

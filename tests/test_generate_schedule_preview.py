@@ -2346,6 +2346,197 @@ def test_confirm_preview_nulls_unresolvable_load_id_to_prevent_fk_violation(monk
     assert rows[0].get('professor_load_id') is None
 
 
+def test_major_matches_tracks_and_abbreviations():
+    """Verify _major_matches handles all track names, aliases, and track tags like (WST), (DST), (NST)."""
+    # Web Systems track
+    assert app_module._major_matches('Web', 'Web Systems')
+    assert app_module._major_matches('Web Development', 'Web Systems')
+    assert app_module._major_matches('Web Systems', 'Web Systems')
+    assert app_module._major_matches('wst', 'Web Systems')
+    assert app_module._major_matches('IT-CAP01 (WST)', 'Web Systems')
+    assert app_module._major_matches('Web Systems', 'Web')
+    assert app_module._major_matches('Web Systems', 'Web Development')
+
+    # Database Systems track
+    assert app_module._major_matches('Database', 'Database Systems')
+    assert app_module._major_matches('Database Systems', 'Database Systems')
+    assert app_module._major_matches('dst', 'Database Systems')
+    assert app_module._major_matches('IT-CAP01 (DST)', 'Database Systems')
+    assert app_module._major_matches('Database Systems', 'Database')
+
+    # Networking track
+    assert app_module._major_matches('Networking', 'Networking')
+    assert app_module._major_matches('net', 'Networking')
+    assert app_module._major_matches('nst', 'Networking')
+    assert app_module._major_matches('IT-CAP01 (NST)', 'Networking')
+
+    # General courses
+    assert app_module._major_matches('General', 'Web Systems')
+    assert app_module._major_matches('General', 'Database Systems')
+    assert app_module._major_matches('General', 'Networking')
+    assert app_module._major_matches(None, 'Web Systems')
+    assert app_module._major_matches('', 'Web Systems')
+
+    # Cross-track mismatches
+    assert not app_module._major_matches('Web Systems', 'Database Systems')
+    assert not app_module._major_matches('Database Systems', 'Networking')
+    assert not app_module._major_matches('Networking', 'Web Systems')
+
+
+def test_generate_schedule_with_specialized_tracks_and_loads(monkeypatch):
+    """Verify that specialized courses (e.g. IT-CAP01 (WST)) produce sessions for sections of their specialization."""
+    client = app_module.app.test_client()
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+
+    mock_courses = [
+        {'course_id': 74, 'course_name': 'IT-CAP01 (WST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'major': 'Web', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
+        {'course_id': 50, 'course_name': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'major': 'General', 'lecture_hours': 2, 'lab_hours': 2, 'ilp_hours': 1, 'program_id': 1},
+    ]
+    mock_loads = [
+        {'professor_load_id': 105, 'course_id': 74, 'prof_id': 22, 'sections': 1, 'professor': {'first_name': 'Alexander', 'last_name': 'Cochanco', 'max_hours': 25}},
+        {'professor_load_id': 91, 'course_id': 50, 'prof_id': 19, 'sections': 1, 'professor': {'first_name': 'Christian', 'last_name': 'Tambio', 'max_hours': 25}},
+    ]
+    mock_profs = [
+        {'prof_id': 22, 'first_name': 'Alexander', 'last_name': 'Cochanco', 'max_hours': 25, 'academic_ranking': {'has_cutoff': True, 'max_hours': 25}},
+        {'prof_id': 19, 'first_name': 'Christian', 'last_name': 'Tambio', 'max_hours': 25, 'academic_ranking': {'has_cutoff': True, 'max_hours': 25}},
+    ]
+    mock_rooms = [
+        {'room_id': 301, 'room_name': 'Room 301', 'room_type': 'Lecture', 'program_id': 1},
+        {'room_id': 201, 'room_name': 'Lab 1', 'room_type': 'Laboratory', 'program_id': 1},
+    ]
+
+    class SpecSupabase(FakeSupabase):
+        def table(self, table_name):
+            class SpecQuery(FakeQuery):
+                def execute(self_inner):
+                    if self_inner.table_name == 'course':
+                        return FakeResponse(mock_courses)
+                    elif self_inner.table_name == 'professor_load':
+                        return FakeResponse(mock_loads)
+                    elif self_inner.table_name == 'professor':
+                        return FakeResponse(mock_profs)
+                    elif self_inner.table_name == 'room':
+                        return FakeResponse(mock_rooms)
+                    elif self_inner.table_name == 'timeslot':
+                        return FakeResponse([
+                            {'day': 'Monday', 'start_time': '08:00:00', 'end_time': '09:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Monday', 'start_time': '09:00:00', 'end_time': '10:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Monday', 'start_time': '10:00:00', 'end_time': '11:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Monday', 'start_time': '11:00:00', 'end_time': '12:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Monday', 'start_time': '13:00:00', 'end_time': '14:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Monday', 'start_time': '14:00:00', 'end_time': '15:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Monday', 'start_time': '15:00:00', 'end_time': '16:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '09:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Tuesday', 'start_time': '09:00:00', 'end_time': '10:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Tuesday', 'start_time': '10:00:00', 'end_time': '11:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Tuesday', 'start_time': '11:00:00', 'end_time': '12:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Tuesday', 'start_time': '13:00:00', 'end_time': '14:00:00', 'professor_cutoff': '17:00:00'},
+                            {'day': 'Tuesday', 'start_time': '14:00:00', 'end_time': '15:00:00', 'professor_cutoff': '17:00:00'},
+                        ])
+                    return super().execute()
+            return SpecQuery(table_name)
+
+    monkeypatch.setattr(app_module, 'supabase', SpecSupabase())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'BSIT')
+    monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+    monkeypatch.setattr(app_module, 'calculate_semester_section_counts', lambda **kwargs: {
+        'valid': True,
+        'breakdown': [
+            {
+                'year_level': 3,
+                'is_specialized': True,
+                'specialization_groups': [
+                    {'specialization': 'Web Systems', 'section_names': ['3A-Web Systems'], 'section_count': 1}
+                ]
+            }
+        ]
+    })
+
+    resp = client.post('/generate_schedule', data={'semester': '2nd Semester'})
+    assert resp.status_code == 200
+
+    with client.session_transaction() as sess:
+        preview = app_module._get_preview_for_user(sess.get('user_id'), sess.get('preview_id'))
+    cap_entries = [e for e in preview if e.get('course_id') == 74]
+    assert len(cap_entries) == 1
+    assert cap_entries[0]['section'] == '3A-Web Systems'
+    assert cap_entries[0]['prof_id'] == 22
+    assert cap_entries[0]['session_type'] == 'Lecture'
+
+
+def test_generate_schedule_reports_unscheduled_loads(monkeypatch):
+    """Verify that when a professor_load cannot be scheduled, it is reported in unscheduled_loads without silent skipping."""
+    client = app_module.app.test_client()
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'tester'
+        session['role'] = 'Scheduler'
+
+    mock_courses = [
+        # Course with 0 hours
+        {'course_id': 999, 'course_name': 'ZERO-01', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
+    ]
+    mock_loads = [
+        {'professor_load_id': 888, 'course_id': 999, 'prof_id': 1, 'sections': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 25}},
+    ]
+    mock_profs = [
+        {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 25, 'academic_ranking': {'has_cutoff': True, 'max_hours': 25}},
+    ]
+    mock_rooms = [
+        {'room_id': 301, 'room_name': 'Room 301', 'room_type': 'Lecture', 'program_id': 1},
+    ]
+
+    class UnscheduledSupabase(FakeSupabase):
+        def table(self, table_name):
+            class UnscheduledQuery(FakeQuery):
+                def execute(self_inner):
+                    if self_inner.table_name == 'course':
+                        return FakeResponse(mock_courses)
+                    elif self_inner.table_name == 'professor_load':
+                        return FakeResponse(mock_loads)
+                    elif self_inner.table_name == 'professor':
+                        return FakeResponse(mock_profs)
+                    elif self_inner.table_name == 'room':
+                        return FakeResponse(mock_rooms)
+                    elif self_inner.table_name == 'timeslot':
+                        return FakeResponse([
+                            {'day': 'Monday', 'start_time': '08:00:00', 'end_time': '09:00:00', 'professor_cutoff': '17:00:00'},
+                        ])
+                    return super().execute()
+            return UnscheduledQuery(table_name)
+
+    monkeypatch.setattr(app_module, 'supabase', UnscheduledSupabase())
+    monkeypatch.setattr(app_module, '_get_department', lambda: 'BSIT')
+    monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+    monkeypatch.setattr(app_module, 'calculate_semester_section_counts', lambda **kwargs: {
+        'valid': True,
+        'breakdown': [
+            {
+                'year_level': 1,
+                'is_specialized': False,
+                'section_names': ['1A'],
+                'section_count': 1
+            }
+        ]
+    })
+
+    resp = client.post('/generate_schedule', data={'semester': '1st Semester'})
+    assert resp.status_code == 200
+
+    with client.session_transaction() as sess:
+        unscheduled = sess.get('unscheduled_loads', [])
+        assert len(unscheduled) == 1
+        assert unscheduled[0]['course'] == 'ZERO-01'
+        assert unscheduled[0]['professor'] == 'Alan Turing'
+        assert unscheduled[0]['placed'] == 0
+
+
+
 
 
 
