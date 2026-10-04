@@ -48,7 +48,7 @@
                     </li>
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{{ url_for('profile') }}"><i class="bx bx-user me-2"></i>Profile</a></li>
-                    {% if session.get('role', '') | lower in ['admin', 'scheduler'] %}
+                    {% if (session.get('role', '') or '') | lower in ['admin', 'super_admin', 'super admin'] %}
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <a class="dropdown-item" href="{{ url_for('backup_database') }}" id="btn-backup-db">
@@ -69,36 +69,25 @@
     </header>
 
     <aside class="sidebar" id="nav-bar">
+        {% set raw_role = (session.get('role', '') or '') | lower %}
+        {% if raw_role in ['super_admin', 'super admin', 'admin'] %}
+            {% set user_role_norm = 'admin' %}
+        {% elif raw_role in ['scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'] %}
+            {% set user_role_norm = 'scheduler' %}
+        {% elif raw_role in ['viewer', 'instructor', 'guest'] %}
+            {% set user_role_norm = 'viewer' %}
+        {% else %}
+            {% set user_role_norm = 'viewer' %}
+        {% endif %}
         <div class="sidebar__brand">
-            <a href="/" class="sidebar__logo">
+            <a href="{% if user_role_norm == 'admin' %}/schedules{% else %}/{% endif %}" class="sidebar__logo">
                 <i class="bx bx-calendar-alt sidebar__logo-icon"></i>
                 <span class="sidebar__logo-text">Scheduler</span>
             </a>
         </div>
         <nav class="sidebar__nav">
-            {% set user_role_lower = (session.get('role', '') or '') | lower %}
-            
-            {# ── SCHEDULER: Exactly four tabs ── #}
-            {% if user_role_lower == 'scheduler' %}
-            <a href="/" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Schedule Generation">
-                <i class="bx bx-calendar-plus sidebar__icon"></i>
-                <span class="sidebar__label">Schedule Generation</span>
-            </a>
-            <a href="/schedules" class="sidebar__link {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Schedule">
-                <i class="bx bx-grid-alt sidebar__icon"></i>
-                <span class="sidebar__label">Schedule</span>
-            </a>
-            <a href="/professor_schedule" class="sidebar__link {% if active_page == 'professor_schedule' %}sidebar__link--active{% endif %}" title="Professor Schedule">
-                <i class="bx bx-user sidebar__icon"></i>
-                <span class="sidebar__label">Professor Schedule</span>
-            </a>
-            <a href="/room_schedule" class="sidebar__link {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
-                <i class="bx bx-building sidebar__icon"></i>
-                <span class="sidebar__label">Room Schedule</span>
-            </a>
-
-            {# ── SUPER ADMIN / ADMIN: Full system access ── #}
-            {% else %}
+            {# ── SCHEDULER ROLE ── #}
+            {% if user_role_norm == 'scheduler' %}
             <a href="/" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Generate Schedule">
                 <i class="bx bx-calendar-plus sidebar__icon"></i>
                 <span class="sidebar__label">Generate Schedule</span>
@@ -128,7 +117,36 @@
                 <span class="sidebar__label">Timeslots</span>
             </a>
             
-            <!-- Schedules Dropdown -->
+            <!-- Schedules Dropdown for Scheduler -->
+            <div class="sidebar__dropdown" id="schedules-dropdown">
+                <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
+                    <i class="bx bx-grid-alt sidebar__icon"></i>
+                    <span class="sidebar__label">Schedules</span>
+                    <i class="bx bx-chevron-down sidebar__chevron {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__chevron--expanded{% endif %}"></i>
+                </a>
+                <div class="sidebar__submenu {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__submenu--expanded{% endif %}" id="schedules-submenu">
+                    <a href="/schedules" class="sidebar__link sidebar__link--submenu {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
+                        <i class="bx bx-grid-alt sidebar__icon"></i>
+                        <span class="sidebar__label">Section Schedule</span>
+                    </a>
+                    <a href="/professor_schedule" class="sidebar__link sidebar__link--submenu {% if active_page == 'professor_schedule' %}sidebar__link--active{% endif %}" title="Professor Schedule">
+                        <i class="bx bx-user sidebar__icon"></i>
+                        <span class="sidebar__label">Professor Schedule</span>
+                    </a>
+                    <a href="/room_schedule" class="sidebar__link sidebar__link--submenu {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
+                        <i class="bx bx-building sidebar__icon"></i>
+                        <span class="sidebar__label">Room Schedule</span>
+                    </a>
+                    <a href="/schedule_archive" class="sidebar__link sidebar__link--submenu {% if active_page == 'schedule_archive' %}sidebar__link--active{% endif %}" title="Schedule Archive">
+                        <i class="bx bx-archive sidebar__icon"></i>
+                        <span class="sidebar__label">Schedule Archive</span>
+                    </a>
+                </div>
+            </div>
+
+            {# ── ADMIN ROLE ── #}
+            {% elif user_role_norm == 'admin' %}
+            <!-- Schedules Dropdown for Admin -->
             <div class="sidebar__dropdown" id="schedules-dropdown">
                 <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
                     <i class="bx bx-grid-alt sidebar__icon"></i>
@@ -163,6 +181,35 @@
                 <i class="bx bx-history sidebar__icon"></i>
                 <span class="sidebar__label">Activity Log</span>
             </a>
+
+            {# ── VIEWER ROLE / DEFAULT ── #}
+            {% else %}
+            <!-- Schedules Dropdown for Viewer -->
+            <div class="sidebar__dropdown" id="schedules-dropdown">
+                <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
+                    <i class="bx bx-grid-alt sidebar__icon"></i>
+                    <span class="sidebar__label">Schedules</span>
+                    <i class="bx bx-chevron-down sidebar__chevron {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__chevron--expanded{% endif %}"></i>
+                </a>
+                <div class="sidebar__submenu {% if active_page in ['schedules', 'professor_schedule', 'room_schedule', 'schedule_archive'] %}sidebar__submenu--expanded{% endif %}" id="schedules-submenu">
+                    <a href="/schedules" class="sidebar__link sidebar__link--submenu {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
+                        <i class="bx bx-grid-alt sidebar__icon"></i>
+                        <span class="sidebar__label">Section Schedule</span>
+                    </a>
+                    <a href="/professor_schedule" class="sidebar__link sidebar__link--submenu {% if active_page == 'professor_schedule' %}sidebar__link--active{% endif %}" title="Professor Schedule">
+                        <i class="bx bx-user sidebar__icon"></i>
+                        <span class="sidebar__label">Professor Schedule</span>
+                    </a>
+                    <a href="/room_schedule" class="sidebar__link sidebar__link--submenu {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
+                        <i class="bx bx-building sidebar__icon"></i>
+                        <span class="sidebar__label">Room Schedule</span>
+                    </a>
+                    <a href="/schedule_archive" class="sidebar__link sidebar__link--submenu {% if active_page == 'schedule_archive' %}sidebar__link--active{% endif %}" title="Schedule Archive">
+                        <i class="bx bx-archive sidebar__icon"></i>
+                        <span class="sidebar__label">Schedule Archive</span>
+                    </a>
+                </div>
+            </div>
             {% endif %}
         </nav>
         <div class="sidebar__footer">

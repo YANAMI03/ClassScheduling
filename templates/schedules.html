@@ -3,6 +3,8 @@
 {% block header_title %}<h5 class="header__title">Section Schedule</h5>{% endblock %}
 
 {% block content %}
+{% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set can_edit_schedule = user_role_lower in ['scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'] %}
 <div class="page-header">
     <div>
         <h1 class="page-title">Section Schedule</h1>
@@ -12,7 +14,7 @@
         <a href="/schedule_archive" class="btn btn-outline-secondary">
             <i class="bx bx-archive"></i> Archive History
         </a>
-        {% if user_role != 'Viewer' %}
+        {% if can_edit_schedule %}
         {% if sections_with_entries or sections %}
         <form action="/archive_schedule" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to archive the current active schedule? This will set its status to archived and allow generating a new schedule.');">
             <button type="submit" class="btn btn-warning text-dark" id="btn-archive-schedule" title="Archive currently active schedule">
@@ -122,7 +124,7 @@
                                     <a href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Section Timetable Schedule">
                                         <i class="bx bx-calendar"></i> View Schedule
                                     </a>
-                                    {% if user_role != 'Viewer' %}
+                                    {% if can_edit_schedule %}
                                     <button type="button" class="btn btn-outline-secondary btn-sm stop-prop edit-schedule-btn"
                                             data-section="{{ item.section.section }}"
                                             data-year="{{ item.section.year_level }}"
@@ -146,7 +148,7 @@
                                             <th>Room</th>
                                             <th>Timeslot</th>
                                             <th>Type</th>
-                                            {% if user_role != 'Viewer' %}
+                                            {% if can_edit_schedule %}
                                             <th class="text-end">Actions</th>
                                             {% endif %}
                                         </tr>
@@ -175,7 +177,7 @@
                                                         {{ entry.session_type or 'TBA' }}
                                                     </span>
                                                 </td>
-                                                {% if user_role != 'Viewer' %}
+                                                {% if can_edit_schedule %}
                                                 <td class="text-end align-middle">
                                                     <a href="/delete_schedule/{{ entry.schedule_id }}?section_name={{ item.section.section }}&semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-danger btn-sm stop-prop" data-confirm="Delete this schedule entry?" title="Delete Entry">
                                                         <i class="bx bx-trash"></i> Delete
@@ -186,7 +188,7 @@
                                             {% endfor %}
                                         {% else %}
                                             <tr>
-                                                <td colspan="{% if user_role != 'Viewer' %}6{% else %}5{% endif %}">
+                                                <td colspan="{% if can_edit_schedule %}6{% else %}5{% endif %}">
                                                     <div class="empty-state py-3">
                                                         <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
                                                         <div class="empty-state__text">No schedule entries found for this section</div>
@@ -219,7 +221,7 @@
             There is currently no active schedule for this program. You can generate a new schedule for either semester or restore an archived schedule version.
         </p>
         <div class="d-flex justify-content-center gap-2">
-            {% if user_role != 'Viewer' %}
+            {% if can_edit_schedule %}
             <a href="/" class="btn btn-primary">
                 <i class="bx bx-plus-circle me-1"></i> Generate New Schedule
             </a>
@@ -232,6 +234,7 @@
 </div>
 {% endif %}
 
+{% if can_edit_schedule %}
 <div class="modal fade" id="deleteAllModal" tabindex="-1" aria-labelledby="deleteAllModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -301,6 +304,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

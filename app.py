@@ -12,6 +12,7 @@ import math
 import random
 import uuid
 import re
+import io
 from collections import Counter
 
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ from excel_export import (
     set_section_theme,
     get_all_section_themes
 )
+import professor_load_importer
 
 SUPABASE_URL: str = os.environ.get("SUPABASE_URL")
 # Anon / public key only. `SUPABASE_PUBLISHABLE_KEY` is the newer name for the
@@ -278,6 +280,16 @@ def handle_postgrest_error(err):
         return _expire_session()
     return jsonify({'error': str(getattr(err, 'message', None) or err)}), 500
 
+from werkzeug.exceptions import HTTPException
+
+@app.errorhandler(HTTPException)
+def handle_import_http_exception(e):
+    if request.path.startswith('/professor_load/import'):
+        code = getattr(e, 'code', 500)
+        desc = getattr(e, 'description', str(e))
+        return jsonify({'ok': False, 'success': False, 'error': desc}), code
+    return e
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -286,83 +298,106 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        role = (session.get('role') or '').lower()
-        if role not in ('admin', 'super_admin'):
-            flash('Access denied. Administrator privileges required.', 'error')
-            return redirect(url_for('schedules'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def super_admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        role = (session.get('role') or '').lower()
-        if role not in ('admin', 'super_admin'):
-            flash('Access denied. Super Administrator privileges required.', 'error')
-            return redirect(url_for('schedules'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def dean_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        role = (session.get('role') or '').lower()
-        if role in ('admin', 'super_admin', 'dean', 'chair', 'dean/chair'):
-            return f(*args, **kwargs)
-        if role == 'scheduler' and request.method in ('GET', 'HEAD'):
-            return f(*args, **kwargs)
-        flash('Access denied. Dean or Administrator privileges required.', 'error')
-        return redirect(url_for('schedules'))
-    return decorated_function
-
-def scheduler_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        role = (session.get('role') or '').lower()
-        if role not in ('admin', 'super_admin', 'dean', 'chair', 'dean/chair', 'scheduler'):
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def scheduler_only_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        role = (session.get('role') or '').lower()
-        if role not in ('admin', 'super_admin', 'scheduler'):
-            flash('Access denied. Only Schedulers can generate schedules.', 'error')
-            return redirect(url_for('schedules'))
-        return f(*args, **kwargs)
-    return decorated_function
+def _normalize_role(role_val):
+    if not role_val:
+        return ''
+    r = str(role_val).strip().lower().replace(' ', '_').replace('-', '_')
+    if r in ('super_admin', 'superadmin', 'administrator', 'admin'):
+        return 'admin'
+    if r in ('scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'):
+        return 'scheduler'
+    if r in ('viewer', 'instructor', 'guest'):
+        return 'viewer'
+    return r
 
 
-def role_required(allowed_roles):
-    """Decorator factory — returns 403 if the current user's role is not in allowed_roles.
-    Role comparison is case-insensitive for robustness."""
+def _is_ajax_or_api_request():
+    """Detect whether this request expects a JSON or API response."""
+    if request.is_json:
+        return True
+    path = request.path.lower()
+    if path.startswith('/api/') or '/import/' in path or path.startswith('/admin/delete_requests/'):
+        return True
+    if path.startswith('/search_'):
+        return True
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return True
+    accept = (request.headers.get('Accept') or '').lower()
+    if 'application/json' in accept:
+        return True
+    # If method is not GET/HEAD, frontend forms/fetch expect JSON or direct action response
+    if request.method not in ('GET', 'HEAD'):
+        return True
+    # Specific write endpoints that might accept GET (like /delete_course/<id>)
+    if any(path.startswith(prefix) for prefix in ('/delete_', '/restore_', '/archive_', '/edit_', '/add_')):
+        return True
+    return False
+
+
+def roles_required(*allowed_roles):
+    """
+    Role-Based Access Control decorator.
+    Enforces authorization on routes according to the system permission matrix.
+    If unauthorized:
+      - API / AJAX / write request: returns JSON {'ok': False, 'error': 'Access denied'} with status 403.
+      - HTML page navigation: renders templates/403.html with status 403.
+    """
+    flat_roles = []
+    for r in allowed_roles:
+        if isinstance(r, (list, tuple, set)):
+            flat_roles.extend(r)
+        else:
+            flat_roles.append(r)
+    normalized_allowed = {_normalize_role(r) for r in flat_roles}
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if 'user_id' not in session:
+                if _is_ajax_or_api_request():
+                    return jsonify({'ok': False, 'error': 'Authentication required'}), 401
                 return redirect(url_for('login'))
-            user_role = (session.get('role') or '').lower()
-            normalised = [r.lower() for r in allowed_roles]
-            if user_role not in normalised:
-                return jsonify({'error': 'Access denied. Insufficient permissions.'}), 403
+
+            raw_role = session.get('role', '')
+            user_role = _normalize_role(raw_role)
+
+            if user_role not in normalized_allowed:
+                logging.warning(
+                    f"RBAC Access Denied: user_id={session.get('user_id')} role='{raw_role}' "
+                    f"path='{request.path}' method='{request.method}' allowed={normalized_allowed}"
+                )
+                if _is_ajax_or_api_request():
+                    return jsonify({'ok': False, 'error': 'Access denied'}), 403
+                return render_template('403.html', active_page='403'), 403
+
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+
+def role_required(allowed_roles):
+    """Backwards compatibility wrapper for role_required."""
+    return roles_required(*allowed_roles)
+
+
+def admin_required(f):
+    return roles_required('admin')(f)
+
+
+def super_admin_required(f):
+    return roles_required('admin')(f)
+
+
+def scheduler_required(f):
+    return roles_required('scheduler')(f)
+
+
+def scheduler_only_required(f):
+    return roles_required('scheduler')(f)
+
+
+def dean_required(f):
+    return roles_required('scheduler')(f)
 
 
 def _get_programs():
@@ -1335,7 +1370,7 @@ def _get_registrar_counts_for_year(year_level=None, semester=None):
 
 
 @app.route('/api/registrar-counts')
-@login_required
+@roles_required('scheduler')
 def registrar_counts():
     """Return registrar mock data for year levels as JSON."""
     year_level = request.args.get('year_level', '')
@@ -1510,9 +1545,19 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
                     mismatch_items = [f"{cname} has {cnt} sections" for cname, cnt in grp_counts.items()]
                     errors.append(f"{yl_name} ({spec_name}): mismatched section counts - " + ", ".join(mismatch_items))
 
-                grp_sec_cnt = next(iter(grp_counts.values())) if grp_counts else 0
+                # If all courses in the track have the same section count, use that count.
+                # If there's an internal mismatch, use the representative count (most frequent or max)
+                # so the General course check computes the actual expected track total instead of collapsing to 0.
+                if len(unique_grp_counts) == 1:
+                    grp_sec_cnt = next(iter(unique_grp_counts))
+                elif grp_counts:
+                    counts_freq = Counter(grp_counts.values())
+                    grp_sec_cnt = sorted(counts_freq.keys(), key=lambda k: (counts_freq[k], k), reverse=True)[0]
+                else:
+                    grp_sec_cnt = 0
+
                 is_grp_uniform = len(unique_grp_counts) == 1 and grp_sec_cnt > 0
-                group_counts[spec_name] = grp_sec_cnt if is_grp_uniform else 0
+                group_counts[spec_name] = grp_sec_cnt
 
                 sec_names = [f"{yl}{chr(65 + i)}-{spec_name}" for i in range(grp_sec_cnt)] if is_grp_uniform else []
                 all_spec_section_names.extend(sec_names)
@@ -1542,7 +1587,13 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
                 if tot_sec == 0:
                     errors.append(f"{cname} (General) has no assigned load")
                 elif tot_sec != required_general_total:
-                    spec_sum_desc = " + ".join(f"{k}: {v}" for k, v in group_counts.items())
+                    track_descs = []
+                    for s_name in spec_groups.keys():
+                        if s_name in group_counts:
+                            s_courses = spec_groups[s_name]
+                            c_items = [f"{gc['course_name']}: {sum(l['sections'] for l in pl_by_course.get(gc['course_id'], []))}" for gc in s_courses]
+                            track_descs.append(f"{s_name}: {group_counts[s_name]} ({', '.join(c_items)})")
+                    spec_sum_desc = " + ".join(track_descs)
                     errors.append(
                         f"{yl_name} {semester}: General course {cname} has {tot_sec} sections, but requires {required_general_total} sections (sum of {spec_sum_desc})"
                     )
@@ -1605,7 +1656,7 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
 
 
 @app.route('/api/semester-section-counts')
-@login_required
+@roles_required('scheduler')
 def api_semester_section_counts():
     """Return calculated section counts and validation status derived strictly from professor_load."""
     semester = request.args.get('semester', '').strip()
@@ -1703,9 +1754,9 @@ def login():
                     log_activity('login', 'auth', session['username'])
 
                     # Redirect users to appropriate starting page
-                    user_role = (session['role'] or '').lower()
-                    if user_role in ('dean', 'chair', 'dean/chair'):
-                        return redirect(url_for('semesters'))
+                    norm_role = _normalize_role(session.get('role', ''))
+                    if norm_role in ('admin', 'viewer'):
+                        return redirect(url_for('schedules'))
                     return redirect(url_for('home'))
             except Exception as err:
                 err_str = str(err)
@@ -1828,7 +1879,7 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/profile')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def profile():
     user = None
     try:
@@ -1846,7 +1897,7 @@ def profile():
 ALLOWED_PICTURE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 
 @app.route('/upload_profile_picture', methods=['POST'])
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def upload_profile_picture():
     file = request.files.get('profile_picture')
     if not file or file.filename == '':
@@ -1924,11 +1975,13 @@ def activity_log():
                            search=search, action_filter=action_filter, target_filter=target_filter)
 
 @app.route('/add_user_columns')
+@admin_required
 def add_user_columns():
     # Schema migration is handled in Supabase; no runtime DDL required.
     return "Columns are part of the Supabase schema. You can close this page."
 
 @app.route('/set_admin_role/<email>')
+@admin_required
 def set_admin_role(email):
     try:
         supabase.table('users').update({'role': 'admin'}).eq('email', email).execute()
@@ -2160,6 +2213,7 @@ def create_user():
         return jsonify({'success': False, 'message': f'Database error: {str(err)}'}), 500
 
 @app.route('/create_test_accounts')
+@admin_required
 def create_test_accounts():
     try:
         # Test accounts credentials
@@ -2255,7 +2309,7 @@ def create_test_accounts():
         return f"Error: {err}"
 
 @app.route('/')
-@login_required
+@roles_required('scheduler')
 def home():
     user_role = (session.get('role') or '').lower()
     if user_role in ('dean', 'chair', 'dean/chair'):
@@ -2265,55 +2319,55 @@ def home():
 
 
 @app.route('/index.html')
-@login_required
+@roles_required('scheduler')
 def legacy_index_html():
     return redirect(url_for('home'))
 
 
 @app.route('/courses.html')
-@login_required
+@roles_required('scheduler')
 def legacy_courses_html():
     return redirect(url_for('show_courses'))
 
 
 @app.route('/professors.html')
-@login_required
+@roles_required('scheduler')
 def legacy_professors_html():
     return redirect(url_for('professors'))
 
 
 @app.route('/section.html')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def legacy_section_html():
-    return redirect(url_for('sections'))
+    return redirect(url_for('schedules'))
 
 
 @app.route('/room.html')
-@login_required
+@roles_required('scheduler')
 def legacy_room_html():
     return redirect(url_for('rooms'))
 
 
 @app.route('/timeslot.html')
-@login_required
+@roles_required('scheduler')
 def legacy_timeslot_html():
     return redirect(url_for('timeslot'))
 
 
 @app.route('/schedules.html')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def legacy_schedules_html():
     return redirect(url_for('schedules'))
 
 
 @app.route('/generated_schedule.html')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def legacy_generated_schedule_html():
     return redirect(url_for('schedules'))
 
 
 @app.route('/schedule.html')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def legacy_schedule_html():
     return redirect(url_for('schedules'))
 #-------------------------------------------------------add_course----------------------------------------------------------------------------------------------
@@ -2460,7 +2514,7 @@ def show_courses():
 
 #-------------------------------------------------------search_courses----------------------------------------------------------------------------------------------
 @app.route('/search_courses', methods=['GET'])
-@login_required
+@roles_required('scheduler')
 def search_courses():
     query_str = request.args.get('q', '').strip()
     user_program = session.get('program', '')
@@ -2509,7 +2563,7 @@ def search_courses():
 
 
 @app.route('/api/courses')
-@login_required
+@roles_required('scheduler')
 def api_courses():
     user_role = (session.get('role') or 'scheduler').lower()
     user_program = session.get('program', '')
@@ -2557,7 +2611,7 @@ def api_courses():
 
 
 @app.route('/api/professor_load/<int:prof_id>')
-@login_required
+@roles_required('scheduler')
 def api_professor_load(prof_id):
     try:
         rows = []
@@ -3140,7 +3194,7 @@ def delete_academic_ranking(ranking_id):
         return redirect(url_for('academic_ranking'))
 
 @app.route('/api/academic_rankings', methods=['GET'])
-@login_required
+@roles_required('scheduler')
 def api_academic_rankings():
     user_role = (session.get('role') or 'scheduler').lower()
     user_program = session.get('program', '').strip()
@@ -3207,7 +3261,7 @@ def rooms():
 
 #-------------------------------------------------------search_rooms----------------------------------------------------------------------------------------------
 @app.route('/search_rooms', methods=['GET'])
-@login_required
+@roles_required('scheduler')
 def search_rooms():
     query_str = request.args.get('q', '').strip()
     user_prog_id = _get_user_program_id()
@@ -3780,6 +3834,252 @@ def delete_professor_load(professor_load_id):
         return redirect(url_for('professor_load'))
     except Exception as err:
         return f"Error: {err}"
+#-------------------------------------------------------professor_load_import----------------------------------------------------------------------------------------------
+_PROFESSOR_LOAD_IMPORT_CACHE = {}
+
+def _cleanup_import_cache():
+    now = time.time()
+    expired = [k for k, v in _PROFESSOR_LOAD_IMPORT_CACHE.items() if now - v.get('timestamp', 0) > 3600]
+    for k in expired:
+        _PROFESSOR_LOAD_IMPORT_CACHE.pop(k, None)
+
+def _fetch_professor_load_import_context():
+    user_prog_id = _get_user_program_id()
+    user_role = (session.get('role') or '').lower()
+    is_super_admin = user_role in ('super_admin', 'admin')
+
+    # 1. Fetch professors
+    cols_p = 'prof_id, first_name, last_name, specialization, program_id, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)'
+    try:
+        q = supabase.table('professor').select(cols_p)
+        if not is_super_admin and user_prog_id:
+            q = q.eq('program_id', user_prog_id)
+        professors = q.execute().data or []
+    except Exception:
+        try:
+            q = supabase.table('professor').select('prof_id, first_name, last_name, specialization, program_id')
+            if not is_super_admin and user_prog_id:
+                q = q.eq('program_id', user_prog_id)
+            professors = q.execute().data or []
+        except Exception:
+            professors = []
+
+    # 2. Fetch courses
+    cols_c = 'course_id, course_name, program_id, year_level, lecture_hours, lab_hours, ilp_hours, units, semester'
+    try:
+        cq = supabase.table('course').select(cols_c)
+        if not is_super_admin and user_prog_id:
+            cq = cq.eq('program_id', user_prog_id)
+        courses = cq.execute().data or []
+    except Exception:
+        try:
+            cq = supabase.table('course').select('*')
+            if not is_super_admin and user_prog_id:
+                cq = cq.eq('program_id', user_prog_id)
+            courses = cq.execute().data or []
+        except Exception:
+            courses = []
+
+    # 3. Fetch existing professor loads
+    cols_pc = 'id, prof_id, course_id, sections, course(course_name, lecture_hours, lab_hours, ilp_hours, units)'
+    try:
+        existing_loads = supabase.table('professor_load').select(cols_pc).execute().data or []
+    except Exception:
+        try:
+            existing_loads = supabase.table('professor_load').select('id, prof_id, course_id, sections').execute().data or []
+        except Exception:
+            existing_loads = []
+
+    return professors, courses, existing_loads
+
+def _check_import_access():
+    if 'user_id' not in session:
+        return False, "Authentication required. Please log in."
+    role = session.get('role', '')
+    if _normalize_role(role) != 'scheduler':
+        return False, "Access denied. Insufficient permissions to import professor load."
+    return True, None
+
+@app.route('/professor_load/import/template', methods=['GET'])
+@roles_required('scheduler')
+def professor_load_import_template():
+    allowed, msg = _check_import_access()
+    if not allowed:
+        flash(msg, 'error')
+        return redirect(url_for('professor_load'))
+    xlsx_bytes = professor_load_importer.generate_import_template_xlsx()
+    return send_file(
+        io.BytesIO(xlsx_bytes),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='professor_load_template.xlsx'
+    )
+
+@app.route('/professor_load/import/preview', methods=['POST'])
+@roles_required('scheduler')
+def professor_load_import_preview():
+    try:
+        allowed, msg = _check_import_access()
+        if not allowed:
+            return jsonify({'ok': False, 'success': False, 'error': msg}), 403
+
+        if 'file' not in request.files:
+            return jsonify({'ok': False, 'success': False, 'error': 'No file uploaded.'}), 400
+
+        file = request.files['file']
+        if not file or not (file.filename or '').strip():
+            return jsonify({'ok': False, 'success': False, 'error': 'No file uploaded.'}), 400
+
+        filename = secure_filename(file.filename or '')
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in ('.xlsx', '.csv'):
+            return jsonify({'ok': False, 'success': False, 'error': 'Unsupported file type. Invalid file format. Please upload .xlsx or .csv.'}), 400
+
+        file_bytes = file.read()
+        if len(file_bytes) == 0:
+            return jsonify({'ok': False, 'success': False, 'error': 'The uploaded file is empty.'}), 400
+        if len(file_bytes) > professor_load_importer.MAX_IMPORT_FILE_SIZE:
+            return jsonify({'ok': False, 'success': False, 'error': 'File size exceeds maximum allowed limit of 5 MB.'}), 413
+
+        _cleanup_import_cache()
+
+        data_rows, dividers, parse_errors = professor_load_importer.parse_import_file(file_bytes, filename)
+        if parse_errors:
+            return jsonify({'ok': False, 'success': False, 'error': parse_errors[0]}), 400
+
+        professors, courses, existing_loads = _fetch_professor_load_import_context()
+
+        validation_result = professor_load_importer.validate_import_data(
+            data_rows, dividers, professors, courses, existing_loads
+        )
+
+        token = str(uuid.uuid4())
+        _PROFESSOR_LOAD_IMPORT_CACHE[token] = {
+            'bytes': file_bytes,
+            'filename': filename,
+            'timestamp': time.time(),
+            'user_id': session.get('user_id'),
+        }
+
+        sanitized_rows = []
+        for r in validation_result['rows']:
+            item = dict(r)
+            item.pop('matched_course_info', None)
+            item.pop('matched_prof_info', None)
+            sanitized_rows.append(item)
+
+        return jsonify({
+            'ok': True,
+            'success': True,
+            'token': token,
+            'filename': filename,
+            'summary': validation_result['summary'],
+            'rows': sanitized_rows,
+            'course_section_totals': validation_result['course_section_totals'],
+            'professor_workloads': validation_result['professor_workloads'],
+        })
+    except Exception as e:
+        logging.exception("Unhandled error in professor_load_import_preview")
+        return jsonify({'ok': False, 'success': False, 'error': f"Failed to preview import file: {str(e)}"}), 500
+
+@app.route('/professor_load/import/confirm', methods=['POST'])
+@roles_required('scheduler')
+def professor_load_import_confirm():
+    try:
+        allowed, msg = _check_import_access()
+        if not allowed:
+            return jsonify({'ok': False, 'success': False, 'error': msg}), 403
+
+        token = request.form.get('token') or (request.json.get('token') if request.is_json else None)
+        if not token or token not in _PROFESSOR_LOAD_IMPORT_CACHE:
+            return jsonify({'ok': False, 'success': False, 'error': 'Import session expired or invalid. Please re-upload your file.'}), 400
+
+        cache_entry = _PROFESSOR_LOAD_IMPORT_CACHE[token]
+        file_bytes = cache_entry['bytes']
+        filename = cache_entry['filename']
+
+        data_rows, dividers, parse_errors = professor_load_importer.parse_import_file(file_bytes, filename)
+        if parse_errors:
+            return jsonify({'ok': False, 'success': False, 'error': parse_errors[0]}), 400
+
+        professors, courses, existing_loads = _fetch_professor_load_import_context()
+        validation_result = professor_load_importer.validate_import_data(
+            data_rows, dividers, professors, courses, existing_loads
+        )
+
+        valid_rows = [r for r in validation_result['rows'] if r['status'] in ("Ready", "Updated", "Warning")]
+        if not valid_rows:
+            return jsonify({'ok': False, 'success': False, 'error': 'No valid rows to import. All rows contain errors.'}), 400
+
+        updated_cnt, inserted_cnt, bulk_errors = professor_load_importer.execute_bulk_import(
+            supabase, valid_rows, existing_loads
+        )
+
+        if bulk_errors:
+            logging.error(f"Bulk import database error: {bulk_errors}")
+            return jsonify({'ok': False, 'success': False, 'error': f"Database write failed: {bulk_errors[0]}"}), 500
+
+        total_imported = updated_cnt + inserted_cnt
+        total_skipped = validation_result['summary']['error_count']
+
+        log_activity(
+            'import',
+            'professor_load',
+            f'Imported {total_imported} course assignments ({inserted_cnt} new, {updated_cnt} updated, {total_skipped} skipped) from {filename}'
+        )
+
+        _PROFESSOR_LOAD_IMPORT_CACHE.pop(token, None)
+
+        return jsonify({
+            'ok': True,
+            'success': True,
+            'imported_count': total_imported,
+            'new_count': inserted_cnt,
+            'updated_count': updated_cnt,
+            'skipped_count': total_skipped,
+            'message': f'Successfully imported {total_imported} assignments ({inserted_cnt} new, {updated_cnt} updated). {total_skipped} rows skipped.'
+        })
+    except Exception as e:
+        logging.exception("Unhandled error in professor_load_import_confirm")
+        return jsonify({'ok': False, 'success': False, 'error': f"Database write failed: {str(e)}"}), 500
+
+@app.route('/professor_load/import/error-report', methods=['POST'])
+@roles_required('scheduler')
+def professor_load_import_error_report():
+    try:
+        allowed, msg = _check_import_access()
+        if not allowed:
+            return jsonify({'ok': False, 'success': False, 'error': msg}), 403
+
+        token = request.form.get('token') or (request.json.get('token') if request.is_json else None)
+        if not token or token not in _PROFESSOR_LOAD_IMPORT_CACHE:
+            return jsonify({'ok': False, 'success': False, 'error': 'Import session expired or invalid.'}), 400
+
+        cache_entry = _PROFESSOR_LOAD_IMPORT_CACHE[token]
+        file_bytes = cache_entry['bytes']
+        filename = cache_entry['filename']
+
+        data_rows, dividers, parse_errors = professor_load_importer.parse_import_file(file_bytes, filename)
+        if parse_errors:
+            return jsonify({'ok': False, 'success': False, 'error': parse_errors[0]}), 400
+
+        professors, courses, existing_loads = _fetch_professor_load_import_context()
+        validation_result = professor_load_importer.validate_import_data(
+            data_rows, dividers, professors, courses, existing_loads
+        )
+
+        error_rows = [r for r in validation_result['rows'] if r['status'] == "Error"]
+        xlsx_bytes = professor_load_importer.generate_error_report_xlsx(error_rows)
+
+        return send_file(
+            io.BytesIO(xlsx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='import_error_report.xlsx'
+        )
+    except Exception as e:
+        logging.exception("Unhandled error in professor_load_import_error_report")
+        return jsonify({'ok': False, 'success': False, 'error': f"Failed to generate error report: {str(e)}"}), 500
 #-------------------------------------------------------time helpers----------------------------------------------------------------------------------------------
 def _format_time(value):
     # Format a timedelta or time-like object/string as a 12-hour clock string (HH:MM AM/PM)
@@ -5059,7 +5359,7 @@ def _calculate_professor_availability(entries, timeslots=None, professor=None):
 
 
 @app.route('/professor_schedule')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def professor_schedule():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -5077,8 +5377,16 @@ def professor_schedule():
     if not semester_filter and active_semester:
         semester_filter = active_semester.get('term') or ''
 
-    # Fetch all professors for filter dropdown
+    fetch_error = False
+    error_message = None
+    all_prof_options = []
+    professors = []
+    year_options = []
+    semester_options = []
+    major_options = []
+
     try:
+        # Fetch all professors for filter dropdown
         p_query = supabase.table('professor').select('prof_id, first_name, last_name, specialization, time_designation, academic_ranking_id, academic_ranking(name, min_units, max_units, min_hours, max_hours)')
         if not is_super_admin and user_prog_id:
             try:
@@ -5087,17 +5395,26 @@ def professor_schedule():
                 pass
         all_prof_options = p_query.execute().data or []
         all_prof_options.sort(key=lambda p: (str(p.get('last_name') or ''), str(p.get('first_name') or '')))
-    except Exception:
-        all_prof_options = []
 
-    # Fetch schedules
-    try:
+        # Fetch schedules with pagination loop
         sched_cols = 'schedule_id, professor_load_id, section, semester, major, program_id, day, class_start, class_end, professor_load(prof_id, course_id, course(course_name)), room(room_name)'
-        query = supabase.table('schedule').select(sched_cols).eq('archive', False)
-        if not is_super_admin and user_prog_id:
-            query = query.eq('program_id', user_prog_id)
-
-        sched_rows = query.execute().data or []
+        
+        sched_rows = []
+        page_size = 1000
+        offset = 0
+        program_id_filter = user_prog_id if (not is_super_admin and user_prog_id) else None
+        while True:
+            query = supabase.table('schedule').select(sched_cols).eq('archive', False)
+            if program_id_filter:
+                query = query.eq('program_id', program_id_filter)
+            if hasattr(query, 'range'):
+                batch = query.range(offset, offset + page_size - 1).execute().data or []
+            else:
+                batch = query.execute().data or []
+            sched_rows.extend(batch)
+            if len(batch) < page_size or offset > 50000 or not hasattr(query, 'range'):
+                break
+            offset += page_size
 
         year_options = sorted({_year_of_section(r.get('section')) for r in sched_rows if _year_of_section(r.get('section'))})
         semester_options = sorted({r.get('semester') for r in sched_rows if r.get('semester')})
@@ -5122,7 +5439,6 @@ def professor_schedule():
             if pid is not None:
                 prof_entries.setdefault(str(pid), []).append(r)
 
-        professors = []
         for p in all_prof_options:
             pid_str = str(p.get('prof_id'))
             if prof_filter and pid_str != prof_filter:
@@ -5151,6 +5467,8 @@ def professor_schedule():
             })
     except Exception as err:
         logging.error(f"Error in professor_schedule: {err}")
+        fetch_error = True
+        error_message = f"Failed to load professor schedules: {err}"
         professors = []
         year_options = []
         semester_options = []
@@ -5170,11 +5488,13 @@ def professor_schedule():
         major_options=major_options,
         major_filter=major_filter,
         professors=professors,
+        fetch_error=fetch_error,
+        error_message=error_message,
     )
 
 
 @app.route('/professor_schedule/<professor_id>')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def view_professor_schedule(professor_id):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -5352,7 +5672,7 @@ def view_professor_schedule(professor_id):
 
 @app.route('/professor_schedule/<professor_id>/export')
 @app.route('/export/professor_schedule/<professor_id>')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def export_professor_schedule(professor_id):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -5532,7 +5852,7 @@ def export_professor_schedule(professor_id):
 
 @app.route('/professor_schedule/<professor_id>/export_pdf')
 @app.route('/export/professor_schedule/<professor_id>/pdf')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def export_professor_schedule_pdf(professor_id):
     year_filter = (request.args.get('year') or '').strip()
     semester_filter = (request.args.get('semester') or '').strip()
@@ -5731,7 +6051,7 @@ def export_professor_schedule_pdf(professor_id):
 
 
 @app.route('/api/professor_availability/<int:professor_id>', methods=['GET'])
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def api_professor_availability(professor_id):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     try:
@@ -5827,7 +6147,7 @@ def api_professor_availability(professor_id):
 
 
 @app.route('/api/professor_workload/<int:professor_id>', methods=['GET'])
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def api_professor_workload(professor_id):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     try:
@@ -5879,7 +6199,7 @@ def api_professor_workload(professor_id):
 
 
 @app.route('/room_schedule')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def room_schedule():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -5986,7 +6306,7 @@ def room_schedule():
 
 
 @app.route('/room_schedule/<room_id>')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def view_room_schedule(room_id):
     day_filter = request.args.get('day', '').strip()
     year_filter = request.args.get('year', '')
@@ -6130,7 +6450,7 @@ def view_room_schedule(room_id):
 
 @app.route('/room_schedule/<room_id>/export')
 @app.route('/export/room_schedule/<room_id>')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def export_room_schedule(room_id):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -6280,7 +6600,7 @@ def export_room_schedule(room_id):
 
 
 @app.route('/api/room_availability/<room_id>', methods=['GET'])
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def api_room_availability(room_id):
     try:
         mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
@@ -6357,7 +6677,7 @@ def api_room_availability(room_id):
 
 
 @app.route('/schedules')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def schedules():
     year_filter = (request.args.get('year') or '').strip()
     semester_filter = (request.args.get('semester') or '').strip()
@@ -6507,7 +6827,7 @@ def schedules():
 
 
 @app.route('/schedule/<section_name>')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def view_schedule(section_name):
     semester_filter = request.args.get('semester', '')
     major_filter = request.args.get('major', '')
@@ -6713,7 +7033,7 @@ def view_schedule(section_name):
 
 @app.route('/schedule/<section_name>/export')
 @app.route('/export/section_schedule/<section_name>')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def export_section_schedule(section_name):
     semester_filter = request.args.get('semester', '')
     major_filter = request.args.get('major', '')
@@ -6855,7 +7175,7 @@ def export_section_schedule(section_name):
 
 @app.route('/schedule/<section_name>/export_pdf')
 @app.route('/export/section_schedule/<section_name>/pdf')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def export_section_schedule_pdf(section_name):
     year_filter = (request.args.get('year') or '').strip()
     semester_filter = (request.args.get('semester') or '').strip()
@@ -7015,7 +7335,7 @@ def export_section_schedule_pdf(section_name):
 
 
 @app.route('/api/section_theme', methods=['GET', 'POST'])
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def api_section_theme():
     """Get or update section export theme assignment."""
     if request.method == 'POST':
@@ -7045,7 +7365,7 @@ def api_section_theme():
 
 
 @app.route('/api/section_availability/<section_name>', methods=['GET'])
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def api_section_availability(section_name):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     preview_pool = _get_preview_for_user()
@@ -7112,7 +7432,7 @@ def api_section_availability(section_name):
 
 
 @app.route('/delete_schedule/<int:schedule_id>')
-@login_required
+@roles_required('scheduler')
 def delete_schedule(schedule_id):
     section_name = request.args.get('section_name', '')
     semester = request.args.get('semester', '')
@@ -7137,7 +7457,7 @@ def delete_schedule(schedule_id):
 
 
 @app.route('/delete_section_schedule/<section_name>', methods=['GET', 'POST'])
-@login_required
+@roles_required('scheduler')
 def delete_section_schedule(section_name):
     major = request.args.get('major', '')
     semester = request.args.get('semester', '')
@@ -7177,7 +7497,7 @@ def delete_section_schedule(section_name):
 
 
 @app.route('/delete_all_schedules', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def delete_all_schedules():
     payload = request.get_json(silent=True) or {}
     password = (payload.get('password') or '').strip()
@@ -7216,7 +7536,7 @@ def delete_all_schedules():
 
 
 @app.route('/edit_schedule/<section_name>', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def edit_schedule(section_name):
     payload = request.get_json(silent=True) or {}
     year_level = (payload.get('year_level') or '').strip()
@@ -7269,7 +7589,7 @@ def edit_schedule(section_name):
 
 
 @app.route('/edit_schedule_entry/<int:schedule_id>', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def edit_schedule_entry(schedule_id):
     payload = request.get_json(silent=True) or {}
     course_name = (payload.get('course_name') or '').strip()
@@ -7478,14 +7798,14 @@ def edit_schedule_entry(schedule_id):
 
 #-------------------------------------------------------add_timeslot----------------------------------------------------------------------------------------------
 @app.route('/add_timeslot', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def add_timeslot():
     # Adding new timeslots via the UI is disabled. Redirect back to timeslot list.
     return redirect(url_for('timeslot'))
 
 #-------------------------------------------------------delete_timeslot----------------------------------------------------------------------------------------------
 @app.route('/delete_timeslot/<int:timeslot_id>')
-@login_required
+@roles_required('scheduler')
 def delete_timeslot(timeslot_id):
     handled, resp = _request_delete_if_scheduler('timeslot', timeslot_id, f'Timeslot ID {timeslot_id}')
     if handled:
@@ -7618,7 +7938,7 @@ def reject_delete_request(req_id):
 
 
 @app.route('/notifications/mark_read', methods=['POST'])
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def mark_notifications_read():
     user_id = session.get('user_id')
     if not user_id:
@@ -8012,7 +8332,7 @@ def unassign_irregular_section(student_id, course_id):
 
 #-------------------------------------------------------TIMESLOT_MODULE----------------------------------------------------------------------------------------------
 @app.route('/timeslot')
-@login_required
+@roles_required('scheduler')
 def timeslot():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -8059,7 +8379,7 @@ def timeslot():
     )
 
 @app.route('/edit_timeslot/<int:timeslot_id>', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def edit_timeslot(timeslot_id):
     start_time = request.form.get('start_time', '').strip()
     end_time = request.form.get('end_time', '').strip()
@@ -8082,7 +8402,7 @@ def edit_timeslot(timeslot_id):
     return redirect(url_for('timeslot'))
 
 @app.route('/initialize_timeslots', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def initialize_timeslots():
     sem_id = request.form.get('semester_id')
     if not sem_id:
@@ -8114,7 +8434,7 @@ def initialize_timeslots():
     return redirect(url_for('timeslot', semester_id=sem_id))
 
 @app.route('/check_schedule_exists')
-@login_required
+@roles_required('scheduler')
 def check_schedule_exists():
     year_level = (request.args.get('year_level') or '').strip()
     semester = (request.args.get('semester') or '').strip()
@@ -8164,7 +8484,7 @@ def check_schedule_exists():
 
 #------------------------------------------------------------Generate Schedule------------------------------------------------------------------------------------------
 @app.route('/generate_schedule', methods=['GET', 'POST'])
-@login_required
+@roles_required('scheduler')
 def generate_schedule():
     generation_warnings = []
     semesters = ['1st Semester', '2nd Semester']
@@ -9087,7 +9407,7 @@ def generate_schedule():
 
 
 @app.route('/preview_schedule')
-@login_required
+@roles_required('scheduler')
 def preview_schedule():
     preview = _get_preview_for_user()
     preview_context = _build_preview_context(preview)
@@ -9100,7 +9420,7 @@ def preview_schedule():
 
 
 @app.route('/edit_preview_entry', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def edit_preview_entry():
     data = request.form or request.get_json(silent=True) or {}
     entry_id = int(data.get('id') or 0)
@@ -9300,14 +9620,14 @@ def edit_preview_entry():
 
 
 @app.route('/api/preview_entries', methods=['GET'])
-@login_required
+@roles_required('scheduler')
 def api_preview_entries():
     preview = _get_preview_for_user()
     return jsonify({'success': True, 'entries': preview or []})
 
 
 @app.route('/confirm_preview', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def confirm_preview():
     preview = _get_preview_for_user()
     if not preview:
@@ -9535,7 +9855,7 @@ def confirm_preview():
 
 
 @app.route('/discard_preview', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def discard_preview():
     _clear_preview_for_user()
     return redirect(url_for('home'))
@@ -9570,7 +9890,7 @@ def _get_pht_date_str(raw_ts):
 
 
 @app.route('/archive_schedule', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def archive_schedule():
     """Archive currently active schedule for the program so a new one can be generated."""
     user_prog_id = _get_user_program_id()
@@ -9648,7 +9968,7 @@ def archive_schedule():
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.route('/schedule_archive')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def schedule_archive():
     semester_filter = (request.args.get('semester') or '').strip()
     program_filter = (request.args.get('program') or '').strip()
@@ -9880,7 +10200,7 @@ def schedule_archive():
 
 
 @app.route('/schedule_archive/<batch_id>')
-@login_required
+@roles_required('admin', 'scheduler', 'viewer')
 def view_schedule_archive_batch(batch_id):
     try:
         rows = []
@@ -10026,10 +10346,10 @@ def view_schedule_archive_batch(batch_id):
 
 @app.route('/restore_schedule_archive/<batch_id>', methods=['POST'])
 @app.route('/restore_schedule/<batch_id>', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def restore_schedule_archive(batch_id):
-    user_role = (session.get('role') or 'scheduler').lower()
-    if user_role not in ['admin', 'super_admin', 'scheduler', 'dean', 'chair']:
+    user_role = _normalize_role(session.get('role', ''))
+    if user_role != 'scheduler':
         flash('You do not have permission to restore archived schedules.', 'danger')
         return redirect(url_for('schedule_archive'))
 
@@ -10146,11 +10466,11 @@ def restore_schedule_archive(batch_id):
 
 
 @app.route('/delete_schedule_archive/<batch_id>', methods=['POST'])
-@login_required
+@roles_required('scheduler')
 def delete_schedule_archive(batch_id):
-    user_role = (session.get('role') or 'scheduler').lower()
-    if user_role not in ('admin', 'super_admin'):
-        flash('Only administrators can delete archived schedule records.', 'danger')
+    user_role = _normalize_role(session.get('role', ''))
+    if user_role != 'scheduler':
+        flash('Only schedulers can delete archived schedule records.', 'danger')
         return redirect(url_for('schedule_archive'))
 
     try:
@@ -10289,8 +10609,7 @@ def _execute_client_side_restore(data_dict, clear_existing=True):
 
 
 @app.route('/backup', methods=['GET'])
-@login_required
-@role_required(['admin', 'scheduler'])
+@roles_required('admin')
 def backup_database():
     """Export tables to a structured JSON file and stream it as a download."""
     try:
@@ -10354,8 +10673,7 @@ def backup_database():
 
 
 @app.route('/restore', methods=['POST'])
-@login_required
-@role_required(['admin', 'scheduler'])
+@roles_required('admin')
 def restore_database():
     """Import a JSON backup, restoring database state with FK ordering and transaction safety."""
     uploaded_file = request.files.get('backup_file') or request.files.get('sql_file')
