@@ -102,15 +102,62 @@
     margin: 0.2rem 0.25rem 0.2rem 0;
     font-size: 0.82rem;
 }
+/* Import Feature Styles */
+.import-dropzone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    background: #f8fafc;
+    padding: 2.25rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+.import-dropzone:hover, .import-dropzone.dragover {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+.import-metric-card {
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.status-badge-ready { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; font-weight: 600; }
+.status-badge-updated { background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; font-weight: 600; }
+.status-badge-warning { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-weight: 600; }
+.status-badge-error { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; font-weight: 600; }
+.preview-table-wrapper {
+    max-height: 460px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.preview-table-wrapper thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    z-index: 2;
+    border-bottom: 2px solid #e2e8f0;
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-header mb-4">
+<div class="page-header mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
     <div>
         <h1 class="page-title">Professors' Teaching Load & Course Assignments</h1>
         <p class="page-subtitle">Assign courses, set section counts, and monitor real-time weekly hours & unit workload capacities</p>
     </div>
+    {% set user_role_lower = (session.get('role', '') or '') | lower %}
+    {% if user_role_lower not in ['viewer', 'guest'] and user_role_lower in ['super admin', 'super_admin', 'admin', 'scheduler'] %}
+    <div>
+        <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2 shadow-sm" id="btn-open-import-modal" data-bs-toggle="modal" data-bs-target="#importLoadModal">
+            <i class="bx bx-upload fs-5"></i>
+            <span class="fw-semibold">Import Load</span>
+        </button>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Dashboard Stats Row -->
@@ -428,8 +475,81 @@
             <h5 class="card-custom__title"><i class="bx bx-list-check me-2 text-primary"></i>Current Assignments & Load Status</h5>
             <span class="text-muted small">Summary of assigned courses, section counts, and capacity compliance</span>
         </div>
-        <span class="badge-custom badge-primary">{{ professor_loads|groupby('prof_id')|list|length }} professors assigned</span>
+        <span class="badge-custom badge-primary" id="prof-table-count-badge">{{ professor_loads|groupby('prof_id')|list|length }} professors assigned</span>
     </div>
+
+    <!-- Assignments Live Filter Bar -->
+    <div class="p-3 border-bottom bg-light bg-opacity-25" id="professor-filter-bar">
+        <div class="row g-3 align-items-end">
+            <!-- 1. Professor search -->
+            <div class="col-12 col-md-5 col-lg-4">
+                <label class="form-label fw-semibold small text-muted mb-1" for="profSearchInput">
+                    <i class="bx bx-search me-1"></i>Search Professor
+                </label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                        <i class="bx bx-search"></i>
+                    </span>
+                    <input type="text"
+                           id="profSearchInput"
+                           class="form-control border-start-0 ps-0"
+                           placeholder="Search by professor name..."
+                           aria-label="Search by professor name"
+                           autocomplete="off">
+                </div>
+            </div>
+
+            <!-- 2. Course filter -->
+            <div class="col-12 col-sm-6 col-md-3 col-lg-3">
+                <label class="form-label fw-semibold small text-muted mb-1" for="profCourseFilter">
+                    <i class="bx bx-book me-1"></i>Course
+                </label>
+                <select id="profCourseFilter" class="form-select" aria-label="Filter by assigned course">
+                    <option value="">All Courses</option>
+                    {% set ns = namespace(seen=[]) %}
+                    {% for c in courses %}
+                        {% if c.course_name and c.course_name not in ns.seen %}
+                            {% set _ = ns.seen.append(c.course_name) %}
+                        {% endif %}
+                    {% endfor %}
+                    {% for pl in professor_loads %}
+                        {% if pl.course_name and pl.course_name not in ns.seen %}
+                            {% set _ = ns.seen.append(pl.course_name) %}
+                        {% endif %}
+                    {% endfor %}
+                    {% for c_name in ns.seen|sort %}
+                    <option value="{{ c_name }}">{{ c_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- 3. Load status filter -->
+            <div class="col-12 col-sm-6 col-md-2 col-lg-3">
+                <label class="form-label fw-semibold small text-muted mb-1" for="profStatusFilter">
+                    <i class="bx bx-tachometer me-1"></i>Load Status
+                </label>
+                <select id="profStatusFilter" class="form-select" aria-label="Filter by load status">
+                    <option value="">All Status</option>
+                    <option value="Underload">Underload</option>
+                    <option value="Balanced">Balanced</option>
+                    <option value="Overload">Overload</option>
+                </select>
+            </div>
+
+            <!-- Clear filters button -->
+            <div class="col-12 col-md-2 col-lg-2 d-flex align-items-end">
+                <button type="button"
+                        class="btn btn-outline-secondary w-100 btn-clear-filters"
+                        id="btnClearFilters"
+                        title="Clear all filters"
+                        aria-label="Clear all active filters"
+                        style="display: none;">
+                    <i class="bx bx-reset me-1"></i> Clear filters
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="table-responsive">
         <table class="table-custom">
             <thead>
@@ -456,7 +576,19 @@
                 {% set p_min_h = prof_group.list[0].min_hours|default(0, true) %}
                 {% set p_max_h = prof_group.list[0].max_hours|default(40, true) %}
 
-                <tr>
+                {% if total_prof_units > p_max_u or total_prof_hours > p_max_h %}
+                {% set prof_status = 'Overload' %}
+                {% elif p_min_h > 0 and total_prof_hours < p_min_h %}
+                {% set prof_status = 'Underload' %}
+                {% else %}
+                {% set prof_status = 'Balanced' %}
+                {% endif %}
+
+                <tr class="professor-row"
+                    data-prof-id="{{ prof_group.grouper }}"
+                    data-prof-name="{{ (p_first ~ ' ' ~ p_last)|trim|lower }}"
+                    data-courses="{% for c in prof_group.list %}{{ c.course_name|trim }}{% if not loop.last %}|{% endif %}{% endfor %}"
+                    data-load-status="{{ prof_status }}">
                     <td class="align-middle">
                         <div class="fw-bold text-dark">{{ p_first }} {{ p_last }}</div>
                         <div class="text-muted small" style="font-size: 0.78rem;">
@@ -494,9 +626,9 @@
                             </span>
                         </div>
                         <div class="mt-1">
-                            {% if total_prof_units > p_max_u or total_prof_hours > p_max_h %}
+                            {% if prof_status == 'Overload' %}
                             <span class="badge bg-danger"><i class="bx bx-error-circle me-1"></i>Overload</span>
-                            {% elif p_min_h > 0 and total_prof_hours < p_min_h %}
+                            {% elif prof_status == 'Underload' %}
                             {# Hours minimum not met — yellow (status driven by hours, not units) #}
                             <span class="badge bg-warning text-dark"><i class="bx bx-info-circle me-1"></i>Underload</span>
                             {% else %}
@@ -537,6 +669,21 @@
                     </td>
                 </tr>
                 {% endfor %}
+                <!-- Empty Filter Results State (hidden by default) -->
+                <tr id="empty-filter-state-row" style="display: none;">
+                    <td colspan="5" class="py-5 text-center">
+                        <div class="empty-state">
+                            <div class="empty-state__icon text-muted fs-1 mb-2">
+                                <i class="bx bx-search-alt"></i>
+                            </div>
+                            <div class="fw-semibold text-dark mb-1">No professors match your filters</div>
+                            <div class="text-muted small mb-3">Try adjusting your search terms or clearing the active filters.</div>
+                            <button type="button" class="btn btn-outline-primary btn-sm btn-clear-filters" aria-label="Clear active filters">
+                                <i class="bx bx-reset me-1"></i> Clear filters
+                            </button>
+                        </div>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -699,9 +846,287 @@
     </div>
 </div>
 
+<!-- Import Professor Load Modal -->
+<div class="modal fade" id="importLoadModal" tabindex="-1" aria-labelledby="importLoadModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <i class="bx bx-upload fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="importLoadModalLabel">Import Teaching Load Assignments</h5>
+                        <small class="text-muted">Batch assign course sections to professors via Excel or CSV</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="btn-close-import-modal"></button>
+            </div>
+
+            <div class="modal-body p-4">
+                <!-- STEP 1: UPLOAD VIEW -->
+                <div id="import-upload-view">
+                    <!-- Format Instructions Box -->
+                    <div class="alert alert-light border d-flex align-items-start gap-3 mb-4 rounded-3">
+                        <i class="bx bx-info-circle text-primary fs-3 mt-1 flex-shrink-0"></i>
+                        <div class="flex-grow-1 small">
+                            <div class="fw-bold text-dark mb-1">Spreadsheet File Requirements</div>
+                            <ul class="mb-2 ps-3 text-secondary">
+                                <li><strong>Required Header Columns:</strong> <code>NAME</code> &nbsp;|&nbsp; <code>Course Code</code> &nbsp;|&nbsp; <code>Number of sections</code></li>
+                                <li><strong>Year Dividers:</strong> Merged cells (or Column A alone) such as <code>1st Year</code>, <code>2nd Year</code>, <code>3rd Year</code>, <code>4th Year</code> are recognized as section markers, never as professors.</li>
+                                <li><strong>Course Codes:</strong> Suffixes in parentheses are preserved (e.g. <code>IT-CAP01 (WST)</code>). Stray trailing typos will be auto-cleaned and flagged.</li>
+                                <li><strong>Workload Safety:</strong> Overloaded assignments exceeding professor ranking limits are flagged as errors and skipped. Existing manual loads not in the file remain completely untouched.</li>
+                            </ul>
+                            <div class="d-flex align-items-center flex-wrap gap-3">
+                                <a href="/professor_load/import/template" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
+                                    <i class="bx bx-download"></i> Download Sample Template (.xlsx)
+                                </a>
+                                <span class="text-muted">Supported formats: .xlsx, .csv &bull; Max size: 5 MB</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dropzone -->
+                    <div class="import-dropzone mb-3" id="import-dropzone">
+                        <input type="file" id="import-file-input" accept=".xlsx,.csv" class="d-none">
+                        <div class="text-center py-3">
+                            <i class="bx bx-cloud-upload fs-1 text-primary mb-2"></i>
+                            <h6 class="fw-semibold mb-1">Drag & drop your spreadsheet file here, or click to browse</h6>
+                            <p class="text-muted small mb-3">Accepts Microsoft Excel (.xlsx) and Comma-Separated Values (.csv)</p>
+                            <button type="button" class="btn btn-sm btn-primary px-3" id="btn-browse-file">
+                                <i class="bx bx-folder-open me-1"></i> Select File
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Selected File Info (hidden until file picked) -->
+                    <div id="import-file-selected-box" class="card-custom p-3 d-none mb-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bx bxs-file-blank fs-2 text-success"></i>
+                                <div>
+                                    <div class="fw-bold text-dark" id="import-file-name">filename.xlsx</div>
+                                    <small class="text-muted" id="import-file-size">0 KB</small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="btn-remove-selected-file">
+                                <i class="bx bx-trash me-1"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Upload / Parsing Error Alert -->
+                    <div id="import-upload-error" class="alert alert-danger d-none mb-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bx bx-error-circle fs-5"></i>
+                            <span id="import-upload-error-msg">An error occurred while uploading.</span>
+                        </div>
+                    </div>
+
+                    <!-- Loading / Parsing Progress -->
+                    <div id="import-loading-state" class="text-center py-5 d-none">
+                        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h6 class="fw-bold mb-1" id="import-loading-title">Parsing & Validating Spreadsheet...</h6>
+                        <p class="text-muted small mb-0">Cross-referencing faculty catalog, course codes, and workload ranking limits</p>
+                    </div>
+                </div>
+
+                <!-- STEP 2: PREVIEW VIEW (hidden initially) -->
+                <div id="import-preview-view" class="d-none">
+                    <!-- Top Bar with file badge and re-upload -->
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 pb-2 border-bottom">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-light text-dark border px-2 py-1"><i class="bx bxs-file-blank me-1 text-primary"></i><span id="preview-file-badge">file.xlsx</span></span>
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis" id="preview-timestamp-badge">Preview Ready</span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" id="btn-import-reupload">
+                            <i class="bx bx-arrow-back"></i> Choose Different File
+                        </button>
+                    </div>
+
+                    <!-- Summary Cards Grid -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-md-2">
+                            <div class="import-metric-card text-center">
+                                <div class="text-muted small">Total Rows</div>
+                                <div class="fw-bold fs-5 text-dark" id="preview-count-total">0</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="import-metric-card text-center" style="border-left: 3px solid #16a34a;">
+                                <div class="text-muted small">Ready / Valid</div>
+                                <div class="fw-bold fs-5 text-success" id="preview-count-valid">0</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="import-metric-card text-center" style="border-left: 3px solid #d97706;">
+                                <div class="text-muted small">Warnings</div>
+                                <div class="fw-bold fs-5 text-warning" id="preview-count-warnings">0</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="import-metric-card text-center" style="border-left: 3px solid #dc2626;">
+                                <div class="text-muted small">Errors (Skip)</div>
+                                <div class="fw-bold fs-5 text-danger" id="preview-count-errors">0</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="import-metric-card text-center">
+                                <div class="text-muted small">Professors</div>
+                                <div class="fw-bold fs-5 text-primary" id="preview-count-profs">0</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="import-metric-card text-center">
+                                <div class="text-muted small">Courses</div>
+                                <div class="fw-bold fs-5 text-info" id="preview-count-courses">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Navigation Tabs -->
+                    <ul class="nav nav-pills mb-3 gap-2" id="previewTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active py-1 px-3 d-inline-flex align-items-center gap-2" id="tab-btn-rows" data-bs-toggle="pill" data-bs-target="#preview-tab-rows" type="button" role="tab">
+                                <i class="bx bx-list-ul"></i> Assignment Rows <span class="badge bg-white text-dark border ms-1" id="pill-rows-count">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-1 px-3 d-inline-flex align-items-center gap-2" id="tab-btn-courses" data-bs-toggle="pill" data-bs-target="#preview-tab-courses" type="button" role="tab">
+                                <i class="bx bx-book"></i> Course Totals <span class="badge bg-white text-dark border ms-1" id="pill-courses-count">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-1 px-3 d-inline-flex align-items-center gap-2" id="tab-btn-workloads" data-bs-toggle="pill" data-bs-target="#preview-tab-workloads" type="button" role="tab">
+                                <i class="bx bx-tachometer"></i> Professor Workload Impact <span class="badge bg-white text-dark border ms-1" id="pill-profs-count">0</span>
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="previewTabContent">
+                        <!-- TAB 1: Assignment Rows -->
+                        <div class="tab-pane fade show active" id="preview-tab-rows" role="tabpanel">
+                            <!-- Filter bar for rows -->
+                            <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                <div class="input-group input-group-sm" style="max-width: 280px;">
+                                    <span class="input-group-text bg-white text-muted"><i class="bx bx-search"></i></span>
+                                    <input type="text" class="form-control" id="preview-row-search" placeholder="Search professor, course...">
+                                </div>
+                                <select class="form-select form-select-sm" id="preview-row-filter-status" style="width: auto;">
+                                    <option value="">All Statuses</option>
+                                    <option value="Ready">Ready</option>
+                                    <option value="Updated">Updated</option>
+                                    <option value="Warning">Warning</option>
+                                    <option value="Error">Error</option>
+                                </select>
+                                <span class="text-muted small ms-auto" id="preview-row-visible-counter">Showing 0 rows</span>
+                            </div>
+
+                            <div class="preview-table-wrapper">
+                                <table class="table table-hover table-sm align-middle mb-0" id="preview-rows-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 95px;">Status</th>
+                                            <th style="width: 55px;">Row</th>
+                                            <th style="width: 85px;">Divider</th>
+                                            <th>Professor Name</th>
+                                            <th>Course Code</th>
+                                            <th style="width: 75px;" class="text-center">Sections</th>
+                                            <th>Validation & Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="preview-rows-tbody">
+                                        <!-- Rows injected by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB 2: Course Section Totals -->
+                        <div class="tab-pane fade" id="preview-tab-courses" role="tabpanel">
+                            <p class="text-muted small mb-2"><i class="bx bx-info-circle me-1"></i>Aggregated section counts per course to easily detect anomalies or section typos:</p>
+                            <div class="preview-table-wrapper">
+                                <table class="table table-hover table-sm align-middle mb-0" id="preview-courses-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Course Code</th>
+                                            <th>Year Level</th>
+                                            <th class="text-center">Total Sections in File</th>
+                                            <th class="text-center">Professors Assigned</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="preview-courses-tbody">
+                                        <!-- Injected by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB 3: Professor Workloads -->
+                        <div class="tab-pane fade" id="preview-tab-workloads" role="tabpanel">
+                            <p class="text-muted small mb-2"><i class="bx bx-info-circle me-1"></i>Projected teaching load hours and units after applying this import (combining existing untouched loads + new file assignments):</p>
+                            <div class="preview-table-wrapper">
+                                <table class="table table-hover table-sm align-middle mb-0" id="preview-workloads-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Professor</th>
+                                            <th>Department</th>
+                                            <th class="text-center">Courses in File</th>
+                                            <th class="text-center">Total Weekly Hours</th>
+                                            <th class="text-center">Total Units</th>
+                                            <th class="text-center">Resulting Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="preview-workloads-tbody">
+                                        <!-- Injected by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 3: SUCCESS STATE (hidden initially) -->
+                <div id="import-success-view" class="text-center py-4 d-none">
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                        <i class="bx bx-check-circle fs-1"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-1">Import Completed Successfully</h5>
+                    <p class="text-muted small mb-3" id="import-success-message">Assignments have been successfully applied to the database.</p>
+                    <div class="d-flex justify-content-center gap-3">
+                        <button type="button" class="btn btn-primary" id="btn-import-finish-reload">
+                            <i class="bx bx-check me-1"></i> Done & Refresh Table
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer d-flex justify-content-between align-items-center">
+                <div>
+                    <button type="button" class="btn btn-outline-danger btn-sm d-none" id="btn-download-error-report">
+                        <i class="bx bx-download me-1"></i> Download Error Report (.xlsx)
+                    </button>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="btn-import-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btn-import-preview-action" disabled>
+                        <i class="bx bx-show me-1"></i> Preview Import
+                    </button>
+                    <button type="button" class="btn btn-success d-none" id="btn-confirm-import">
+                        <i class="bx bx-check-double me-1"></i> Confirm & Save Import
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 $(function(){
     $('#editModal').appendTo("body");
+    $('#importLoadModal').appendTo("body");
 
     // Master state registries
     var coursesData = {};
@@ -2038,12 +2463,712 @@ $(function(){
         });
     }
 
+    // ==========================================
+    // Live Filter System for Assignments Table
+    // ==========================================
+    var $profSearchInput = $('#profSearchInput');
+    var $profCourseFilter = $('#profCourseFilter');
+    var $profStatusFilter = $('#profStatusFilter');
+    var $btnClearFilters = $('#btnClearFilters');
+    var $countBadge = $('#prof-table-count-badge');
+    var $emptyFilterRow = $('#empty-filter-state-row');
+
+    function populateCourseFilterDropdown(preferredCourse) {
+        var courseSelect = document.getElementById('profCourseFilter');
+        if (!courseSelect) return;
+
+        var courseSet = new Set();
+
+        // 1. Gather any pre-rendered options from the select
+        Array.from(courseSelect.options).forEach(function(opt) {
+            if (opt.value && opt.value.trim()) {
+                courseSet.add(opt.value.trim());
+            }
+        });
+
+        // 2. Gather all courses from the master catalog (allCoursesList)
+        if (typeof allCoursesList !== 'undefined' && Array.isArray(allCoursesList)) {
+            allCoursesList.forEach(function(c) {
+                if (c && c.course_name) {
+                    var trimmed = String(c.course_name).trim();
+                    if (trimmed) {
+                        courseSet.add(trimmed);
+                    }
+                }
+            });
+        }
+
+        // 3. Gather all courses currently assigned in table rows
+        var rows = document.querySelectorAll('.professor-row');
+        rows.forEach(function(row) {
+            var rawCourses = row.getAttribute('data-courses') || '';
+            if (rawCourses) {
+                rawCourses.split('|').forEach(function(code) {
+                    var trimmed = code.trim();
+                    if (trimmed) {
+                        courseSet.add(trimmed);
+                    }
+                });
+            }
+        });
+
+        var sortedCourses = Array.from(courseSet).sort(function(a, b) {
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+        var targetVal = (preferredCourse !== undefined && preferredCourse !== null) ? preferredCourse : courseSelect.value;
+        courseSelect.innerHTML = '<option value="">All Courses</option>';
+
+        sortedCourses.forEach(function(courseCode) {
+            var opt = document.createElement('option');
+            opt.value = courseCode;
+            opt.textContent = courseCode;
+            if (courseCode === targetVal) {
+                opt.selected = true;
+            }
+            courseSelect.appendChild(opt);
+        });
+
+        if (targetVal && !courseSet.has(targetVal)) {
+            courseSelect.value = '';
+        }
+    }
+
+    function checkProfessorNameMatch(profName, searchStr) {
+        if (!searchStr) return true;
+        var cleanQuery = searchStr.trim().toLowerCase().replace(/\s+/g, ' ');
+        if (!cleanQuery) return true;
+
+        var cleanName = (profName || '').toLowerCase().replace(/\s+/g, ' ');
+
+        // Direct phrase match
+        if (cleanName.indexOf(cleanQuery) !== -1) {
+            return true;
+        }
+
+        // Space-separated token matching (e.g. "Turing Alan")
+        var tokens = cleanQuery.split(' ').filter(Boolean);
+        if (tokens.length > 1) {
+            return tokens.every(function(t) {
+                return cleanName.indexOf(t) !== -1;
+            });
+        }
+        return false;
+    }
+
+    function checkCourseMatch(rowCoursesStr, selectedCourse) {
+        if (!selectedCourse) return true;
+        if (!rowCoursesStr) return false;
+        var list = rowCoursesStr.split('|').map(function(s) { return s.trim(); });
+        var target = selectedCourse.trim().toLowerCase();
+        var targetNorm = target.replace(/[\s\-_]/g, '');
+        return list.some(function(c) {
+            var cLower = c.toLowerCase();
+            return cLower === target || cLower.replace(/[\s\-_]/g, '') === targetNorm;
+        });
+    }
+
+    function checkStatusMatch(rowStatus, selectedStatus) {
+        if (!selectedStatus) return true;
+        return (rowStatus || '').toLowerCase() === selectedStatus.toLowerCase();
+    }
+
+    function applyAssignmentsFilter() {
+        var searchVal = ($profSearchInput.val() || '').trim();
+        var courseVal = $profCourseFilter.val() || '';
+        var statusVal = $profStatusFilter.val() || '';
+
+        var isFiltered = (searchVal !== '' || courseVal !== '' || statusVal !== '');
+
+        // Toggle clear filters button visibility
+        if (isFiltered) {
+            $btnClearFilters.show();
+        } else {
+            $btnClearFilters.hide();
+        }
+
+        // Save active filter state for persistence across add/edit/delete
+        try {
+            var filterState = { search: searchVal, course: courseVal, status: statusVal };
+            if (isFiltered) {
+                sessionStorage.setItem('prof_load_filter_state', JSON.stringify(filterState));
+            } else {
+                sessionStorage.removeItem('prof_load_filter_state');
+            }
+        } catch (e) {}
+
+        var $rows = $('.professor-row');
+        var totalCount = $rows.length;
+        var visibleCount = 0;
+
+        $rows.each(function() {
+            var $row = $(this);
+            var profName = $row.attr('data-prof-name') || '';
+            var courses = $row.attr('data-courses') || '';
+            var loadStatus = $row.attr('data-load-status') || '';
+
+            var matchesSearch = checkProfessorNameMatch(profName, searchVal);
+            var matchesCourse = checkCourseMatch(courses, courseVal);
+            var matchesStatus = checkStatusMatch(loadStatus, statusVal);
+
+            var matches = matchesSearch && matchesCourse && matchesStatus;
+
+            if (matches) {
+                $row.show();
+                visibleCount++;
+            } else {
+                $row.hide();
+            }
+        });
+
+        // Update badge text
+        if ($countBadge.length) {
+            if (isFiltered) {
+                $countBadge.text(visibleCount + ' of ' + totalCount + ' professors');
+            } else {
+                $countBadge.text(totalCount + ' professors assigned');
+            }
+        }
+
+        // Show/hide empty state inside table
+        if (totalCount > 0 && visibleCount === 0) {
+            $emptyFilterRow.show();
+        } else {
+            $emptyFilterRow.hide();
+        }
+    }
+
+    function clearAssignmentsFilters() {
+        $profSearchInput.val('');
+        $profCourseFilter.val('');
+        $profStatusFilter.val('');
+        try {
+            sessionStorage.removeItem('prof_load_filter_state');
+        } catch (e) {}
+        applyAssignmentsFilter();
+        $profSearchInput.focus();
+    }
+
+    // Debounce helper
+    function debounceFilter(func, delay) {
+        var timer;
+        return function() {
+            var ctx = this, args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                func.apply(ctx, args);
+            }, delay);
+        };
+    }
+
+    var debouncedApplyFilter = debounceFilter(applyAssignmentsFilter, 250);
+
+    // Event listeners for live filtering
+    $profSearchInput.on('input', debouncedApplyFilter);
+    $profCourseFilter.on('change', applyAssignmentsFilter);
+    $profStatusFilter.on('change', applyAssignmentsFilter);
+    $(document).on('click', '.btn-clear-filters', clearAssignmentsFilters);
+
     // Initial state setup
     updateAddLoadPanel();
     applyCourseFilter('', addCourseList);
     if ($('#prof_select').val()) {
         $('#prof_select').trigger('change');
     }
+
+    // Restore saved filter state on page load
+    var savedFilterState = null;
+    try {
+        var savedRaw = sessionStorage.getItem('prof_load_filter_state');
+        if (savedRaw) {
+            savedFilterState = JSON.parse(savedRaw);
+        }
+    } catch (e) {}
+
+    if (savedFilterState) {
+        if (savedFilterState.search) $profSearchInput.val(savedFilterState.search);
+        if (savedFilterState.status) $profStatusFilter.val(savedFilterState.status);
+    }
+
+    populateCourseFilterDropdown(savedFilterState ? savedFilterState.course : '');
+    applyAssignmentsFilter();
+
+    // =========================================================================
+    // IMPORT PROFESSOR LOAD FEATURE
+    // =========================================================================
+    var currentImportFile = null;
+    var currentImportToken = null;
+    var currentImportData = null;
+
+    var $dropzone = $('#import-dropzone');
+    var $fileInput = $('#import-file-input');
+    var $btnBrowse = $('#btn-browse-file');
+    var $fileSelectedBox = $('#import-file-selected-box');
+    var $fileName = $('#import-file-name');
+    var $fileSize = $('#import-file-size');
+    var $btnRemoveFile = $('#btn-remove-selected-file');
+    var $uploadError = $('#import-upload-error');
+    var $uploadErrorMsg = $('#import-upload-error-msg');
+    var $loadingState = $('#import-loading-state');
+    var $uploadView = $('#import-upload-view');
+    var $previewView = $('#import-preview-view');
+    var $successView = $('#import-success-view');
+
+    var $btnPreviewAction = $('#btn-import-preview-action');
+    var $btnConfirmImport = $('#btn-confirm-import');
+    var $btnDownloadErrors = $('#btn-download-error-report');
+    var $btnCancelImport = $('#btn-import-cancel');
+    var $btnReupload = $('#btn-import-reupload');
+    var $btnFinishReload = $('#btn-import-finish-reload');
+
+    var $previewRowSearch = $('#preview-row-search');
+    var $previewRowFilterStatus = $('#preview-row-filter-status');
+    var $previewRowsTbody = $('#preview-rows-tbody');
+    var $previewCoursesTbody = $('#preview-courses-tbody');
+    var $previewWorkloadsTbody = $('#preview-workloads-tbody');
+
+    function resetImportModal() {
+        currentImportFile = null;
+        currentImportToken = null;
+        currentImportData = null;
+        $fileInput.val('');
+        $fileSelectedBox.addClass('d-none');
+        $dropzone.removeClass('d-none');
+        $uploadError.addClass('d-none');
+        $loadingState.addClass('d-none');
+        $uploadView.removeClass('d-none');
+        $previewView.addClass('d-none');
+        $successView.addClass('d-none');
+        $btnPreviewAction.removeClass('d-none').prop('disabled', true).html('<i class="bx bx-show me-1"></i> Preview Import');
+        $btnConfirmImport.addClass('d-none').prop('disabled', false).html('<i class="bx bx-check-double me-1"></i> Confirm & Save Import');
+        $btnDownloadErrors.addClass('d-none');
+        $btnCancelImport.removeClass('d-none').text('Cancel');
+        $previewRowSearch.val('');
+        $previewRowFilterStatus.val('');
+        $previewRowsTbody.empty();
+        $previewCoursesTbody.empty();
+        $previewWorkloadsTbody.empty();
+    }
+
+    $('#importLoadModal').on('show.bs.modal', function() {
+        resetImportModal();
+    });
+
+    // Browse click
+    $btnBrowse.on('click', function(e) {
+        e.stopPropagation();
+        document.getElementById('import-file-input').click();
+    });
+
+    $dropzone.on('click', function() {
+        document.getElementById('import-file-input').click();
+    });
+
+    // Drag and Drop
+    $dropzone.on('dragover dragenter', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $(this).addClass('dragover');
+    });
+
+    $dropzone.on('dragleave dragend', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $(this).removeClass('dragover');
+    });
+
+    $dropzone.on('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $(this).removeClass('dragover');
+        var files = e.originalEvent.dataTransfer.files;
+        if (files && files.length > 0) {
+            handleFileSelection(files[0]);
+        }
+    });
+
+    $fileInput.on('change', function() {
+        if (this.files && this.files.length > 0) {
+            handleFileSelection(this.files[0]);
+        }
+    });
+
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(2) + ' MB';
+    }
+
+    function handleFileSelection(file) {
+        var ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'xlsx' && ext !== 'csv') {
+            $uploadErrorMsg.text('Unsupported file type. Please upload an Excel (.xlsx) or CSV (.csv) file.');
+            $uploadError.removeClass('d-none');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            $uploadErrorMsg.text('File size exceeds maximum allowed limit of 5 MB.');
+            $uploadError.removeClass('d-none');
+            return;
+        }
+
+        $uploadError.addClass('d-none');
+        currentImportFile = file;
+        $fileName.text(file.name);
+        $fileSize.text(formatFileSize(file.size));
+        $dropzone.addClass('d-none');
+        $fileSelectedBox.removeClass('d-none');
+        $btnPreviewAction.prop('disabled', false);
+    }
+
+    $btnRemoveFile.on('click', function(e) {
+        e.stopPropagation();
+        currentImportFile = null;
+        $fileInput.val('');
+        $fileSelectedBox.addClass('d-none');
+        $dropzone.removeClass('d-none');
+        $btnPreviewAction.prop('disabled', true);
+        $uploadError.addClass('d-none');
+    });
+
+    $btnReupload.on('click', function() {
+        resetImportModal();
+    });
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // Trigger Preview
+    $btnPreviewAction.on('click', function() {
+        if (!currentImportFile) return;
+
+        $btnPreviewAction.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Uploading...');
+        $dropzone.addClass('d-none');
+        $fileSelectedBox.addClass('d-none');
+        $loadingState.removeClass('d-none');
+        $uploadError.addClass('d-none');
+
+        var formData = new FormData();
+        formData.append('file', currentImportFile);
+
+        fetch('/professor_load/import/preview', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(res) {
+            var contentType = res.headers.get('content-type') || '';
+            if (contentType.indexOf('application/json') !== -1) {
+                return res.json().then(function(data) {
+                    return { status: res.status, ok: res.ok, data: data };
+                });
+            } else {
+                return res.text().then(function() {
+                    return {
+                        status: res.status,
+                        ok: false,
+                        data: {
+                            ok: false,
+                            success: false,
+                            error: 'Server error (' + res.status + (res.statusText ? ' ' + res.statusText : '') + '). Check the server log.'
+                        }
+                    };
+                });
+            }
+        })
+        .then(function(result) {
+            $loadingState.addClass('d-none');
+            var isSuccess = result.ok && (result.data.ok === true || result.data.success === true);
+            if (!isSuccess) {
+                var err = (result.data && (result.data.error || result.data.message)) ? (result.data.error || result.data.message) : ('Server error (' + result.status + '). Check the server log.');
+                $uploadErrorMsg.text(err);
+                $uploadError.removeClass('d-none');
+                $fileSelectedBox.removeClass('d-none');
+                $btnPreviewAction.prop('disabled', false).html('<i class="bx bx-show me-1"></i> Preview Import');
+                return;
+            }
+
+            // Success: render preview
+            currentImportToken = result.data.token;
+            currentImportData = result.data;
+            renderPreviewData(result.data);
+        })
+        .catch(function(err) {
+            $loadingState.addClass('d-none');
+            $uploadErrorMsg.text(err.message || 'Could not communicate with the server.');
+            $uploadError.removeClass('d-none');
+            $fileSelectedBox.removeClass('d-none');
+            $btnPreviewAction.prop('disabled', false).html('<i class="bx bx-show me-1"></i> Preview Import');
+        });
+    });
+
+    function renderPreviewData(data) {
+        var summary = data.summary || {};
+        var rows = data.rows || [];
+        var courses = data.course_section_totals || [];
+        var profs = data.professor_workloads || [];
+
+        // Summary counts
+        $('#preview-file-badge').text(data.filename || currentImportFile.name);
+        $('#preview-count-total').text(summary.total_rows || 0);
+        $('#preview-count-valid').text(summary.valid_count || 0);
+        $('#preview-count-warnings').text(summary.warning_count || 0);
+        $('#preview-count-errors').text(summary.error_count || 0);
+        $('#preview-count-profs').text(summary.professors_affected || 0);
+        $('#preview-count-courses').text(summary.courses_affected || 0);
+
+        $('#pill-rows-count').text(rows.length);
+        $('#pill-courses-count').text(courses.length);
+        $('#pill-profs-count').text(profs.length);
+
+        // Render Rows Tab
+        $previewRowsTbody.empty();
+        rows.forEach(function(r) {
+            var statusBadgeClass = 'status-badge-ready';
+            var statusIcon = 'bx-check';
+            if (r.status === 'Updated') {
+                statusBadgeClass = 'status-badge-updated';
+                statusIcon = 'bx-refresh';
+            } else if (r.status === 'Warning') {
+                statusBadgeClass = 'status-badge-warning';
+                statusIcon = 'bx-error-circle';
+            } else if (r.status === 'Error') {
+                statusBadgeClass = 'status-badge-error';
+                statusIcon = 'bx-x-circle';
+            }
+
+            // Notes / cleaned badges
+            var detailsHtml = '';
+            if (r.errors && r.errors.length > 0) {
+                detailsHtml += '<div class="text-danger small"><i class="bx bx-x me-1"></i>' + r.errors.map(escapeHtml).join('; ') + '</div>';
+            }
+            if (r.warnings && r.warnings.length > 0) {
+                detailsHtml += '<div class="text-warning-emphasis small"><i class="bx bx-info-circle me-1"></i>' + r.warnings.map(escapeHtml).join('; ') + '</div>';
+            }
+            if (!detailsHtml) {
+                if (r.status === 'Updated') {
+                    detailsHtml = '<span class="text-muted small">Updates existing assignment sections to ' + r.sections + '</span>';
+                } else {
+                    detailsHtml = '<span class="text-muted small">New assignment ready to save</span>';
+                }
+            }
+
+            var courseDisplay = escapeHtml(r.course_code || r.raw_course_code || '—');
+            if (r.raw_course_code && r.raw_course_code !== r.course_code) {
+                courseDisplay += ' <span class="badge bg-warning-subtle text-dark border ms-1" title="Original: ' + escapeHtml(r.raw_course_code) + '"><i class="bx bx-magic-wand me-1"></i>Cleaned</span>';
+            }
+
+            var dividerLabel = r.year_level ? ('Year ' + r.year_level) : (r.year_label ? escapeHtml(r.year_label) : '<span class="text-muted">—</span>');
+
+            var trHtml = '<tr class="preview-data-row" data-status="' + escapeHtml(r.status) + '" data-search="' + escapeHtml((r.professor_name || '') + ' ' + (r.course_code || '')).toLowerCase() + '">' +
+                '<td><span class="badge ' + statusBadgeClass + ' d-inline-flex align-items-center gap-1 px-2 py-1"><i class="bx ' + statusIcon + '"></i>' + escapeHtml(r.status) + '</span></td>' +
+                '<td class="text-muted small">Row ' + r.row_number + '</td>' +
+                '<td class="small fw-semibold text-secondary">' + dividerLabel + '</td>' +
+                '<td class="fw-semibold">' + escapeHtml(r.matched_professor_name || r.professor_name || '—') + '</td>' +
+                '<td>' + courseDisplay + '</td>' +
+                '<td class="text-center fw-bold">' + (r.sections !== null && r.sections !== undefined ? r.sections : '—') + '</td>' +
+                '<td>' + detailsHtml + '</td>' +
+            '</tr>';
+            $previewRowsTbody.append(trHtml);
+        });
+
+        // Render Courses Totals Tab
+        $previewCoursesTbody.empty();
+        courses.forEach(function(c) {
+            var yl = c.year_level ? ('Year ' + c.year_level) : '<span class="text-muted">—</span>';
+            var trHtml = '<tr>' +
+                '<td class="fw-semibold text-primary">' + escapeHtml(c.course_code) + '</td>' +
+                '<td>' + yl + '</td>' +
+                '<td class="text-center fw-bold fs-6 text-dark">' + c.total_sections + '</td>' +
+                '<td class="text-center text-muted">' + c.professors_count + ' faculty</td>' +
+            '</tr>';
+            $previewCoursesTbody.append(trHtml);
+        });
+
+        // Render Workloads Tab
+        $previewWorkloadsTbody.empty();
+        profs.forEach(function(p) {
+            var badgeCls = 'bg-success-subtle text-success-emphasis border-success-subtle';
+            if (p.load_status === 'Overload') badgeCls = 'bg-danger-subtle text-danger-emphasis border-danger-subtle';
+            else if (p.load_status === 'Underload') badgeCls = 'bg-warning-subtle text-warning-emphasis border-warning-subtle';
+
+            var trHtml = '<tr>' +
+                '<td class="fw-semibold">' + escapeHtml(p.name) + '</td>' +
+                '<td><span class="badge bg-light text-dark border">' + escapeHtml(p.department || 'General') + '</span></td>' +
+                '<td class="text-center">' + p.assignments_count + '</td>' +
+                '<td class="text-center"><span class="fw-bold ' + (p.is_over_limit ? 'text-danger' : 'text-dark') + '">' + p.total_hours + '</span> <small class="text-muted">/ max ' + p.max_hours + ' hrs</small></td>' +
+                '<td class="text-center"><span class="fw-bold ' + (p.is_over_limit ? 'text-danger' : 'text-dark') + '">' + p.total_units + '</span> <small class="text-muted">/ max ' + p.max_units + ' units</small></td>' +
+                '<td class="text-center"><span class="badge ' + badgeCls + ' border px-2 py-1">' + escapeHtml(p.load_status) + '</span></td>' +
+            '</tr>';
+            $previewWorkloadsTbody.append(trHtml);
+        });
+
+        // Toggle Views
+        $uploadView.addClass('d-none');
+        $previewView.removeClass('d-none');
+        $btnPreviewAction.addClass('d-none');
+
+        // Configure Confirm Button
+        var validCount = summary.valid_count || 0;
+        if (validCount > 0) {
+            $btnConfirmImport.removeClass('d-none').prop('disabled', false)
+                .html('<i class="bx bx-check-double me-1"></i> Confirm Import (' + validCount + ' Valid ' + (validCount === 1 ? 'Row' : 'Rows') + ')');
+        } else {
+            $btnConfirmImport.removeClass('d-none').prop('disabled', true)
+                .html('<i class="bx bx-x me-1"></i> No Valid Rows to Import');
+        }
+
+        // Show/Hide Error Report Download
+        if ((summary.error_count || 0) > 0) {
+            $btnDownloadErrors.removeClass('d-none');
+        } else {
+            $btnDownloadErrors.addClass('d-none');
+        }
+
+        applyPreviewRowsFilter();
+    }
+
+    // Filter preview rows
+    function applyPreviewRowsFilter() {
+        var searchVal = ($previewRowSearch.val() || '').trim().toLowerCase();
+        var statusVal = $previewRowFilterStatus.val();
+
+        var $rows = $previewRowsTbody.find('tr.preview-data-row');
+        var visibleCount = 0;
+
+        $rows.each(function() {
+            var $row = $(this);
+            var status = $row.attr('data-status');
+            var searchData = $row.attr('data-search') || '';
+
+            var matchesStatus = !statusVal || status === statusVal;
+            var matchesSearch = !searchVal || searchData.indexOf(searchVal) !== -1;
+
+            if (matchesStatus && matchesSearch) {
+                $row.show();
+                visibleCount++;
+            } else {
+                $row.hide();
+            }
+        });
+
+        $('#preview-row-visible-counter').text('Showing ' + visibleCount + ' of ' + $rows.length + ' rows');
+    }
+
+    $previewRowSearch.on('input', applyPreviewRowsFilter);
+    $previewRowFilterStatus.on('change', applyPreviewRowsFilter);
+
+    // Download Error Report
+    $btnDownloadErrors.on('click', function() {
+        if (!currentImportToken) return;
+        $btnDownloadErrors.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Generating...');
+
+        fetch('/professor_load/import/error-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ token: currentImportToken })
+        })
+        .then(function(res) {
+            if (!res.ok) throw new Error('Failed to generate error report.');
+            return res.blob();
+        })
+        .then(function(blob) {
+            $btnDownloadErrors.prop('disabled', false).html('<i class="bx bx-download me-1"></i> Download Error Report (.xlsx)');
+            var url = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'import_error_report.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        })
+        .catch(function(err) {
+            $btnDownloadErrors.prop('disabled', false).html('<i class="bx bx-download me-1"></i> Download Error Report (.xlsx)');
+            if (typeof window.showToast === 'function') {
+                window.showToast(err.message || 'Error downloading report.', 'error');
+            } else {
+                alert(err.message || 'Error downloading report.');
+            }
+        });
+    });
+
+    // Confirm Import Action
+    $btnConfirmImport.on('click', function() {
+        if (!currentImportToken) return;
+
+        $btnConfirmImport.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Saving to Database...');
+        $btnCancelImport.prop('disabled', true);
+        $btnDownloadErrors.prop('disabled', true);
+
+        fetch('/professor_load/import/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ token: currentImportToken })
+        })
+        .then(function(res) {
+            var contentType = res.headers.get('content-type') || '';
+            if (contentType.indexOf('application/json') !== -1) {
+                return res.json().then(function(data) {
+                    return { status: res.status, ok: res.ok, data: data };
+                });
+            } else {
+                return res.text().then(function() {
+                    return {
+                        status: res.status,
+                        ok: false,
+                        data: {
+                            ok: false,
+                            success: false,
+                            error: 'Server error (' + res.status + (res.statusText ? ' ' + res.statusText : '') + '). Check the server log.'
+                        }
+                    };
+                });
+            }
+        })
+        .then(function(result) {
+            var isSuccess = result.ok && (result.data.ok === true || result.data.success === true);
+            if (!isSuccess) {
+                var err = (result.data && (result.data.error || result.data.message)) ? (result.data.error || result.data.message) : ('Import failed (status ' + result.status + ').');
+                alert('Import failed: ' + err);
+                $btnConfirmImport.prop('disabled', false).html('<i class="bx bx-check-double me-1"></i> Try Again');
+                $btnCancelImport.prop('disabled', false);
+                $btnDownloadErrors.prop('disabled', false);
+                return;
+            }
+
+            // Success!
+            var data = result.data;
+            $previewView.addClass('d-none');
+            $btnConfirmImport.addClass('d-none');
+            $btnCancelImport.addClass('d-none');
+            $btnDownloadErrors.addClass('d-none');
+
+            $('#import-success-message').text(data.message || 'Assignments have been saved successfully.');
+            $successView.removeClass('d-none');
+
+            if (typeof window.showToast === 'function') {
+                window.showToast(data.message || 'Professor load imported successfully!', 'success');
+            }
+        })
+        .catch(function(err) {
+            alert('Error during save: ' + (err.message || 'Please check your connection.'));
+            $btnConfirmImport.prop('disabled', false).html('<i class="bx bx-check-double me-1"></i> Confirm & Save Import');
+            $btnCancelImport.prop('disabled', false);
+            $btnDownloadErrors.prop('disabled', false);
+        });
+    });
+
+    // Reload page on Finish
+    $btnFinishReload.on('click', function() {
+        window.location.reload();
+    });
 });
 </script>
 {% endblock %}

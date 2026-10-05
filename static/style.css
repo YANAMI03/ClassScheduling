@@ -1585,5 +1585,332 @@ a {
     cursor: pointer;
 }
 
+/* ============================================================
+   UNIVERSAL LOADING ANIMATION
+   - #app-top-bar   : thin top progress bar (navigation)
+   - #app-overlay   : full-screen overlay (long async tasks)
+   ============================================================ */
 
+/* --- Top Progress Bar --- */
+#app-top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 60%, #93c5fd 100%);
+    z-index: 99999;
+    border-radius: 0 2px 2px 0;
+    transition: width 0.25s ease, opacity 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.5);
+}
+#app-top-bar.bar-active {
+    opacity: 1;
+}
+#app-top-bar.bar-done {
+    width: 100% !important;
+    opacity: 0;
+    transition: width 0.15s ease, opacity 0.4s ease 0.1s;
+}
 
+/* --- Full-Screen Overlay --- */
+#app-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99998;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 1rem;
+    animation: overlayFadeIn 0.2s ease forwards;
+}
+#app-overlay.overlay-visible {
+    display: flex;
+}
+@keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.app-overlay__spinner {
+    width: 52px;
+    height: 52px;
+    border: 4px solid rgba(255,255,255,0.15);
+    border-top-color: var(--primary-light);
+    border-right-color: #93c5fd;
+    border-radius: 50%;
+    animation: overlaySpinnerRotate 0.75s linear infinite;
+}
+@keyframes overlaySpinnerRotate {
+    to { transform: rotate(360deg); }
+}
+
+.app-overlay__text {
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    opacity: 0.9;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    #app-top-bar {
+        transition: none;
+    }
+    .app-overlay__spinner {
+        animation: none;
+        border-top-color: var(--primary-light);
+    }
+}
+
+/* ============================================================
+   BUTTON LOADING STATES
+   .btn-loading  — applied while async action runs
+   .btn-loading-spinner — inline CSS spinner inside the button
+   ============================================================ */
+
+.btn-loading {
+    opacity: 0.78;
+    cursor: progress !important;
+    pointer-events: none;
+}
+
+.btn-loading-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    flex-shrink: 0;
+    vertical-align: middle;
+    animation: btnSpinnerRotate 0.65s linear infinite;
+    margin-right: 0.4em;
+    position: relative;
+    top: -1px;
+}
+
+@keyframes btnSpinnerRotate {
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   GENERATE / CONFIRM SCHEDULE — RICH OVERLAY CARD
+   #schedule-gen-overlay  — centered card rendered on top of
+   the dim backdrop (#app-overlay)
+   ============================================================ */
+
+#schedule-gen-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: genOverlayIn 0.22s ease forwards;
+}
+#schedule-gen-overlay.gen-overlay-active {
+    display: flex;
+}
+@keyframes genOverlayIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.gen-overlay-card {
+    background: #ffffff;
+    border-radius: 18px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.22), 0 4px 16px rgba(0,0,0,0.1);
+    padding: 2.25rem 2.5rem 2rem;
+    width: min(480px, 92vw);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+/* SVG Progress Ring */
+.gen-ring-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.25rem;
+}
+.gen-ring {
+    width: 72px;
+    height: 72px;
+    animation: genRingRotate 1.4s linear infinite;
+    transform-origin: center;
+}
+.gen-ring-track {
+    stroke: #e2e8f0;
+    fill: none;
+}
+.gen-ring-arc {
+    stroke: var(--primary);
+    fill: none;
+    stroke-linecap: round;
+    stroke-dasharray: 180;
+    stroke-dashoffset: 45;
+    animation: genRingArcPulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes genRingRotate {
+    to { transform: rotate(360deg); }
+}
+@keyframes genRingArcPulse {
+    from { stroke-dashoffset: 45; }
+    to   { stroke-dashoffset: 160; }
+}
+
+/* Success ring */
+.gen-ring-success .gen-ring {
+    animation: none;
+}
+.gen-ring-success .gen-ring-arc {
+    animation: none;
+    stroke: #16a34a;
+    stroke-dashoffset: 0;
+    stroke-dasharray: 190;
+    transition: stroke-dashoffset 0.5s ease;
+}
+.gen-ring-success .gen-ring-check {
+    display: block;
+}
+
+.gen-ring-check {
+    display: none;
+    stroke: #16a34a;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 3.5;
+    stroke-dasharray: 30;
+    stroke-dashoffset: 30;
+    animation: genCheckDraw 0.4s ease 0.2s forwards;
+}
+@keyframes genCheckDraw {
+    to { stroke-dashoffset: 0; }
+}
+
+/* Error ring */
+.gen-ring-error .gen-ring {
+    animation: none;
+}
+.gen-ring-error .gen-ring-arc {
+    animation: none;
+    stroke: #dc2626;
+    stroke-dashoffset: 0;
+    stroke-dasharray: 190;
+}
+.gen-ring-error .gen-ring-x {
+    display: block;
+}
+.gen-ring-x {
+    display: none;
+    stroke: #dc2626;
+    fill: none;
+    stroke-linecap: round;
+    stroke-width: 3.5;
+    stroke-dasharray: 28;
+    stroke-dashoffset: 28;
+    animation: genCheckDraw 0.35s ease 0.1s forwards;
+}
+
+.gen-overlay-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.35rem;
+}
+.gen-overlay-subtitle {
+    font-size: 0.845rem;
+    color: var(--text-secondary);
+    margin: 0 0 1.25rem;
+    line-height: 1.5;
+}
+
+/* Indeterminate progress bar */
+.gen-overlay-bar-wrap {
+    background: #e2e8f0;
+    border-radius: 99px;
+    height: 5px;
+    overflow: hidden;
+    margin-bottom: 0.85rem;
+}
+.gen-overlay-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 60%, #93c5fd 100%);
+    border-radius: 99px;
+    animation: genBarSlide 1.6s ease-in-out infinite;
+    width: 40%;
+}
+@keyframes genBarSlide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+}
+
+.gen-overlay-elapsed {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0;
+}
+
+/* Success / Error states */
+.gen-overlay-success-msg {
+    display: none;
+    font-size: 0.9rem;
+    color: #15803d;
+    font-weight: 500;
+    margin-top: 0.5rem;
+}
+.gen-overlay-error-msg {
+    display: none;
+    font-size: 0.875rem;
+    color: #dc2626;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 0.65rem 0.9rem;
+    margin-top: 0.75rem;
+    text-align: left;
+}
+.gen-overlay-error-actions {
+    display: none;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .btn-loading-spinner {
+        animation: none;
+        border-right-color: currentColor;
+        opacity: 0.5;
+    }
+    .gen-ring {
+        animation: none;
+    }
+    .gen-ring-arc {
+        animation: none;
+        stroke-dashoffset: 90;
+    }
+    .gen-overlay-bar-fill {
+        animation: none;
+        width: 60%;
+        transform: none;
+    }
+    .gen-ring-check,
+    .gen-ring-x {
+        animation: none;
+        stroke-dashoffset: 0;
+    }
+}

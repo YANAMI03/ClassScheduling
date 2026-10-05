@@ -181,7 +181,8 @@
             </div>
 
             <div class="col-12 pt-2">
-                <button type="submit" class="btn btn-primary btn-lg" id="schedule-submit" disabled>
+                <button type="submit" class="btn btn-primary btn-lg" id="schedule-submit" disabled
+                    data-loading-text="Generating schedule...">
                     <i class="bx bx-play-circle me-1"></i> Generate Schedule
                 </button>
                 <a href="/schedules" class="btn btn-outline-secondary btn-lg ms-2">
@@ -200,13 +201,15 @@
             <p class="page-subtitle">Review and edit the generated schedule before saving it.</p>
         </div>
         <div class="d-flex gap-2">
-            <form action="/confirm_preview" method="post" class="m-0">
-                <button type="submit" class="btn btn-success">
+            <form action="/confirm_preview" method="post" class="m-0" id="confirm-preview-form">
+                <button type="submit" class="btn btn-success" id="confirm-schedule-btn"
+                    data-loading-text="Confirming schedule...">
                     <i class="bx bx-check-circle"></i> Confirm Schedule
                 </button>
             </form>
             <form action="/discard_preview" method="post" class="m-0">
-                <button type="submit" class="btn btn-outline-secondary">
+                <button type="submit" class="btn btn-outline-secondary" id="discard-preview-btn"
+                    data-loading-text="Discarding...">
                     <i class="bx bx-x-circle"></i> Discard Preview
                 </button>
             </form>
@@ -757,6 +760,27 @@
                     e.preventDefault();
                     showToast('Cannot generate schedule due to mismatched section counts or active schedule conflict.', 'danger');
                     return;
+                }
+                // Show rich gen overlay (base.html provides window.AppLoader)
+                if (typeof window.AppLoader !== 'undefined' && window.AppLoader.showGenOverlay) {
+                    window.AppLoader.showGenOverlay({
+                        title: 'Generating schedule\u2026',
+                        subtitle: 'This may take a moment. Please don\u2019t close or refresh this page.'
+                    });
+                }
+            });
+        }
+
+        // Confirm Schedule overlay
+        var confirmForm = document.getElementById('confirm-preview-form');
+        if (confirmForm) {
+            confirmForm.addEventListener('submit', function(e) {
+                if (e.defaultPrevented) return;
+                if (typeof window.AppLoader !== 'undefined' && window.AppLoader.showGenOverlay) {
+                    window.AppLoader.showGenOverlay({
+                        title: 'Confirming schedule\u2026',
+                        subtitle: 'Saving your schedule. Please don\u2019t close or refresh this page.'
+                    });
                 }
             });
         }

@@ -3,6 +3,8 @@
 {% block header_title %}<h5 class="header__title">Schedule Archive</h5>{% endblock %}
 
 {% block content %}
+{% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set can_manage_archive = user_role_lower in ['scheduler'] %}
 <div class="page-header d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 class="page-title">Schedule Archive</h1>
@@ -12,7 +14,7 @@
         <a href="/schedules" class="btn btn-outline-secondary">
             <i class="bx bx-grid-alt me-1"></i> Active Schedules
         </a>
-        {% if session.get('role') | lower in ['admin', 'scheduler'] %}
+        {% if can_manage_archive %}
         <a href="/" class="btn btn-primary">
             <i class="bx bx-plus-circle me-1"></i> Generate Schedule
         </a>
@@ -130,7 +132,7 @@
                             <a href="{{ url_for('view_schedule_archive_batch', batch_id=batch.batch_id) }}" class="btn btn-sm btn-outline-secondary" title="View archived schedule details">
                                 <i class="bx bx-show"></i> View
                             </a>
-                            {% if session.get('role') | lower in ['admin', 'scheduler'] %}
+                            {% if can_manage_archive %}
                             <button type="button" class="btn btn-sm btn-success restore-batch-btn"
                                     data-batch-id="{{ batch.batch_id }}"
                                     data-semester="{{ batch.semester }}"
@@ -139,8 +141,6 @@
                                     title="Restore this schedule version">
                                 <i class="bx bx-reset"></i> Restore
                             </button>
-                            {% endif %}
-                            {% if session.get('role') | lower == 'admin' %}
                             <button type="button" class="btn btn-sm btn-outline-danger delete-batch-btn"
                                     data-batch-id="{{ batch.batch_id }}"
                                     data-batch-label="{{ batch.semester }} ({{ batch.archived_at_fmt }})"
@@ -183,6 +183,7 @@
 </div>
 {% endif %}
 
+{% if can_manage_archive %}
 <!-- Restore Confirmation Modal -->
 <div class="modal fade" id="restoreArchiveModal" tabindex="-1" aria-labelledby="restoreArchiveModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -225,7 +226,7 @@
     </div>
 </div>
 
-<!-- Delete Archive Confirmation Modal (Admin) -->
+<!-- Delete Archive Confirmation Modal -->
 <div class="modal fade" id="deleteArchiveModal" tabindex="-1" aria-labelledby="deleteArchiveModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -249,12 +250,14 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var restoreModal = new bootstrap.Modal(document.getElementById('restoreArchiveModal'));
+        var restoreEl = document.getElementById('restoreArchiveModal');
+        var restoreModal = restoreEl ? new bootstrap.Modal(restoreEl) : null;
         var restoreForm = document.getElementById('restoreArchiveForm');
         var restoreModalDate = document.getElementById('restoreModalDate');
         var restoreModalSem = document.getElementById('restoreModalSem');
@@ -262,6 +265,7 @@
 
         document.querySelectorAll('.restore-batch-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
+                if (!restoreModal) return;
                 var batchId = this.dataset.batchId;
                 var semester = this.dataset.semester;
                 var program = this.dataset.program;
@@ -276,12 +280,14 @@
             });
         });
 
-        var deleteModal = new bootstrap.Modal(document.getElementById('deleteArchiveModal'));
+        var deleteEl = document.getElementById('deleteArchiveModal');
+        var deleteModal = deleteEl ? new bootstrap.Modal(deleteEl) : null;
         var deleteForm = document.getElementById('deleteArchiveForm');
         var deleteModalLabel = document.getElementById('deleteModalLabel');
 
         document.querySelectorAll('.delete-batch-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
+                if (!deleteModal) return;
                 var batchId = this.dataset.batchId;
                 var label = this.dataset.batchLabel;
 

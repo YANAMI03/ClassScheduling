@@ -3,6 +3,8 @@
 {% block header_title %}<h5 class="header__title">Archived Schedule Details</h5>{% endblock %}
 
 {% block content %}
+{% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set can_manage_archive = user_role_lower in ['scheduler'] %}
 <div class="page-header d-flex justify-content-between align-items-center mb-4">
     <div>
         <div class="d-flex align-items-center gap-2 mb-1">
@@ -17,7 +19,7 @@
             {% if batch_info.archive_reason %} &bull; <em>{{ batch_info.archive_reason }}</em>{% endif %}
         </p>
     </div>
-    {% if session.get('role') | lower in ['admin', 'scheduler'] %}
+    {% if can_manage_archive %}
     <div>
         <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#restoreArchiveModal">
             <i class="bx bx-reset me-1"></i> Restore This Version
@@ -139,6 +141,7 @@
 </div>
 {% endif %}
 
+{% if can_manage_archive %}
 <!-- Restore Confirmation Modal -->
 <div class="modal fade" id="restoreArchiveModal" tabindex="-1" aria-labelledby="restoreArchiveModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -184,4 +187,5 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %}
