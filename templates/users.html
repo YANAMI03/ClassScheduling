@@ -248,7 +248,7 @@
                 <td>
                     <span class="badge-custom badge-{{ (user.role or 'scheduler').lower() }}">
                         {% if (user.role or '').lower() in ['dean', 'chair'] %}
-                            Dean / Chair
+                            Scheduler
                         {% elif (user.role or '').lower() == 'super_admin' %}
                             Super Admin
                         {% elif (user.role or '').lower() == 'admin' %}
@@ -457,7 +457,7 @@ function createUser() {
     }
     
     if (!isGlobal && !program) {
-        alert('Please select a program for Dean or Scheduler.');
+        alert('Please select a program for Scheduler.');
         return;
     }
     
@@ -527,7 +527,7 @@ function saveUser() {
     }
     
     if (!isGlobal && !program) {
-        showToast('Please select a program for Dean or Scheduler.', 'warning');
+        showToast('Please select a program for Scheduler.', 'warning');
         return;
     }
     

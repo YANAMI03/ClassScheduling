@@ -21,9 +21,9 @@
 </ul>
 
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set is_scheduler = (user_role_lower == 'scheduler') %}
+{% set can_edit_professors = (user_role_lower in ['scheduler', 'dean', 'chair', 'super_admin', 'admin']) %}
 
-{% if not is_scheduler %}
+{% if can_edit_professors %}
 <div class="card-custom mb-4">
     <div class="card-custom__header">
         <h5 class="card-custom__title"><i class="bx bx-user-plus me-2"></i>Add New Professor</h5>
@@ -60,7 +60,8 @@
                 </select>
             </div>
             <div class="col-12">
-                <button class="btn btn-primary" type="submit">
+                <button class="btn btn-primary" type="submit" id="addProfessorBtn"
+                    data-loading-text="Adding...">
                     <i class="bx bx-plus"></i> Add Professor
                 </button>
             </div>
@@ -70,7 +71,7 @@
 {% else %}
 <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
     <i class="bx bx-info-circle fs-4 me-2"></i>
-    <div>You are viewing the faculty roster in read-only mode. Faculty roster management is restricted to Dean/Chair.</div>
+    <div>You are viewing the faculty roster in read-only mode.</div>
 </div>
 {% endif %}
 
@@ -89,7 +90,7 @@
                     <th>Academic Ranking</th>
                     <th>Total Assigned Units</th>
                     <th>Total Assigned Hours</th>
-                    {% if not is_scheduler %}
+                    {% if can_edit_professors %}
                     <th class="text-end">Actions</th>
                     {% endif %}
                 </tr>
@@ -113,7 +114,7 @@
                     </td>
                     <td>{{ professor.total_assigned_units }}</td>
                     <td>{{ professor.total_assigned_hours }}</td>
-                    {% if not is_scheduler %}
+                    {% if can_edit_professors %}
                     <td class="text-end">
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal"
                                 data-id="{{professor.prof_id}}"
@@ -132,7 +133,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ 7 if not is_scheduler else 6 }}">
+                    <td colspan="{{ 7 if can_edit_professors else 6 }}">
                         <div class="empty-state">
                             <div class="empty-state__icon"><i class="bx bx-user"></i></div>
                             <div class="empty-state__text">No professors added yet</div>
@@ -147,8 +148,8 @@
 {% endblock %}
 
 {% block scripts %}
-{% set is_scheduler = ((session.get('role', '') or '') | lower == 'scheduler') %}
-{% if not is_scheduler %}
+{% set can_edit_professors = ((session.get('role', '') or '') | lower in ['scheduler', 'dean', 'chair', 'super_admin', 'admin']) %}
+{% if can_edit_professors %}
 <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -189,7 +190,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Update</button>
+                    <button type="submit" class="btn btn-primary" data-loading-text="Updating...">Update</button>
                 </div>
             </form>
         </div>
@@ -199,7 +200,7 @@
 
 <script>
 $(function(){
-    {% if not is_scheduler %}
+    {% if can_edit_professors %}
     $('#editModal').appendTo("body");
     $(document).on('click', '.edit-btn', function(){
         var $t = $(this);
@@ -248,19 +249,20 @@ $(function(){
         });
     }
 
-    {% if not is_scheduler %}
+    {% if can_edit_professors %}
     // AJAX Add Professor: prevent duplicates server-side and show toast notifications
     var addForm = document.getElementById('addProfessorForm');
+    var addProfBtn = document.getElementById('addProfessorBtn');
     if (addForm) {
         addForm.addEventListener('submit', function(ev){
             ev.preventDefault();
             var formData = new FormData(addForm);
-
-            fetch(addForm.action, { method: 'POST', body: formData, headers: {'X-Requested-With': 'XMLHttpRequest'} })
-                .then(function(resp){
-                    return resp.json().then(function(data){ return {ok: resp.ok, status: resp.status, data: data}; });
-                })
-                .then(function(result){
+            var doFetch = function() {
+                return fetch(addForm.action, { method: 'POST', body: formData, headers: {'X-Requested-With': 'XMLHttpRequest'} })
+                    .then(function(resp){
+                        return resp.json().then(function(data){ return {ok: resp.ok, status: resp.status, data: data}; });
+                    })
+                    .then(function(result){
                     if (!result.ok) {
                         showToast(result.data.error || 'Unable to add professor.', 'error');
                         return;
@@ -305,6 +307,12 @@ $(function(){
                 .catch(function(err){
                     showToast(err.message || 'Something went wrong. Please try again.', 'error');
                 });
+            }; // end doFetch
+            if (typeof window.withButtonLoading === 'function' && addProfBtn) {
+                window.withButtonLoading(addProfBtn, doFetch, 'Adding...');
+            } else {
+                doFetch();
+            }
         });
     }
     {% endif %}

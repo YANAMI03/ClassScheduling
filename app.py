@@ -334,6 +334,15 @@ def _is_ajax_or_api_request():
     return False
 
 
+def _is_ajax_request():
+    """Detect whether a specific endpoint call was triggered via AJAX/fetch expecting JSON."""
+    return (
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or 'application/json' in (request.headers.get('Accept') or '').lower()
+    )
+
+
 def roles_required(*allowed_roles):
     """
     Role-Based Access Control decorator.
@@ -666,7 +675,7 @@ def inject_pending_requests():
         return context
 
     try:
-        if (user_role or '').lower() in ('admin', 'super_admin', 'dean', 'chair', 'dean/chair'):
+        if (user_role or '').lower() in ('admin', 'super_admin'):
             res = supabase.table('delete_requests').select('*', count='exact').eq('status', 'pending').execute()
             context['pending_delete_requests_count'] = res.count if res.count is not None else 0
 
@@ -2054,7 +2063,7 @@ def edit_user(user_id):
         program_id_input = request.form.get('program_id', '').strip() if not is_global_admin else None
 
         if not is_global_admin and not (program_input or program_id_input):
-            return jsonify({'success': False, 'message': 'Program is required for Dean and Scheduler roles.'}), 400
+            return jsonify({'success': False, 'message': 'Program is required for Scheduler role.'}), 400
 
         # Resolve program and program_id
         programs = _get_programs()
@@ -2139,7 +2148,7 @@ def create_user():
         program_id_input = request.form.get('program_id', '').strip() if not is_global_admin else None
 
         if not is_global_admin and not (program_input or program_id_input):
-            return jsonify({'success': False, 'message': 'Program is required for Dean and Scheduler roles.'}), 400
+            return jsonify({'success': False, 'message': 'Program is required for Scheduler role.'}), 400
 
         programs = _get_programs()
         program = program_input
@@ -2233,14 +2242,6 @@ def create_test_accounts():
                 'password': 'Scheduler123!',
                 'program': 'BSIT',
                 'role': 'Scheduler'
-            },
-            {
-                'first_name': 'Dean',
-                'last_name': 'User',
-                'email': 'dean@example.com',
-                'password': 'Dean123!',
-                'program': 'BSIT',
-                'role': 'dean'
             }
         ]
 
@@ -2311,9 +2312,6 @@ def create_test_accounts():
 @app.route('/')
 @roles_required('scheduler')
 def home():
-    user_role = (session.get('role') or '').lower()
-    if user_role in ('dean', 'chair', 'dean/chair'):
-        return redirect(url_for('semesters'))
     semesters = ['1st Semester', '2nd Semester']
     return render_template('index.html', active_page='home', semesters=semesters)
 
@@ -2372,7 +2370,7 @@ def legacy_schedule_html():
     return redirect(url_for('schedules'))
 #-------------------------------------------------------add_course----------------------------------------------------------------------------------------------
 @app.route('/add_course', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def add_course():
     try:
         course_name = request.form['course_name']
@@ -2450,15 +2448,19 @@ def add_course():
 
         session.pop('course_message', None)
         log_activity('create', 'course', course_name)
+        if _is_ajax_request():
+            return jsonify({'success': True, 'message': 'Course created successfully.', 'course': course_data}), 200
         flash('Created successfully', 'success')
         return redirect(url_for('show_courses'))
     except Exception as err:
         logging.error(f"Error adding course: {err}")
+        if _is_ajax_request():
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('show_courses'))
 #-------------------------------------------------------show_courses----------------------------------------------------------------------------------------------
 @app.route('/courses')
-@dean_required
+@roles_required('scheduler')
 def show_courses():
     user_prog_id = _get_user_program_id()
     user_program = session.get('program', '')
@@ -2638,31 +2640,65 @@ def api_professor_load(prof_id):
 
 #-------------------------------------------------------delete_course----------------------------------------------------------------------------------------------
 @app.route('/delete_course/<int:course_id>', methods=['GET', 'POST'])
-@dean_required
+@roles_required('scheduler')
 def delete_course(course_id):
-    handled, resp = _request_delete_if_scheduler('course', course_id, f'Course ID {course_id}')
-    if handled:
-        return resp or redirect(url_for('show_courses'))
+    is_ajax = _is_ajax_request()
     try:
+        # Data protection: Check if course is assigned in teaching loads
+        try:
+            load_check = supabase.table('professor_load').select('id').eq('course_id', course_id).limit(1).execute()
+            if load_check.data:
+                err_msg = 'Cannot delete course: this course is currently assigned in faculty teaching loads. Please remove the teaching load assignments first.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+                flash(err_msg, 'danger')
+                return redirect(url_for('show_courses'))
+        except Exception as e:
+            logging.debug(f"Error checking course professor_load references: {e}")
+
+        # Data protection: Check if course is assigned in active schedules
+        try:
+            sched_check = supabase.table('schedule').select('schedule_id').eq('course_id', course_id).eq('archive', False).limit(1).execute()
+            if sched_check.data:
+                err_msg = 'Cannot delete course: this course is assigned to active class schedules. Please remove schedule entries or archive the schedule first.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+                flash(err_msg, 'danger')
+                return redirect(url_for('show_courses'))
+        except Exception as e:
+            logging.debug(f"Error checking course schedule references: {e}")
+
         supabase.table('course').delete().eq('course_id', course_id).execute()
-        _set_delete_request_status({'item_type': 'course', 'item_id': str(course_id), 'status': 'pending'}, 'approved')
+        try:
+            _set_delete_request_status({'item_type': 'course', 'item_id': str(course_id), 'status': 'pending'}, 'approved')
+        except Exception:
+            pass
         log_activity('delete', 'course', f'Course ID {course_id}')
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Course deleted successfully.'}), 200
         flash('Deleted successfully', 'success')
         return redirect(url_for('show_courses'))
     except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('show_courses'))
 
 #-------------------------------------------------------edit_course----------------------------------------------------------------------------------------------
 @app.route('/edit_course/<int:course_id>', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def edit_course(course_id):
+    is_ajax = _is_ajax_request()
     try:
-        course_name = request.form['course_name']
-        lecture_hours = request.form.get('lecture_hours', 0)
-        lab_hours = request.form.get('lab_hours', 0)
-        ilp_hours = request.form.get('ilp_hours', 0)
-        units_raw = request.form.get('units', '').strip()
+        data = request.get_json(silent=True) if request.is_json else None
+        if not data:
+            data = request.form or {}
+
+        course_name = (data.get('course_name') or '').strip()
+        lecture_hours = data.get('lecture_hours', 0)
+        lab_hours = data.get('lab_hours', 0)
+        ilp_hours = data.get('ilp_hours', 0)
+        units_raw = str(data.get('units', '')).strip()
         try:
             units = float(units_raw) if units_raw else 0
             if units.is_integer():
@@ -2673,24 +2709,30 @@ def edit_course(course_id):
         try:
             ilp_val = float(ilp_hours)
             if ilp_val not in (0.0, 1.0):
-                session['course_message'] = 'ILP hours must be either 0 or 1.'
+                msg = 'ILP hours must be either 0 or 1.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+                session['course_message'] = msg
                 session.modified = True
                 return redirect(url_for('show_courses'))
         except (ValueError, TypeError):
-            session['course_message'] = 'ILP hours must be a valid number.'
+            msg = 'ILP hours must be a valid number.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+            session['course_message'] = msg
             session.modified = True
             return redirect(url_for('show_courses'))
 
-        year_level = request.form.get('year_level', '')
-        raw_prog = request.form.get('program', '').strip()
+        year_level = data.get('year_level', '')
+        raw_prog = str(data.get('program') or data.get('program_id') or '').strip()
         program_id = None
         if raw_prog:
             program_id = int(raw_prog) if raw_prog.isdigit() else _find_program_id_by_name(raw_prog)
         if not program_id:
             program_id = _get_user_program_id()
 
-        raw_semester = request.form.get('semester', '').strip()
-        major = request.form.get('major', '').strip() or None
+        raw_semester = (data.get('semester') or '').strip()
+        major = (data.get('major') or '').strip() or None
 
         update_data = {
             'course_name': course_name,
@@ -2714,15 +2756,19 @@ def edit_course(course_id):
 
         session.pop('course_message', None)
         log_activity('edit', 'course', course_name)
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Course edited successfully.'}), 200
         flash('Edited successfully', 'success')
         return redirect(url_for('show_courses'))
     except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('show_courses'))
 #-------------------------------------------------------add_professor----------------------------------------------------------------------------------------------
 #-------------------------------------------------------add_professor----------------------------------------------------------------------------------------------
 @app.route('/add_professor', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def add_professor():
     try:
         first_name = request.form.get('first_name', '').strip()
@@ -2801,8 +2847,9 @@ def add_professor():
         log_activity('create', 'professor', f'{first_name} {last_name}')
         flash('Created successfully', 'success')
 
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        if _is_ajax_request():
             return jsonify({
+                'success': True,
                 'message': 'Professor added successfully.',
                 'professor': {
                     'prof_id': new_id,
@@ -2823,14 +2870,19 @@ def add_professor():
 
 #-------------------------------------------------------edit_professor----------------------------------------------------------------------------------------------
 @app.route('/edit_professor/<int:professor_id>', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def edit_professor(professor_id):
+    is_ajax = _is_ajax_request()
     try:
-        first_name = request.form['first_name'].strip()
-        last_name = request.form['last_name'].strip()
-        specialization = request.form.get('specialization', '').strip()
-        academic_ranking_id_raw = request.form.get('academic_ranking_id', '').strip()
-        time_desig_raw = request.form.get('time_designation', '5').strip()
+        data = request.get_json(silent=True) if request.is_json else None
+        if not data:
+            data = request.form or {}
+
+        first_name = (data.get('first_name') or '').strip()
+        last_name = (data.get('last_name') or '').strip()
+        specialization = (data.get('specialization') or '').strip()
+        academic_ranking_id_raw = str(data.get('academic_ranking_id') or '').strip()
+        time_desig_raw = str(data.get('time_designation', '5')).strip()
         try:
             time_designation = int(time_desig_raw)
             if time_designation not in (4, 5):
@@ -2844,7 +2896,10 @@ def edit_professor(professor_id):
             academic_ranking_id = None
 
         if not academic_ranking_id:
-            flash('Academic ranking is required.', 'danger')
+            msg = 'Academic ranking is required.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+            flash(msg, 'danger')
             return redirect(url_for('professors'))
 
         user_role = (session.get('role') or '').lower()
@@ -2864,7 +2919,10 @@ def edit_professor(professor_id):
                         elif user_program and row_prog and row_prog != user_program.upper():
                             mismatch = True
                     if mismatch:
-                        flash('Selected academic ranking does not belong to your assigned program.', 'danger')
+                        msg = 'Selected academic ranking does not belong to your assigned program.'
+                        if is_ajax:
+                            return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+                        flash(msg, 'danger')
                         return redirect(url_for('professors'))
             except Exception as r_err:
                 logging.warning(f"Error checking academic ranking {academic_ranking_id}: {r_err}")
@@ -2882,32 +2940,65 @@ def edit_professor(professor_id):
         supabase.table('professor').update(update_payload).eq('prof_id', professor_id).execute()
 
         log_activity('edit', 'professor', f'{first_name} {last_name}')
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Professor updated successfully.'}), 200
         flash('Edited successfully', 'success')
         return redirect(url_for('professors'))
     except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('professors'))
 
 #-------------------------------------------------------delete_professor----------------------------------------------------------------------------------------------
 @app.route('/delete_professor/<int:professor_id>', methods=['GET', 'POST'])
-@dean_required
+@roles_required('scheduler')
 def delete_professor(professor_id):
-    handled, resp = _request_delete_if_scheduler('professor', professor_id, f'Professor ID {professor_id}')
-    if handled:
-        return resp or redirect(url_for('professors'))
+    is_ajax = _is_ajax_request()
     try:
+        # Data protection: Check if professor has teaching loads
+        try:
+            load_check = supabase.table('professor_load').select('id').eq('prof_id', professor_id).limit(1).execute()
+            if load_check.data:
+                err_msg = 'Cannot delete professor: this faculty member has assigned courses in teaching load. Please remove the teaching load assignments first.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+                flash(err_msg, 'danger')
+                return redirect(url_for('professors'))
+        except Exception as e:
+            logging.debug(f"Error checking professor teaching load references: {e}")
+
+        # Data protection: Check if professor is assigned in active schedules
+        try:
+            sched_check = supabase.table('schedule').select('schedule_id').eq('prof_id', professor_id).eq('archive', False).limit(1).execute()
+            if sched_check.data:
+                err_msg = 'Cannot delete professor: this professor is assigned to active class schedules. Please remove schedule assignments or archive the schedule first.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+                flash(err_msg, 'danger')
+                return redirect(url_for('professors'))
+        except Exception as e:
+            logging.debug(f"Error checking professor schedule references: {e}")
+
         supabase.table('professor').delete().eq('prof_id', professor_id).execute()
-        _set_delete_request_status({'item_type': 'professor', 'item_id': str(professor_id), 'status': 'pending'}, 'approved')
+        try:
+            _set_delete_request_status({'item_type': 'professor', 'item_id': str(professor_id), 'status': 'pending'}, 'approved')
+        except Exception:
+            pass
         log_activity('delete', 'professor', f'Professor ID {professor_id}')
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Professor deleted successfully.'}), 200
         flash('Deleted successfully', 'success')
         return redirect(url_for('professors'))
     except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('professors'))
 
 #-------------------------------------------------------show_professors----------------------------------------------------------------------------------------------
 @app.route('/professors')
-@dean_required
+@roles_required('scheduler')
 def professors():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -2979,7 +3070,7 @@ def professors():
 
 #-------------------------------------------------------ACADEMIC_RANKING_MODULE----------------------------------------------------------------------------------------------
 @app.route('/academic_ranking')
-@dean_required
+@roles_required('scheduler')
 def academic_ranking():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -3022,19 +3113,20 @@ def academic_ranking():
                            program=user_program)
 
 @app.route('/add_academic_ranking', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def add_academic_ranking():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
     is_super_admin = user_role in ('super_admin', 'admin')
     user_program = session.get('program', '').strip()
 
-    name = request.form.get('name', '').strip()
+    data = request.get_json(silent=True) or request.form or {}
+    name = (data.get('name') or data.get('ranking_name') or '').strip()
     try:
-        min_units = float(request.form.get('min_units', 0) or 0)
-        max_units = float(request.form.get('max_units', 24) or 24)
-        min_hours = float(request.form.get('min_hours', 0) or 0)
-        max_hours = float(request.form.get('max_hours', 40) or 40)
+        min_units = float(data.get('min_units', 0) or 0)
+        max_units = float(data.get('max_units', 24) or 24)
+        min_hours = float(data.get('min_hours', 0) or 0)
+        max_hours = float(data.get('max_hours', 40) or 40)
         if min_units < 0 or max_units <= 0 or min_units > max_units or min_hours < 0 or max_hours <= 0 or min_hours > max_hours:
             raise ValueError
     except (TypeError, ValueError):
@@ -3084,8 +3176,9 @@ def add_academic_ranking():
         log_activity('create', 'academic_ranking', f'{name} ({program})')
         flash('Academic ranking added successfully.', 'success')
 
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        if _is_ajax_request():
             return jsonify({
+                'success': True,
                 'message': 'Academic ranking added successfully.',
                 'ranking': new_ranking
             })
@@ -3099,40 +3192,57 @@ def add_academic_ranking():
         return redirect(url_for('academic_ranking'))
 
 @app.route('/edit_academic_ranking/<int:ranking_id>', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def edit_academic_ranking(ranking_id):
+    is_ajax = _is_ajax_request()
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
     is_super_admin = user_role in ('super_admin', 'admin')
     user_program = session.get('program', '').strip()
 
-    name = request.form.get('name', '').strip()
+    data = request.get_json(silent=True) if request.is_json else None
+    if not data:
+        data = request.form or {}
+
+    name = (data.get('name') or '').strip()
     try:
-        min_units = float(request.form.get('min_units', 0) or 0)
-        max_units = float(request.form.get('max_units', 24) or 24)
-        min_hours = float(request.form.get('min_hours', 0) or 0)
-        max_hours = float(request.form.get('max_hours', 40) or 40)
+        min_units = float(data.get('min_units', 0) or 0)
+        max_units = float(data.get('max_units', 24) or 24)
+        min_hours = float(data.get('min_hours', 0) or 0)
+        max_hours = float(data.get('max_hours', 40) or 40)
         if min_units < 0 or max_units <= 0 or min_units > max_units or min_hours < 0 or max_hours <= 0 or min_hours > max_hours:
             raise ValueError
     except (TypeError, ValueError):
-        flash('Load limits must be valid, non-negative values with minimums not exceeding maximums.', 'danger')
+        msg = 'Load limits must be valid, non-negative values with minimums not exceeding maximums.'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+        flash(msg, 'danger')
         return redirect(url_for('academic_ranking'))
     if not name:
-        flash('Rank name is required.', 'danger')
+        msg = 'Rank name is required.'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+        flash(msg, 'danger')
         return redirect(url_for('academic_ranking'))
 
     try:
         curr_res = supabase.table('academic_ranking').select('*').eq('academic_ranking_id', ranking_id).execute()
         curr_row = _first(curr_res.data or [])
         if not curr_row:
-            flash('Academic ranking not found.', 'danger')
+            msg = 'Academic ranking not found.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg, 'error': msg}), 404
+            flash(msg, 'danger')
             return redirect(url_for('academic_ranking'))
 
-        # Restrict editing to Dean's own program
+        # Restrict editing to own program
         if not is_super_admin and user_prog_id:
             row_pid = curr_row.get('program_id')
             if row_pid and row_pid != user_prog_id:
-                flash('You do not have permission to edit academic rankings outside your program.', 'danger')
+                msg = 'You do not have permission to edit academic rankings outside your program.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg, 'error': msg}), 403
+                flash(msg, 'danger')
                 return redirect(url_for('academic_ranking'))
 
         update_payload = {
@@ -3145,16 +3255,21 @@ def edit_academic_ranking(ranking_id):
         supabase.table('academic_ranking').update(update_payload).eq('academic_ranking_id', ranking_id).execute()
 
         log_activity('edit', 'academic_ranking', f'{name} (ID: {ranking_id})')
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Academic ranking updated successfully.'}), 200
         flash('Academic ranking updated successfully.', 'success')
         return redirect(url_for('academic_ranking'))
     except Exception as err:
         logging.exception(f"Error updating academic ranking {ranking_id}: {err}")
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('academic_ranking'))
 
 @app.route('/delete_academic_ranking/<int:ranking_id>', methods=['GET', 'POST'])
-@dean_required
+@roles_required('scheduler')
 def delete_academic_ranking(ranking_id):
+    is_ajax = _is_ajax_request()
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
     is_super_admin = user_role in ('super_admin', 'admin')
@@ -3163,33 +3278,47 @@ def delete_academic_ranking(ranking_id):
         curr_res = supabase.table('academic_ranking').select('*').eq('academic_ranking_id', ranking_id).execute()
         curr_row = _first(curr_res.data or [])
         if not curr_row:
-            flash('Academic ranking not found.', 'danger')
+            msg = 'Academic ranking not found.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg, 'error': msg}), 404
+            flash(msg, 'danger')
             return redirect(url_for('academic_ranking'))
 
         if not is_super_admin and user_prog_id:
             row_pid = curr_row.get('program_id')
             if row_pid and row_pid != user_prog_id:
-                flash('You do not have permission to delete academic rankings outside your program.', 'danger')
+                msg = 'You do not have permission to delete academic rankings outside your program.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg, 'error': msg}), 403
+                flash(msg, 'danger')
                 return redirect(url_for('academic_ranking'))
 
         ranking_name = curr_row.get('name', f'ID {ranking_id}')
-        handled, resp = _request_delete_if_scheduler('academic_ranking', ranking_id, f'Academic Ranking: {ranking_name}')
-        if handled:
-            return resp or redirect(url_for('academic_ranking'))
 
+        # Data protection: Check if professors are assigned
         assigned = supabase.table('professor').select('prof_id').eq('academic_ranking_id', ranking_id).execute().data or []
         if assigned:
-            flash('This ranking cannot be deleted while professors are assigned to it.', 'danger')
+            err_msg = 'This ranking cannot be deleted while professors are assigned to it.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+            flash(err_msg, 'danger')
             return redirect(url_for('academic_ranking'))
 
         supabase.table('academic_ranking').delete().eq('academic_ranking_id', ranking_id).execute()
-        _set_delete_request_status({'item_type': 'academic_ranking', 'item_id': str(ranking_id), 'status': 'pending'}, 'approved')
+        try:
+            _set_delete_request_status({'item_type': 'academic_ranking', 'item_id': str(ranking_id), 'status': 'pending'}, 'approved')
+        except Exception:
+            pass
 
         log_activity('delete', 'academic_ranking', f'{ranking_name} (ID {ranking_id})')
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Academic ranking deleted successfully.'}), 200
         flash('Academic ranking deleted successfully.', 'success')
         return redirect(url_for('academic_ranking'))
     except Exception as err:
         logging.exception(f"Error deleting academic ranking {ranking_id}: {err}")
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('academic_ranking'))
 
@@ -3224,7 +3353,7 @@ def api_academic_rankings():
     return jsonify({'academic_rankings': data})
 #-------------------------------------------------------show_rooms----------------------------------------------------------------------------------------------
 @app.route('/rooms')
-@dean_required
+@roles_required('scheduler')
 def rooms():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -3303,12 +3432,29 @@ def search_rooms():
         return jsonify({'error': str(err), 'rooms': [], 'exact_match': False}), 500
 
 @app.route('/add_room', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def add_room():
+    is_ajax = (
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or 'application/json' in (request.headers.get('Accept') or '').lower()
+    )
     try:
-        room_name = request.form['room_name'].strip()
-        room_type = request.form.get('room_type', 'Lecture Room')
-        raw_prog = request.form.get('program_id')
+        data = request.get_json(silent=True) if request.is_json else None
+        if not data:
+            data = request.form or {}
+
+        room_name = (data.get('room_name') or '').strip()
+        room_type = (data.get('room_type') or 'Lecture Room').strip()
+        raw_prog = data.get('program_id')
+
+        if not room_name:
+            err_msg = 'Room name is required.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+            flash(err_msg, 'warning')
+            return redirect(url_for('rooms'))
+
         program_id = None
         if raw_prog and str(raw_prog).strip():
             try:
@@ -3325,23 +3471,45 @@ def add_room():
         if program_id:
             payload['program_id'] = program_id
 
-        supabase.table('room').insert(payload).execute()
+        res = supabase.table('room').insert(payload).execute()
 
         log_activity('create', 'room', room_name)
+        if is_ajax:
+            created_room = res.data[0] if (res and res.data) else payload
+            return jsonify({'success': True, 'message': 'Created successfully', 'room': created_room}), 200
         flash('Created successfully', 'success')
         return redirect(url_for('rooms'))
     except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('rooms'))
 
 #-------------------------------------------------------edit_room----------------------------------------------------------------------------------------------
 @app.route('/edit_room/<int:room_id>', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def edit_room(room_id):
+    is_ajax = (
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or 'application/json' in (request.headers.get('Accept') or '').lower()
+    )
     try:
-        room_name = request.form['room_name'].strip()
-        room_type = request.form.get('room_type', 'Lecture Room')
-        raw_prog = request.form.get('program_id')
+        data = request.get_json(silent=True) if request.is_json else None
+        if not data:
+            data = request.form or {}
+
+        room_name = (data.get('room_name') or '').strip()
+        room_type = (data.get('room_type') or 'Lecture Room').strip()
+        raw_prog = data.get('program_id')
+
+        if not room_name:
+            err_msg = 'Room name is required.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+            flash(err_msg, 'warning')
+            return redirect(url_for('rooms'))
+
         program_id = None
         if raw_prog and str(raw_prog).strip():
             try:
@@ -3359,32 +3527,64 @@ def edit_room(room_id):
         supabase.table('room').update(update_payload).eq('room_id', room_id).execute()
 
         log_activity('edit', 'room', room_name)
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Edited successfully'}), 200
         flash('Edited successfully', 'success')
         return redirect(url_for('rooms'))
     except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('rooms'))
 
 #-------------------------------------------------------delete_room----------------------------------------------------------------------------------------------
 @app.route('/delete_room/<int:room_id>', methods=['GET', 'POST'])
-@dean_required
+@roles_required('scheduler')
 def delete_room(room_id):
-    handled, resp = _request_delete_if_scheduler('room', room_id, f'Room ID {room_id}')
-    if handled:
-        return resp or redirect(url_for('rooms'))
+    is_ajax = (
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or 'application/json' in (request.headers.get('Accept') or '').lower()
+    )
     try:
+        # Data protection: Check if room is referenced by active schedule rows
+        in_active_schedule = False
+        try:
+            sched_check = supabase.table('schedule').select('schedule_id').eq('room_id', room_id).eq('archive', False).limit(1).execute()
+            in_active_schedule = bool(sched_check.data)
+        except Exception:
+            try:
+                sched_check = supabase.table('schedule').select('schedule_id').eq('room_id', room_id).limit(1).execute()
+                in_active_schedule = bool(sched_check.data)
+            except Exception:
+                in_active_schedule = False
+
+        if in_active_schedule:
+            err_msg = 'Cannot delete room: this room is currently assigned to one or more active schedules. Please remove the room assignment or archive the schedule first.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+            flash(err_msg, 'danger')
+            return redirect(url_for('rooms'))
+
         supabase.table('room').delete().eq('room_id', room_id).execute()
-        _set_delete_request_status({'item_type': 'room', 'item_id': str(room_id), 'status': 'pending'}, 'approved')
+        try:
+            _set_delete_request_status({'item_type': 'room', 'item_id': str(room_id), 'status': 'pending'}, 'approved')
+        except Exception:
+            pass
         log_activity('delete', 'room', f'Room ID {room_id}')
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Deleted successfully'}), 200
         flash('Deleted successfully', 'success')
         return redirect(url_for('rooms'))
     except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('rooms'))
 
 #-------------------------------------------------------show_professor_load----------------------------------------------------------------------------------------------
 @app.route('/professor_load')
-@dean_required
+@roles_required('scheduler')
 def professor_load():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -3514,7 +3714,7 @@ def professor_load():
     )
 #-------------------------------------------------------add_professor_load----------------------------------------------------------------------------------------------
 @app.route('/add_professor_load', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def add_professor_load():
     prof_id = request.form.get('prof_id')
     course_ids = request.form.getlist('course_ids')
@@ -3643,7 +3843,7 @@ def add_professor_load():
     return redirect(url_for('professor_load'))
 #-------------------------------------------------------update_prof_with_courses----------------------------------------------------------------------------------------------
 @app.route('/update_prof_with_courses/<int:prof_id>', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def update_prof_with_courses(prof_id):
     try:
         first_name = request.form.get('first_name', '').strip()
@@ -3797,7 +3997,7 @@ def update_prof_with_courses(prof_id):
     return redirect(url_for('professor_load'))
 #-------------------------------------------------------edit_professor_load----------------------------------------------------------------------------------------------
 @app.route('/edit_professor_load/<int:professor_load_id>', methods=['POST'])
-@dean_required
+@roles_required('scheduler')
 def edit_professor_load(professor_load_id):
     try:
         prof_id = request.form['prof_id']
@@ -3813,27 +4013,62 @@ def edit_professor_load(professor_load_id):
     except Exception as err:
         return f"Error: {err}"
 #-------------------------------------------------------delete_professor_load_all----------------------------------------------------------------------------------------------
-@app.route('/delete_professor_load_all/<int:prof_id>')
-@dean_required
+@app.route('/delete_professor_load_all/<int:prof_id>', methods=['GET', 'POST'])
+@roles_required('scheduler')
 def delete_professor_load_all(prof_id):
+    is_ajax = _is_ajax_request()
     try:
+        pl_rows = supabase.table('professor_load').select('id').eq('prof_id', prof_id).execute().data or []
+        pl_ids = [r['id'] for r in pl_rows if r.get('id')]
+        if pl_ids:
+            in_sched = supabase.table('schedule').select('schedule_id').in_('professor_load_id', pl_ids).eq('archive', False).limit(1).execute()
+            if in_sched.data:
+                msg = 'Cannot delete all assignments for this professor because one or more are assigned in the active schedule.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg}), 400
+                flash(msg, 'danger')
+                return redirect(url_for('professor_load'))
+
         supabase.table('professor_load').delete().eq('prof_id', prof_id).execute()
         log_activity('delete', 'professor_load', f'All assignments for Prof ID {prof_id}')
-        flash('Deleted successfully', 'success')
+        msg = 'All assignments for professor deleted successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg})
+        flash(msg, 'success')
         return redirect(url_for('professor_load'))
     except Exception as err:
-        return f"Error: {err}"
+        msg = f'Error deleting assignments: {err}'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 500
+        flash(msg, 'danger')
+        return redirect(url_for('professor_load'))
 #-------------------------------------------------------delete_professor_load----------------------------------------------------------------------------------------------
-@app.route('/delete_professor_load/<int:professor_load_id>')
-@dean_required
+@app.route('/delete_professor_load/<int:professor_load_id>', methods=['GET', 'POST'])
+@roles_required('scheduler')
 def delete_professor_load(professor_load_id):
+    is_ajax = _is_ajax_request()
     try:
+        in_sched = supabase.table('schedule').select('schedule_id').eq('professor_load_id', professor_load_id).eq('archive', False).limit(1).execute()
+        if in_sched.data:
+            msg = 'Cannot delete course assignment because it is currently assigned in the active schedule.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg}), 400
+            flash(msg, 'danger')
+            return redirect(url_for('professor_load'))
+
         supabase.table('professor_load').delete().eq('id', professor_load_id).execute()
         log_activity('delete', 'professor_load', f'Prof-Course ID {professor_load_id}')
-        flash('Deleted successfully', 'success')
+        msg = 'Assignment deleted successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg})
+        flash(msg, 'success')
         return redirect(url_for('professor_load'))
     except Exception as err:
-        return f"Error: {err}"
+        msg = f'Error deleting assignment: {err}'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 500
+        flash(msg, 'danger')
+        return redirect(url_for('professor_load'))
 #-------------------------------------------------------professor_load_import----------------------------------------------------------------------------------------------
 _PROFESSOR_LOAD_IMPORT_CACHE = {}
 
@@ -7800,24 +8035,99 @@ def edit_schedule_entry(schedule_id):
 @app.route('/add_timeslot', methods=['POST'])
 @roles_required('scheduler')
 def add_timeslot():
-    # Adding new timeslots via the UI is disabled. Redirect back to timeslot list.
-    return redirect(url_for('timeslot'))
+    is_ajax = _is_ajax_request()
+    data = request.get_json(silent=True) or request.form
+    day = (data.get('day') or '').strip()
+    start_time = (data.get('start_time') or '').strip()
+    end_time = (data.get('end_time') or '').strip()
+    lunch_time = (data.get('lunch_time') or '').strip() or None
+    semester_id = data.get('semester_id')
 
-#-------------------------------------------------------delete_timeslot----------------------------------------------------------------------------------------------
-@app.route('/delete_timeslot/<int:timeslot_id>')
-@roles_required('scheduler')
-def delete_timeslot(timeslot_id):
-    handled, resp = _request_delete_if_scheduler('timeslot', timeslot_id, f'Timeslot ID {timeslot_id}')
-    if handled:
-        return resp or redirect(url_for('timeslot'))
+    if not day:
+        msg = 'Day of the week is required.'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 400
+        flash(msg, 'danger')
+        return redirect(url_for('timeslot'))
+
     try:
-        supabase.table('timeslot').delete().eq('timeslot_id', timeslot_id).execute()
-        _set_delete_request_status({'item_type': 'timeslot', 'item_id': str(timeslot_id), 'status': 'pending'}, 'approved')
-        log_activity('delete', 'timeslot', f'Timeslot ID {timeslot_id}')
-        flash('Deleted successfully', 'success')
+        existing = supabase.table('timeslot').select('timeslot_id, day').execute().data or []
+        for ts in existing:
+            if (ts.get('day') or '').strip().lower() == day.lower():
+                msg = f'A timeslot for {day} already exists.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg}), 400
+                flash(msg, 'danger')
+                return redirect(url_for('timeslot'))
+
+        payload = {
+            'day': day.capitalize(),
+            'start_time': _to_time_string(start_time) if start_time else '08:00:00',
+            'end_time': _to_time_string(end_time) if end_time else '20:00:00',
+            'lunch_time': _to_time_string(lunch_time) if lunch_time else '12:00:00'
+        }
+        if semester_id:
+            try:
+                payload['semester_id'] = int(semester_id)
+            except (ValueError, TypeError):
+                pass
+
+        supabase.table('timeslot').insert(payload).execute()
+        log_activity('add', 'timeslot', f'Timeslot {day}')
+        msg = f'Operating day {day} added successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg})
+        flash(msg, 'success')
         return redirect(url_for('timeslot'))
     except Exception as err:
-        return f"Error: {err}"
+        msg = f'Error adding timeslot: {err}'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 500
+        flash(msg, 'danger')
+        return redirect(url_for('timeslot'))
+
+#-------------------------------------------------------delete_timeslot----------------------------------------------------------------------------------------------
+@app.route('/delete_timeslot/<int:timeslot_id>', methods=['GET', 'POST'])
+@roles_required('scheduler')
+def delete_timeslot(timeslot_id):
+    is_ajax = _is_ajax_request()
+    try:
+        ts_res = supabase.table('timeslot').select('*').eq('timeslot_id', timeslot_id).execute()
+        ts_rows = ts_res.data or []
+        if not ts_rows:
+            msg = 'Timeslot not found.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg}), 404
+            flash(msg, 'danger')
+            return redirect(url_for('timeslot'))
+
+        ts_row = ts_rows[0]
+        day_name = ts_row.get('day') or ts_row.get('start_day')
+
+        # Keep existing data protections: check if active schedule uses this day
+        if day_name:
+            in_sched = supabase.table('schedule').select('schedule_id').eq('day', day_name).eq('archive', False).limit(1).execute()
+            if in_sched.data:
+                msg = f"Cannot delete {day_name} because active classes are scheduled on this day."
+                if is_ajax:
+                    return jsonify({'success': False, 'message': msg}), 400
+                flash(msg, 'danger')
+                return redirect(url_for('timeslot'))
+
+        supabase.table('timeslot').delete().eq('timeslot_id', timeslot_id).execute()
+        _set_delete_request_status({'item_type': 'timeslot', 'item_id': str(timeslot_id), 'status': 'pending'}, 'approved')
+        log_activity('delete', 'timeslot', f'Timeslot ID {timeslot_id} ({day_name})')
+        msg = f'Operating day {day_name or timeslot_id} deleted successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg})
+        flash(msg, 'success')
+        return redirect(url_for('timeslot'))
+    except Exception as err:
+        msg = f'Error deleting timeslot: {err}'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 500
+        flash(msg, 'danger')
+        return redirect(url_for('timeslot'))
 
 #-------------------------------------------------------Admin Delete Requests----------------------------------------------------------------------------------------------
 @app.route('/admin/delete_requests/<int:req_id>/approve', methods=['POST'])
@@ -8336,7 +8646,8 @@ def unassign_irregular_section(student_id, course_id):
 def timeslot():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
-    is_dean_or_admin = user_role in ('super_admin', 'admin', 'dean', 'chair', 'dean/chair')
+    can_edit_timeslot = user_role in ('scheduler', 'super_admin', 'admin')
+    is_dean_or_admin = can_edit_timeslot
 
     semesters_list = _get_semesters(user_prog_id)
     req_sem_id = request.args.get('semester_id')
@@ -8375,15 +8686,18 @@ def timeslot():
         semester=selected_sem,
         semesters=semesters_list,
         timeslots=all_timeslots,
-        is_dean_or_admin=is_dean_or_admin
+        is_dean_or_admin=is_dean_or_admin,
+        can_edit_timeslot=can_edit_timeslot
     )
 
 @app.route('/edit_timeslot/<int:timeslot_id>', methods=['POST'])
 @roles_required('scheduler')
 def edit_timeslot(timeslot_id):
-    start_time = request.form.get('start_time', '').strip()
-    end_time = request.form.get('end_time', '').strip()
-    lunch_time = request.form.get('lunch_time', '').strip() or None
+    is_ajax = _is_ajax_request()
+    data = request.get_json(silent=True) or request.form
+    start_time = (data.get('start_time') or '').strip()
+    end_time = (data.get('end_time') or '').strip()
+    lunch_time = (data.get('lunch_time') or '').strip() or None
 
     try:
         payload = {}
@@ -8395,9 +8709,15 @@ def edit_timeslot(timeslot_id):
 
         supabase.table('timeslot').update(payload).eq('timeslot_id', timeslot_id).execute()
         log_activity('edit', 'timeslot', f'Timeslot ID {timeslot_id}')
-        flash('Timeslot operating hours updated successfully.', 'success')
+        msg = 'Timeslot operating hours updated successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg})
+        flash(msg, 'success')
     except Exception as err:
-        flash(f'Error updating timeslot: {err}', 'danger')
+        msg = f'Error updating timeslot: {err}'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 500
+        flash(msg, 'danger')
 
     return redirect(url_for('timeslot'))
 

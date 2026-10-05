@@ -4,7 +4,7 @@
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_manage_archive = user_role_lower in ['scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'] %}
+{% set can_manage_archive = user_role_lower in ['scheduler'] %}
 <div class="page-header d-flex justify-content-between align-items-center mb-4">
     <div>
         <div class="d-flex align-items-center gap-2 mb-1">

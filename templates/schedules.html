@@ -4,7 +4,7 @@
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_edit_schedule = user_role_lower in ['scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'] %}
+{% set can_edit_schedule = user_role_lower in ['scheduler'] %}
 <div class="page-header">
     <div>
         <h1 class="page-title">Section Schedule</h1>

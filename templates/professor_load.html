@@ -150,7 +150,7 @@
         <p class="page-subtitle">Assign courses, set section counts, and monitor real-time weekly hours & unit workload capacities</p>
     </div>
     {% set user_role_lower = (session.get('role', '') or '') | lower %}
-    {% if user_role_lower not in ['viewer', 'guest'] and user_role_lower in ['super admin', 'super_admin', 'admin', 'scheduler', 'dean', 'chair', 'dean/chair', 'program chair'] %}
+    {% if user_role_lower not in ['viewer', 'guest'] and user_role_lower in ['super admin', 'super_admin', 'admin', 'scheduler'] %}
     <div>
         <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2 shadow-sm" id="btn-open-import-modal" data-bs-toggle="modal" data-bs-target="#importLoadModal">
             <i class="bx bx-upload fs-5"></i>
@@ -2757,11 +2757,11 @@ $(function(){
     // Browse click
     $btnBrowse.on('click', function(e) {
         e.stopPropagation();
-        $fileInput.trigger('click');
+        document.getElementById('import-file-input').click();
     });
 
     $dropzone.on('click', function() {
-        $fileInput.trigger('click');
+        document.getElementById('import-file-input').click();
     });
 
     // Drag and Drop

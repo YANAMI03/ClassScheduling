@@ -9,13 +9,15 @@
         <p class="page-subtitle">Review the generated schedule before saving it.</p>
     </div>
     <div class="d-flex gap-2">
-        <form action="/confirm_preview" method="post" class="m-0">
-            <button type="submit" class="btn btn-success">
+        <form action="/confirm_preview" method="post" class="m-0" id="preview-confirm-form">
+            <button type="submit" class="btn btn-success" id="preview-confirm-btn"
+                data-loading-text="Confirming schedule...">
                 <i class="bx bx-check-circle"></i> Confirm Schedule
             </button>
         </form>
         <form action="/discard_preview" method="post" class="m-0">
-            <button type="submit" class="btn btn-outline-secondary">
+            <button type="submit" class="btn btn-outline-secondary" id="preview-discard-btn"
+                data-loading-text="Discarding...">
                 <i class="bx bx-x-circle"></i> Discard Preview
             </button>
         </form>
@@ -496,5 +498,21 @@ $(function(){
         });
     });
 });
+</script>
+<script>
+(function() {
+    var confirmForm = document.getElementById('preview-confirm-form');
+    if (confirmForm) {
+        confirmForm.addEventListener('submit', function(e) {
+            if (e.defaultPrevented) return;
+            if (typeof window.AppLoader !== 'undefined' && window.AppLoader.showGenOverlay) {
+                window.AppLoader.showGenOverlay({
+                    title: 'Confirming schedule\u2026',
+                    subtitle: 'Saving your schedule. Please don\u2019t close or refresh this page.'
+                });
+            }
+        });
+    }
+}());
 </script>
 {% endblock %}

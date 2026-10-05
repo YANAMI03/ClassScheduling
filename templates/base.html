@@ -13,6 +13,38 @@
     {% block head_extra %}{% endblock %}
 </head>
 <body id="body-pd">
+    <!-- Universal Loading: top progress bar -->
+    <div id="app-top-bar" role="progressbar" aria-label="Page loading" aria-hidden="true"></div>
+    <!-- Universal Loading: full-screen overlay -->
+    <div id="app-overlay" role="status" aria-live="polite" aria-label="Loading">
+        <div class="app-overlay__spinner"></div>
+        <div class="app-overlay__text" id="app-overlay-text">Loading&hellip;</div>
+    </div>
+    <!-- Generate / Confirm Schedule — rich overlay card -->
+    <div id="schedule-gen-overlay" role="dialog" aria-modal="true" aria-labelledby="gen-overlay-title" aria-live="assertive">
+        <div class="gen-overlay-card">
+            <div class="gen-ring-wrap" id="gen-ring-wrap">
+                <svg class="gen-ring" viewBox="0 0 72 72" aria-hidden="true">
+                    <circle class="gen-ring-track" cx="36" cy="36" r="30" stroke-width="5"/>
+                    <circle class="gen-ring-arc"   cx="36" cy="36" r="30" stroke-width="5" transform="rotate(-90 36 36)"/>
+                    <polyline class="gen-ring-check" points="22,36 31,45 50,26"/>
+                    <line    class="gen-ring-x" x1="24" y1="24" x2="48" y2="48"/>
+                    <line    class="gen-ring-x" x1="48" y1="24" x2="24" y2="48"/>
+                </svg>
+            </div>
+            <p class="gen-overlay-title" id="gen-overlay-title">Generating schedule&hellip;</p>
+            <p class="gen-overlay-subtitle" id="gen-overlay-subtitle">This may take a moment. Please don&rsquo;t close or refresh this page.</p>
+            <div class="gen-overlay-bar-wrap" id="gen-overlay-bar-wrap">
+                <div class="gen-overlay-bar-fill"></div>
+            </div>
+            <p class="gen-overlay-elapsed" id="gen-overlay-elapsed">Elapsed: 00:00</p>
+            <div class="gen-overlay-success-msg" id="gen-overlay-success-msg"></div>
+            <div class="gen-overlay-error-msg" id="gen-overlay-error-msg"></div>
+            <div class="gen-overlay-error-actions" id="gen-overlay-error-actions">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="gen-overlay-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
     <header class="header" id="header">
         {% block header_title %}{% endblock %}
         <div class="header__user d-flex align-items-center gap-3">
@@ -660,11 +692,288 @@
                     e.preventDefault();
                     return false;
                 }
-                restoreBtn.disabled = true;
-                restoreBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Restoring database...';
+                if (typeof window.setButtonLoading === 'function') {
+                    window.setButtonLoading(restoreBtn, true, 'Restoring…');
+                } else {
+                    restoreBtn.disabled = true;
+                    restoreBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Restoring database...';
+                }
             });
         }
     });
+
+    // =========================================================================
+    // UNIVERSAL LOADER  (window.AppLoader)
+    // Top-bar: thin progress bar for navigation transitions
+    // Overlay:  full-screen spinner for long async operations
+    // Button loading: setButtonLoading / withButtonLoading helpers
+    // Generate / Confirm overlay card: showGenOverlay / genOverlaySuccess / genOverlayError
+    // =========================================================================
+    (function() {
+        /* ---- Top progress bar ---- */
+        var bar   = document.getElementById('app-top-bar');
+        var overlay = document.getElementById('app-overlay');
+        var overlayText = document.getElementById('app-overlay-text');
+        var barTimer = null;
+        var barWidth = 0;
+
+        function barStep() {
+            if (!bar) return;
+            var increment = barWidth < 30 ? 12 : barWidth < 60 ? 6 : barWidth < 80 ? 3 : 1;
+            barWidth = Math.min(barWidth + increment, 90);
+            bar.style.width = barWidth + '%';
+        }
+
+        /* ---- Gen/Confirm overlay references ---- */
+        var genOverlay   = document.getElementById('schedule-gen-overlay');
+        var genRingWrap  = document.getElementById('gen-ring-wrap');
+        var genTitle     = document.getElementById('gen-overlay-title');
+        var genSubtitle  = document.getElementById('gen-overlay-subtitle');
+        var genBarWrap   = document.getElementById('gen-overlay-bar-wrap');
+        var genElapsed   = document.getElementById('gen-overlay-elapsed');
+        var genSuccessMsg = document.getElementById('gen-overlay-success-msg');
+        var genErrorMsg  = document.getElementById('gen-overlay-error-msg');
+        var genErrorActs = document.getElementById('gen-overlay-error-actions');
+        var genCloseBtn  = document.getElementById('gen-overlay-close-btn');
+        var genElapsedTimer = null;
+        var genElapsedSec   = 0;
+        var genFailsafeTimer = null;
+        var genBeforeUnloadFn = null;
+
+        function padTwo(n) { return n < 10 ? '0' + n : '' + n; }
+
+        function resetGenOverlayUI() {
+            if (genRingWrap) { genRingWrap.classList.remove('gen-ring-success', 'gen-ring-error'); }
+            if (genBarWrap)  { genBarWrap.style.display = ''; }
+            if (genElapsed)  { genElapsed.style.display = ''; }
+            if (genSuccessMsg) { genSuccessMsg.style.display = 'none'; }
+            if (genErrorMsg)   { genErrorMsg.style.display = 'none'; }
+            if (genErrorActs)  { genErrorActs.style.display = 'none'; }
+        }
+
+        function clearGenTimers() {
+            clearInterval(genElapsedTimer);
+            clearTimeout(genFailsafeTimer);
+            genElapsedTimer = null;
+            genFailsafeTimer = null;
+        }
+
+        function removeBeforeUnload() {
+            if (genBeforeUnloadFn) {
+                window.removeEventListener('beforeunload', genBeforeUnloadFn);
+                genBeforeUnloadFn = null;
+            }
+        }
+
+        /* ---- AppLoader public API ---- */
+        window.AppLoader = {
+            startBar: function() {
+                if (!bar) return;
+                clearTimeout(barTimer);
+                bar.classList.remove('bar-done');
+                barWidth = 0;
+                bar.style.width = '0%';
+                bar.style.transition = 'none';
+                bar.classList.add('bar-active');
+                void bar.offsetWidth;
+                bar.style.transition = '';
+                barStep();
+                barTimer = setInterval(barStep, 300);
+            },
+            finishBar: function() {
+                if (!bar) return;
+                clearTimeout(barTimer);
+                barWidth = 100;
+                bar.style.width = '100%';
+                bar.classList.add('bar-done');
+                setTimeout(function() {
+                    bar.classList.remove('bar-active', 'bar-done');
+                    bar.style.width = '0%';
+                }, 600);
+            },
+            show: function(text) {
+                if (overlayText) overlayText.textContent = text || 'Loading\u2026';
+                if (overlay) overlay.classList.add('overlay-visible');
+            },
+            hide: function() {
+                if (overlay) overlay.classList.remove('overlay-visible');
+            },
+
+            // --- Gen/Confirm overlay ---
+            showGenOverlay: function(opts) {
+                opts = opts || {};
+                resetGenOverlayUI();
+                if (genTitle)    genTitle.textContent = opts.title    || 'Generating schedule\u2026';
+                if (genSubtitle) genSubtitle.textContent = opts.subtitle || 'This may take a moment. Please don\u2019t close or refresh this page.';
+                if (genElapsed)  genElapsed.textContent = 'Elapsed: 00:00';
+                genElapsedSec = 0;
+                clearGenTimers();
+                genElapsedTimer = setInterval(function() {
+                    genElapsedSec++;
+                    var m = Math.floor(genElapsedSec / 60);
+                    var s = genElapsedSec % 60;
+                    if (genElapsed) genElapsed.textContent = 'Elapsed: ' + padTwo(m) + ':' + padTwo(s);
+                }, 1000);
+                // 5-minute failsafe
+                var FAILSAFE_MS = 5 * 60 * 1000;
+                genFailsafeTimer = setTimeout(function() {
+                    window.AppLoader.genOverlayError(
+                        'This is taking longer than expected. The generation may still be running. ' +
+                        'Please check the Schedules page, or try again if nothing was saved.'
+                    );
+                }, FAILSAFE_MS);
+                // beforeunload warning
+                genBeforeUnloadFn = function(e) {
+                    e.preventDefault();
+                    e.returnValue = 'Schedule generation is still running. Are you sure you want to leave?';
+                    return e.returnValue;
+                };
+                window.addEventListener('beforeunload', genBeforeUnloadFn);
+                if (genOverlay) genOverlay.classList.add('gen-overlay-active');
+            },
+            hideGenOverlay: function() {
+                clearGenTimers();
+                removeBeforeUnload();
+                if (genOverlay) genOverlay.classList.remove('gen-overlay-active');
+                resetGenOverlayUI();
+            },
+            genOverlaySuccess: function(msg) {
+                clearGenTimers();
+                removeBeforeUnload();
+                if (genRingWrap)    genRingWrap.classList.add('gen-ring-success');
+                if (genBarWrap)     genBarWrap.style.display = 'none';
+                if (genSuccessMsg) { genSuccessMsg.textContent = msg || 'Done!'; genSuccessMsg.style.display = 'block'; }
+                // Auto-hide after 1.2 s
+                setTimeout(function() {
+                    window.AppLoader.hideGenOverlay();
+                }, 1200);
+            },
+            genOverlayError: function(msg) {
+                clearGenTimers();
+                removeBeforeUnload();
+                if (genRingWrap)   genRingWrap.classList.add('gen-ring-error');
+                if (genBarWrap)    genBarWrap.style.display = 'none';
+                if (genElapsed)    genElapsed.style.display = 'none';
+                if (genErrorMsg) { genErrorMsg.textContent = msg || 'An error occurred.'; genErrorMsg.style.display = 'block'; }
+                if (genErrorActs)  genErrorActs.style.display = 'flex';
+            }
+        };
+
+        // Close button for error state
+        if (genCloseBtn) {
+            genCloseBtn.addEventListener('click', function() {
+                window.AppLoader.hideGenOverlay();
+            });
+        }
+
+        /* ---- Button Loading Helpers ---- */
+
+        /**
+         * setButtonLoading(btn, isLoading, loadingText?)
+         * Lock/restore a button's width, content, and disabled state.
+         * Stores state in btn.__loaderState to support nested / re-entrant calls.
+         */
+        window.setButtonLoading = function(btn, isLoading, loadingText) {
+            if (!btn) return;
+            if (isLoading) {
+                if (btn.__loaderState) return; // already loading
+                var w = btn.offsetWidth;
+                btn.__loaderState = { html: btn.innerHTML, width: w };
+                btn.style.minWidth = w + 'px';
+                var text = loadingText ||
+                    btn.getAttribute('data-loading-text') ||
+                    btn.textContent.trim().replace(/\s+/g,' ');
+                btn.innerHTML = '<span class="btn-loading-spinner" aria-hidden="true"></span>' +
+                    '<span>' + text + '</span>';
+                btn.disabled = true;
+                btn.setAttribute('aria-busy', 'true');
+                btn.classList.add('btn-loading');
+            } else {
+                if (!btn.__loaderState) return;
+                btn.innerHTML = btn.__loaderState.html;
+                btn.style.minWidth = '';
+                btn.disabled = false;
+                btn.removeAttribute('aria-busy');
+                btn.classList.remove('btn-loading');
+                btn.__loaderState = null;
+            }
+        };
+
+        /**
+         * withButtonLoading(btn, asyncFn, loadingText?) -> Promise
+         * Runs asyncFn with button in loading state. Always restores in finally.
+         */
+        window.withButtonLoading = function(btn, asyncFn, loadingText) {
+            window.setButtonLoading(btn, true, loadingText);
+            var result;
+            try {
+                result = asyncFn();
+            } catch(e) {
+                window.setButtonLoading(btn, false);
+                throw e;
+            }
+            if (result && typeof result.then === 'function') {
+                return result.then(
+                    function(v) { window.setButtonLoading(btn, false); return v; },
+                    function(e) { window.setButtonLoading(btn, false); throw e; }
+                );
+            }
+            window.setButtonLoading(btn, false);
+            return result;
+        };
+
+        /* ---- Auto-wiring on DOMContentLoaded ---- */
+        document.addEventListener('DOMContentLoaded', function() {
+            /* Sidebar nav top-bar */
+            var navLinks = document.querySelectorAll(
+                '.sidebar__link:not([data-bs-toggle]):not([data-loader-skip]), ' +
+                '.sidebar__link--logout'
+            );
+            navLinks.forEach(function(link) {
+                var href = link.getAttribute('href');
+                if (!href || href === '#' || href === 'javascript:void(0)' || link.getAttribute('data-bs-toggle')) return;
+                link.addEventListener('click', function(e) {
+                    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                    window.AppLoader.startBar();
+                });
+            });
+
+            window.addEventListener('pageshow', function() {
+                window.AppLoader.finishBar();
+            });
+
+            /* Auto-wire data-loading-text buttons (one-click, non-form) */
+            document.querySelectorAll('[data-loading-text]:not([data-loader-skip])').forEach(function(btn) {
+                /* Skip if inside a form — handled by form submit wiring below */
+                if (btn.type === 'submit') return;
+                btn.addEventListener('click', function() {
+                    if (btn.__loaderState) return;
+                    window.setButtonLoading(btn, true);
+                    /* Auto-restore if the page navigates away (full reload) */
+                    window.addEventListener('pagehide', function restore() {
+                        window.setButtonLoading(btn, false);
+                        window.removeEventListener('pagehide', restore);
+                    }, { once: true });
+                });
+            });
+
+            /* Auto-wire form submit buttons with data-loading-text */
+            document.querySelectorAll('form:not([data-loader-skip])').forEach(function(form) {
+                var btn = form.querySelector('[type="submit"][data-loading-text]:not([data-loader-skip])');
+                if (!btn) return;
+                form.addEventListener('submit', function(e) {
+                    if (e.defaultPrevented) return;
+                    if (btn.__loaderState) { e.preventDefault(); return; } // block double-submit
+                    window.setButtonLoading(btn, true);
+                    /* Restore if we return to the same page (e.g. validation error flash) */
+                    window.addEventListener('pageshow', function restore() {
+                        window.setButtonLoading(btn, false);
+                        window.removeEventListener('pageshow', restore);
+                    }, { once: true });
+                });
+            });
+        });
+    }());
     </script>
     {% block scripts %}{% endblock %}
 </body>
