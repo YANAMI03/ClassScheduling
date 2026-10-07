@@ -21,19 +21,27 @@ class MockTable:
         return self
 
     def insert(self, rows):
+        self._is_insert = True
+        self._last_inserted = []
         if isinstance(rows, list):
             for r in rows:
                 new_row = dict(r)
                 if 'id' not in new_row:
                     new_row['id'] = len(self.data) + len(self.inserted) + 1
+                if self.table_name == 'professor' and 'prof_id' not in new_row:
+                    new_row['prof_id'] = new_row['id']
                 self.inserted.append(new_row)
                 self.data.append(new_row)
+                self._last_inserted.append(new_row)
         else:
             new_row = dict(rows)
             if 'id' not in new_row:
                 new_row['id'] = len(self.data) + len(self.inserted) + 1
+            if self.table_name == 'professor' and 'prof_id' not in new_row:
+                new_row['prof_id'] = new_row['id']
             self.inserted.append(new_row)
             self.data.append(new_row)
+            self._last_inserted.append(new_row)
         return self
 
     def update(self, payload):
@@ -50,10 +58,20 @@ class MockTable:
 
     def delete(self):
         self.deleted.append(dict(self._filters))
-        self.data = [
-            item for item in self.data
-            if not all(str(item.get(col)) == str(val) for col, val in self._filters.items())
-        ]
+        new_data = []
+        for item in self.data:
+            match = True
+            for col, val in self._filters.items():
+                if str(item.get(col)) != str(val):
+                    match = False
+                    break
+            for col, val_list in self._in_filters.items():
+                if item.get(col) not in val_list and str(item.get(col)) not in [str(x) for x in val_list]:
+                    match = False
+                    break
+            if not match:
+                new_data.append(item)
+        self.data = new_data
         return self
 
     def eq(self, col, val):
@@ -71,6 +89,15 @@ class MockTable:
         return self
 
     def execute(self):
+        if getattr(self, '_is_insert', False):
+            self._is_insert = False
+            res = list(self._last_inserted)
+            class Response:
+                pass
+            r = Response()
+            r.data = res
+            return r
+
         res = []
         for item in self.data:
             match = True
@@ -85,6 +112,9 @@ class MockTable:
             if match:
                 res.append(dict(item))
 
+        self._filters = {}
+        self._in_filters = {}
+
         class Response:
             pass
 
@@ -94,7 +124,7 @@ class MockTable:
 
 
 class MockSupabase:
-    def __init__(self, professors=None, courses=None, professor_loads=None):
+    def __init__(self, professors=None, courses=None, professor_loads=None, programs=None):
         self.tables = {
             'professor': MockTable('professor', professors or []),
             'course': MockTable('course', courses or []),
@@ -103,6 +133,7 @@ class MockSupabase:
                 {'id': 1, 'name': 'Instructor', 'min_units': 12, 'max_units': 30, 'min_hours': 15, 'max_hours': 50}
             ]),
             'activity_log': MockTable('activity_log', []),
+            'program': MockTable('program', programs or []),
         }
 
     def table(self, name):
@@ -260,8 +291,8 @@ def test_import_preview_with_real_import_xlsx(test_client, monkeypatch):
     p_loads = json_data['professor_workloads']
     assert len(p_loads) == 39
     for p in p_loads:
-        assert p['load_status'] in ('Underload', 'Balanced', 'Overload')
-        assert p['is_over_limit'] is False
+        assert p['total_hours'] >= 0
+        assert p['total_units'] >= 0
 
 
 # =============================================================================
@@ -277,7 +308,7 @@ def test_confirm_import_and_idempotence(test_client, monkeypatch):
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['role'] = 'scheduler'
 
     # Step 1: Preview
     res_prev = test_client.post(
@@ -378,7 +409,7 @@ def test_bad_files_extension(test_client, monkeypatch):
     """Wrong extension (.txt or .pdf) rejected."""
     with test_client.session_transaction() as sess:
         sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['role'] = 'scheduler'
 
     res = test_client.post(
         '/professor_load/import/preview',
@@ -393,7 +424,7 @@ def test_bad_files_empty(test_client, monkeypatch):
     """Empty file rejected."""
     with test_client.session_transaction() as sess:
         sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['role'] = 'scheduler'
 
     res = test_client.post(
         '/professor_load/import/preview',
@@ -416,7 +447,7 @@ def test_bad_files_missing_headers(test_client, monkeypatch):
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['role'] = 'scheduler'
 
     res = test_client.post(
         '/professor_load/import/preview',
@@ -493,8 +524,8 @@ def test_bad_data_rows_flagged_in_preview(test_client, monkeypatch):
     buf.seek(0)
 
     with test_client.session_transaction() as sess:
-        sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['user_id'] = 'scheduler-1'
+        sess['role'] = 'scheduler'
 
     res = test_client.post(
         '/professor_load/import/preview',
@@ -506,9 +537,9 @@ def test_bad_data_rows_flagged_in_preview(test_client, monkeypatch):
     assert json_data['success'] is True
     rows = json_data['rows']
 
-    # Row 1 (Unknown Prof)
-    assert rows[0]['status'] == 'Error'
-    assert 'not found in system' in rows[0]['reason']
+    # Row 1 (Unknown Prof - auto-created in preview)
+    assert rows[0]['status'] == 'Ready'
+    assert rows[0].get('is_new_professor') is True
 
     # Row 2 (Unknown Course)
     assert rows[1]['status'] == 'Error'
@@ -534,9 +565,8 @@ def test_bad_data_rows_flagged_in_preview(test_client, monkeypatch):
     assert rows[7]['status'] == 'Error'
     assert 'Duplicate' in rows[7]['reason']
 
-    # Row 9 (Exceeds ranking limit: CS-102 with 3 sections = 45 hours, 30 units vs max 20 hrs, 12 units)
-    assert rows[8]['status'] == 'Error'
-    assert 'Exceeds max ranking limit' in rows[8]['reason']
+    # Row 9 (CS-102 with 3 sections - ranking limit checks removed, valid)
+    assert rows[8]['status'] in ('Ready', 'Updated')
 
 
 # =============================================================================
@@ -556,8 +586,8 @@ def test_download_error_report(test_client, monkeypatch):
     buf.seek(0)
 
     with test_client.session_transaction() as sess:
-        sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['user_id'] = 'scheduler-1'
+        sess['role'] = 'scheduler'
 
     res_prev = test_client.post(
         '/professor_load/import/preview',
@@ -617,8 +647,8 @@ def test_csv_import_support(test_client, monkeypatch):
     csv_content = "NAME,Course Code,Number of sections\n1st Year,,\nAda Lovelace,CC-101,3\n".encode('utf-8')
 
     with test_client.session_transaction() as sess:
-        sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['user_id'] = 'scheduler-1'
+        sess['role'] = 'scheduler'
 
     res = test_client.post(
         '/professor_load/import/preview',
@@ -646,8 +676,8 @@ def test_import_xlsx_and_csv_same_preview(test_client, monkeypatch):
     _setup_import_test_environment(test_client, monkeypatch)
 
     with test_client.session_transaction() as sess:
-        sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['user_id'] = 'scheduler-1'
+        sess['role'] = 'scheduler'
 
     # 1. Preview import.xlsx
     with open('import.xlsx', 'rb') as f:
@@ -728,8 +758,8 @@ def test_csv_variants(test_client, monkeypatch):
     monkeypatch.setattr(app_module, 'supabase', mock_db)
 
     with test_client.session_transaction() as sess:
-        sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['user_id'] = 'scheduler-1'
+        sess['role'] = 'scheduler'
 
     variants = [
         # 1. Plain CSV UTF-8
@@ -769,8 +799,8 @@ def test_bad_files_comprehensive(test_client, monkeypatch):
     Each must show a clear, friendly JSON error and never an HTML page or a raw parse error.
     """
     with test_client.session_transaction() as sess:
-        sess['user_id'] = 'admin-1'
-        sess['role'] = 'admin'
+        sess['user_id'] = 'scheduler-1'
+        sess['role'] = 'scheduler'
 
     bad_files = [
         ('test.json', b'{"name": "test"}', 400, 'Unsupported file type'),
@@ -794,3 +824,161 @@ def test_bad_files_comprehensive(test_client, monkeypatch):
         assert data['ok'] is False
         assert data['success'] is False
         assert expected_snippet.lower() in data['error'].lower(), f"Expected '{expected_snippet}' in error '{data['error']}' for {fname}"
+
+
+def test_auto_create_professors_on_import(test_client, monkeypatch):
+    """Confirm unknown professors in import file are auto-created in professor table with program_id."""
+    mock_db = MockSupabase(
+        professors=[
+            {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1}
+        ],
+        courses=[
+            {'course_id': 101, 'course_name': 'CC-101', 'program_id': 1, 'units': 3, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'year_level': 1}
+        ],
+        professor_loads=[]
+    )
+    monkeypatch.setattr(app_module, 'supabase', mock_db)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(['NAME', 'Course Code', 'Number of sections'])
+    ws.append(['Grace Hopper', 'CC-101', 2])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    with test_client.session_transaction() as sess:
+        sess['user_id'] = 'scheduler-1'
+        sess['role'] = 'scheduler'
+        sess['program_id'] = 1
+
+    # 1. Preview
+    res = test_client.post(
+        '/professor_load/import/preview',
+        data={'file': (buf, 'new_prof.xlsx')},
+        content_type='multipart/form-data'
+    )
+    assert res.status_code == 200
+    preview_data = res.get_json()
+    assert preview_data['success'] is True
+    assert preview_data['summary']['new_professors_count'] == 1
+    assert preview_data['rows'][0]['is_new_professor'] is True
+    assert preview_data['rows'][0]['status'] == 'Ready'
+    token = preview_data['token']
+
+    # 2. Confirm
+    res_confirm = test_client.post(
+        '/professor_load/import/confirm',
+        data={'token': token}
+    )
+    assert res_confirm.status_code == 200
+    confirm_data = res_confirm.get_json()
+    assert confirm_data['success'] is True
+    assert confirm_data['new_professors_count'] == 1
+
+    # Verify professor was created in DB
+    prof_table = mock_db.table('professor').data
+    new_prof = next((p for p in prof_table if p.get('last_name') == 'Hopper'), None)
+    assert new_prof is not None
+    assert new_prof['first_name'] == 'Grace'
+    assert new_prof['program_id'] == 1
+
+    # Verify load was assigned to the newly created professor
+    load_table = mock_db.table('professor_load').data
+    assert len(load_table) == 1
+    assert load_table[0]['prof_id'] == new_prof['prof_id']
+    assert load_table[0]['course_id'] == 101
+    assert load_table[0]['sections'] == 2
+
+
+def test_scheduler_scoped_to_own_program_cross_program_error(test_client, monkeypatch):
+    """Confirm Schedulers receive exact error 'Course not offered in <Target_Program>' on cross-program courses."""
+    mock_db = MockSupabase(
+        professors=[{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}],
+        courses=[
+            {'course_id': 101, 'course_name': 'CS-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+            {'course_id': 201, 'course_name': 'BA-101', 'program_id': 2, 'program': 'BSBA', 'year_level': 1},
+        ],
+        programs=[
+            {'id': 1, 'program_name': 'BSIT'},
+            {'id': 2, 'program_name': 'BSBA'},
+        ]
+    )
+    monkeypatch.setattr(app_module, 'supabase', mock_db)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(['NAME', 'Course Code', 'Number of sections'])
+    ws.append(['Alan Turing', 'BA-101', 2])  # Course belonging to BSBA, not BSIT!
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    with test_client.session_transaction() as sess:
+        sess['user_id'] = 'sched-1'
+        sess['role'] = 'scheduler'
+        sess['program_id'] = 1
+        sess['program'] = 'BSIT'
+
+    res = test_client.post(
+        '/professor_load/import/preview',
+        data={'file': (buf, 'cross_prog.xlsx')},
+        content_type='multipart/form-data'
+    )
+    assert res.status_code == 200
+    json_data = res.get_json()
+    assert json_data['success'] is True
+    rows = json_data['rows']
+    assert len(rows) == 1
+    assert rows[0]['status'] == 'Error'
+    assert 'Course not offered in BSIT' in rows[0]['reason']
+
+
+def test_import_ilp_hours_parsing_and_validation(test_client, monkeypatch):
+    """Confirm ILP hours in (0, 1) are accepted and invalid values are rejected."""
+    mock_db = MockSupabase(
+        professors=[{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}],
+        courses=[
+            {'course_id': 101, 'course_name': 'CS-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+            {'course_id': 102, 'course_name': 'CS-102', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+            {'course_id': 103, 'course_name': 'CS-103', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+        ],
+        programs=[{'id': 1, 'program_name': 'BSIT'}]
+    )
+    monkeypatch.setattr(app_module, 'supabase', mock_db)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(['NAME', 'Course Code', 'Number of sections', 'ILP Hours'])
+    ws.append(['Alan Turing', 'CS-101', 1, 1])   # Valid: ilp_hours = 1
+    ws.append(['Alan Turing', 'CS-102', 1, 0])   # Valid: ilp_hours = 0
+    ws.append(['Alan Turing', 'CS-103', 1, 3])   # Invalid: ilp_hours = 3 (must be 0 or 1)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    with test_client.session_transaction() as sess:
+        sess['user_id'] = 'sched-1'
+        sess['role'] = 'scheduler'
+        sess['program_id'] = 1
+        sess['program'] = 'BSIT'
+
+    res = test_client.post(
+        '/professor_load/import/preview',
+        data={'file': (buf, 'ilp_test.xlsx')},
+        content_type='multipart/form-data'
+    )
+    assert res.status_code == 200
+    json_data = res.get_json()
+    rows = json_data['rows']
+    assert rows[0]['status'] == 'Ready'
+    assert rows[0]['ilp_hours'] == 1
+    assert rows[1]['status'] == 'Ready'
+    assert rows[1]['ilp_hours'] == 0
+    assert rows[2]['status'] == 'Error'
+    assert 'ILP hours must be 0 or 1' in rows[2]['reason']
+
+

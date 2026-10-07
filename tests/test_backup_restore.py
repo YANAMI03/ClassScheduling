@@ -114,9 +114,9 @@ def test_backup_database_partial_export(monkeypatch):
 
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
-        sess['user_id'] = 'user-scheduler-123'
-        sess['role'] = 'Scheduler'
-        sess['username'] = 'scheduler_user'
+        sess['user_id'] = 'user-admin-123'
+        sess['role'] = 'admin'
+        sess['username'] = 'admin_user'
 
     res = client.get('/backup?tables=course,professor')
     assert res.status_code == 200
@@ -193,9 +193,9 @@ def test_restore_database_client_side_fallback(monkeypatch):
 
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
-        sess['user_id'] = 'user-scheduler-123'
-        sess['role'] = 'scheduler'
-        sess['username'] = 'scheduler'
+        sess['user_id'] = 'user-admin-123'
+        sess['role'] = 'admin'
+        sess['username'] = 'admin'
 
     sample_backup = {
         "program_department": [{"program_name": "BSIT", "department_name": "CICT"}],

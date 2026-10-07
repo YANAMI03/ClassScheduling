@@ -37,12 +37,6 @@ function checkCourseMatch(rowCoursesStr, selectedCourse) {
     });
 }
 
-// 3. checkStatusMatch implementation from professor_load.html
-function checkStatusMatch(rowStatus, selectedStatus) {
-    if (!selectedStatus) return true;
-    return (rowStatus || '').toLowerCase() === selectedStatus.toLowerCase();
-}
-
 console.log('--- Step 3: Running JS Live Filter Verification Tests ---');
 
 // Test 1: Search by full name, partial name, and casing, extra spaces
@@ -58,10 +52,10 @@ console.log('✓ Test 1 passed.');
 // Test 2: Filter by a course that has multiple professors, and by one that has a single professor
 console.log('Test 2: Course filter matching (multi-prof and single-prof)...');
 const professors = [
-    { id: 1, name: 'alan turing', courses: 'IT-PF02', status: 'Underload' },
-    { id: 2, name: 'ada lovelace', courses: 'IT-PF02|CC-104', status: 'Balanced' },
-    { id: 3, name: 'grace hopper', courses: 'CC-104', status: 'Overload' },
-    { id: 4, name: 'john von neumann', courses: 'IT-NET01', status: 'Balanced' }
+    { id: 1, name: 'alan turing', courses: 'IT-PF02' },
+    { id: 2, name: 'ada lovelace', courses: 'IT-PF02|CC-104' },
+    { id: 3, name: 'grace hopper', courses: 'CC-104' },
+    { id: 4, name: 'john von neumann', courses: 'IT-NET01' }
 ];
 
 // Multi-professor course: IT-PF02 (Prof 1 and 2)
@@ -79,56 +73,38 @@ const allCoursesMatches = professors.filter(p => checkCourseMatch(p.courses, '')
 assert.strictEqual(allCoursesMatches.length, 4);
 console.log('✓ Test 2 passed.');
 
-// Test 3: Filter by each status and confirm results
-console.log('Test 3: Status filter matching...');
-const underloadMatches = professors.filter(p => checkStatusMatch(p.status, 'Underload'));
-assert.strictEqual(underloadMatches.length, 1);
-assert.strictEqual(underloadMatches[0].name, 'alan turing');
-
-const balancedMatches = professors.filter(p => checkStatusMatch(p.status, 'Balanced'));
-assert.strictEqual(balancedMatches.length, 2);
-
-const overloadMatches = professors.filter(p => checkStatusMatch(p.status, 'Overload'));
-assert.strictEqual(overloadMatches.length, 1);
-assert.strictEqual(overloadMatches[0].name, 'grace hopper');
-
-const allStatusMatches = professors.filter(p => checkStatusMatch(p.status, ''));
-assert.strictEqual(allStatusMatches.length, 4);
-console.log('✓ Test 3 passed.');
-
-// Test 4: Combine all three filters with AND behavior, count badge, empty state
-console.log('Test 4: Combined AND filters, count badge, and empty state...');
-function applyCombinedFilter(list, search, course, status) {
+// Test 3: Combine search and course filters with AND behavior, count badge, empty state
+console.log('Test 3: Combined AND filters, count badge, and empty state...');
+function applyCombinedFilter(list, search, course) {
     return list.filter(p =>
         checkProfessorNameMatch(p.name, search) &&
-        checkCourseMatch(p.courses, course) &&
-        checkStatusMatch(p.status, status)
+        checkCourseMatch(p.courses, course)
     );
 }
 
-// Search "Ada" + Course "CC-104" + Status "Balanced" -> 1 match (Ada Lovelace)
-let res = applyCombinedFilter(professors, 'Ada', 'CC-104', 'Balanced');
+// Search "Ada" + Course "CC-104" -> 1 match (Ada Lovelace)
+let res = applyCombinedFilter(professors, 'Ada', 'CC-104');
 assert.strictEqual(res.length, 1);
 assert.strictEqual(res[0].name, 'ada lovelace');
 let badgeText = `${res.length} of ${professors.length} professors`;
 assert.strictEqual(badgeText, '1 of 4 professors');
 
-// Search "Ada" + Course "CC-104" + Status "Overload" -> 0 matches (Empty state!)
-res = applyCombinedFilter(professors, 'Ada', 'CC-104', 'Overload');
+// Search "Ada" + Course "IT-NET01" -> 0 matches (Empty state!)
+res = applyCombinedFilter(professors, 'Ada', 'IT-NET01');
 assert.strictEqual(res.length, 0);
 let isEmptyState = (res.length === 0 && professors.length > 0);
 assert.strictEqual(isEmptyState, true);
 badgeText = `${res.length} of ${professors.length} professors`;
 assert.strictEqual(badgeText, '0 of 4 professors');
-console.log('✓ Test 4 passed.');
+console.log('✓ Test 3 passed.');
 
-// Test 5: Clear filters returns full list and original count
-console.log('Test 5: Clear filters...');
-res = applyCombinedFilter(professors, '', '', '');
+// Test 4: Clear filters returns full list and original count
+console.log('Test 4: Clear filters...');
+res = applyCombinedFilter(professors, '', '');
 assert.strictEqual(res.length, professors.length);
 badgeText = `${professors.length} professors assigned`;
 assert.strictEqual(badgeText, '4 professors assigned');
-console.log('✓ Test 5 passed.');
+console.log('✓ Test 4 passed.');
 
 // Test 6: Course dropdown unique sorted population including master catalog (e.g. CC-100)
 console.log('Test 6: Unique sorted assigned courses dropdown population...');

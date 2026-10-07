@@ -138,9 +138,9 @@ def extended_client(monkeypatch):
 # 1. Rooms (/rooms)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_scheduler_rooms_page_ui(extended_client):
+def test_admin_rooms_page_ui(extended_client):
     client, fake_db = extended_client
-    _login_as(client, 'scheduler')
+    _login_as(client, 'admin')
 
     res = client.get('/rooms')
     assert res.status_code == 200
@@ -153,19 +153,19 @@ def test_scheduler_rooms_page_ui(extended_client):
     assert 'chair' not in html.lower()
 
     add_form = soup.find('form', id='addRoomForm')
-    assert add_form is not None, "Scheduler should see the Add Room form"
+    assert add_form is not None, "Admin should see the Add Room form"
     assert soup.find('input', id='add_room_name') is not None
     assert soup.find('button', id='addRoomBtn') is not None
     assert 'Actions' in html
     edit_buttons = soup.find_all('button', class_='edit-btn')
-    assert len(edit_buttons) > 0, "Scheduler should see Edit buttons"
+    assert len(edit_buttons) > 0, "Admin should see Edit buttons"
     delete_links = [a for a in soup.find_all('a', href=True) if '/delete_room/' in a['href']]
-    assert len(delete_links) > 0, "Scheduler should see Delete buttons"
+    assert len(delete_links) > 0, "Admin should see Delete buttons"
 
 
-def test_scheduler_room_write_actions_and_protection(extended_client):
+def test_admin_room_write_actions_and_protection(extended_client):
     client, fake_db = extended_client
-    _login_as(client, 'scheduler')
+    _login_as(client, 'admin')
 
     # Add Room
     res_add = client.post('/add_room', data={'room_name': 'Room 201', 'room_type': 'Lecture Room', 'program_id': 1})
@@ -185,9 +185,9 @@ def test_scheduler_room_write_actions_and_protection(extended_client):
     assert 'active schedule' in res_del_active_ajax.get_json().get('message', '').lower()
 
 
-def test_admin_and_viewer_blocked_from_rooms(extended_client):
+def test_scheduler_and_viewer_blocked_from_rooms(extended_client):
     client, _ = extended_client
-    _login_as(client, 'admin')
+    _login_as(client, 'scheduler')
     assert client.get('/rooms').status_code == 403
     assert client.post('/add_room', data={'room_name': 'R'}).status_code == 403
 
@@ -199,9 +199,9 @@ def test_admin_and_viewer_blocked_from_rooms(extended_client):
 # 2. Courses (/courses)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_scheduler_courses_crud_and_protection(extended_client):
+def test_admin_courses_crud_and_protection(extended_client):
     client, fake_db = extended_client
-    _login_as(client, 'scheduler')
+    _login_as(client, 'admin')
 
     # Page view: no read-only banner, no dean/chair
     res = client.get('/courses')
@@ -242,9 +242,9 @@ def test_scheduler_courses_crud_and_protection(extended_client):
     assert res_del_in_use.status_code == 400
 
 
-def test_admin_blocked_from_courses(extended_client):
+def test_scheduler_blocked_from_courses(extended_client):
     client, _ = extended_client
-    _login_as(client, 'admin')
+    _login_as(client, 'scheduler')
     assert client.get('/courses').status_code == 403
     assert client.post('/add_course', data={'course_name': 'C'}).status_code == 403
     assert client.post('/edit_course/10', data={'course_name': 'C'}).status_code == 403
@@ -252,108 +252,60 @@ def test_admin_blocked_from_courses(extended_client):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. Professors (/professors)
+# 3. Professors (deleted routes return 404)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_scheduler_professors_crud_and_protection(extended_client):
+def test_professors_routes_deleted_return_404(extended_client):
     client, fake_db = extended_client
     _login_as(client, 'scheduler')
 
-    # Page view: no read-only banner, no dean/chair
-    res = client.get('/professors')
-    assert res.status_code == 200
-    html = res.data.decode('utf-8')
-    assert 'read-only mode' not in html.lower()
-    assert 'dean' not in html.lower()
-    assert 'chair' not in html.lower()
-
-    # Add Professor
-    res_add = client.post('/add_professor', data={
-        'first_name': 'Alice',
-        'last_name': 'Brown',
-        'academic_ranking_id': '1',
-        'program_id': '1',
-    })
-    assert res_add.status_code in (200, 302)
-
-    # Edit Professor
-    res_edit = client.post('/edit_professor/1', data={
-        'first_name': 'John Updated',
-        'last_name': 'Doe',
-        'academic_ranking_id': '1',
-        'program_id': '1',
-    })
-    assert res_edit.status_code in (200, 302)
-
-    # Delete prof 2 who is in active schedule -> blocked
-    res_del_in_use = client.post('/delete_professor/2', headers={'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'})
-    assert res_del_in_use.status_code == 400
+    # Deleted routes must return 404
+    assert client.get('/professors').status_code == 404
+    assert client.post('/add_professor', data={'first_name': 'Alice'}).status_code == 404
+    assert client.post('/edit_professor/1', data={'first_name': 'Alice'}).status_code == 404
+    assert client.get('/delete_professor/1').status_code == 404
 
 
 def test_admin_blocked_from_professors(extended_client):
     client, _ = extended_client
     _login_as(client, 'admin')
-    assert client.get('/professors').status_code == 403
-    assert client.post('/add_professor', data={'first_name': 'P'}).status_code == 403
-    assert client.post('/edit_professor/1', data={'first_name': 'P'}).status_code == 403
-    assert client.get('/delete_professor/1').status_code == 403
+    assert client.get('/professors').status_code == 404
+    assert client.post('/add_professor', data={'first_name': 'P'}).status_code == 404
+    assert client.post('/edit_professor/1', data={'first_name': 'P'}).status_code == 404
+    assert client.get('/delete_professor/1').status_code == 404
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4. Academic Ranking (/academic_ranking)
+# 4. Academic Ranking (deleted routes return 404)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_scheduler_academic_ranking_crud_and_protection(extended_client):
+def test_academic_ranking_routes_deleted_return_404(extended_client):
     client, fake_db = extended_client
     _login_as(client, 'scheduler')
 
-    # Page view: no read-only banner, no dean/chair
-    res = client.get('/academic_ranking')
-    assert res.status_code == 200
-    html = res.data.decode('utf-8')
-    assert 'read-only mode' not in html.lower()
-    assert 'dean' not in html.lower()
-    assert 'chair' not in html.lower()
-
-    # Add Ranking
-    res_add = client.post('/add_academic_ranking', data={
-        'ranking_name': 'Professor I',
-        'max_teaching_load': '24',
-        'max_preparations': '4',
-        'rate_per_hour': '400',
-    })
-    assert res_add.status_code in (200, 302)
-
-    # Edit Ranking
-    res_edit = client.post('/edit_academic_ranking/1', data={
-        'ranking_name': 'Instructor I Updated',
-        'max_teaching_load': '18',
-        'max_preparations': '3',
-        'rate_per_hour': '220',
-    })
-    assert res_edit.status_code in (200, 302)
-
-    # Delete ranking 2 assigned to professor 2 -> blocked
-    res_del_in_use = client.post('/delete_academic_ranking/2', headers={'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'})
-    assert res_del_in_use.status_code == 400
+    # Deleted routes must return 404
+    assert client.get('/academic_ranking').status_code == 404
+    assert client.post('/add_academic_ranking', data={'ranking_name': 'Prof'}).status_code == 404
+    assert client.post('/edit_academic_ranking/1', data={'ranking_name': 'Prof'}).status_code == 404
+    assert client.get('/delete_academic_ranking/1').status_code == 404
 
 
 def test_admin_blocked_from_academic_ranking(extended_client):
     client, _ = extended_client
     _login_as(client, 'admin')
-    assert client.get('/academic_ranking').status_code == 403
-    assert client.post('/add_academic_ranking', data={'ranking_name': 'R'}).status_code == 403
-    assert client.post('/edit_academic_ranking/1', data={'ranking_name': 'R'}).status_code == 403
-    assert client.get('/delete_academic_ranking/1').status_code == 403
+    assert client.get('/academic_ranking').status_code == 404
+    assert client.post('/add_academic_ranking', data={'ranking_name': 'R'}).status_code == 404
+    assert client.post('/edit_academic_ranking/1', data={'ranking_name': 'R'}).status_code == 404
+    assert client.get('/delete_academic_ranking/1').status_code == 404
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 5. Timeslots (/timeslot)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_scheduler_timeslot_crud_and_protection(extended_client):
+def test_admin_timeslot_crud_and_protection(extended_client):
     client, fake_db = extended_client
-    _login_as(client, 'scheduler')
+    _login_as(client, 'admin')
 
     # Page view: no read-only banner, no dean/chair
     res = client.get('/timeslot')
@@ -388,9 +340,9 @@ def test_scheduler_timeslot_crud_and_protection(extended_client):
     assert res_del_unused.status_code == 200
 
 
-def test_admin_blocked_from_timeslot(extended_client):
+def test_scheduler_blocked_from_timeslot(extended_client):
     client, _ = extended_client
-    _login_as(client, 'admin')
+    _login_as(client, 'scheduler')
     assert client.get('/timeslot').status_code == 403
     assert client.post('/add_timeslot', data={'day': 'Sunday'}).status_code == 403
     assert client.post('/edit_timeslot/1', data={'start_time': '08:00'}).status_code == 403
@@ -441,22 +393,33 @@ def test_admin_blocked_from_load_and_generate(extended_client):
 
 def test_all_management_pages_clean_of_dean_and_chair(extended_client):
     client, _ = extended_client
-    _login_as(client, 'scheduler')
 
-    pages = [
-        '/rooms',
-        '/courses',
-        '/professors',
-        '/academic_ranking',
-        '/timeslot',
+    # Scheduler pages
+    _login_as(client, 'scheduler')
+    scheduler_pages = [
         '/professor_load',
         '/generate_schedule',
         '/',
+        '/schedules',
     ]
-
-    for path in pages:
+    for path in scheduler_pages:
         res = client.get(path)
-        assert res.status_code == 200, f"Page {path} returned status {res.status_code}"
+        assert res.status_code == 200, f"Scheduler page {path} returned status {res.status_code}"
+        html = res.data.decode('utf-8')
+        assert 'dean' not in html.lower(), f"Found 'dean' on {path}"
+        assert 'chair' not in html.lower(), f"Found 'chair' on {path}"
+
+    # Admin pages
+    _login_as(client, 'admin')
+    admin_pages = [
+        '/rooms',
+        '/courses',
+        '/timeslot',
+        '/schedules',
+    ]
+    for path in admin_pages:
+        res = client.get(path)
+        assert res.status_code == 200, f"Admin page {path} returned status {res.status_code}"
         html = res.data.decode('utf-8')
         assert 'dean' not in html.lower(), f"Found 'dean' on {path}"
         assert 'chair' not in html.lower(), f"Found 'chair' on {path}"

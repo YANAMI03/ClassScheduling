@@ -52,7 +52,7 @@
 <!-- Weekly Workload Dashboard -->
 <div class="row g-3 mb-4">
     <!-- Card 1: Total Scheduled Hours -->
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card-custom h-100 p-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
                 <span class="text-muted small fw-semibold text-uppercase tracking-wider">Scheduled Workload</span>
@@ -67,57 +67,26 @@
                 <span class="badge-custom badge-primary" id="profAssignedText">
                     <i class="bx bx-calendar-check me-1"></i>{{ workload.assigned_hours_text }}
                 </span>
-                <small class="text-muted">{{ workload.valid_classes_count }} class{{ 'es' if workload.valid_classes_count != 1 else '' }}</small>
+                <small class="text-muted">Total weekly hours</small>
             </div>
         </div>
     </div>
 
-    <!-- Card 2: Remaining Available Hours -->
-    <div class="col-md-4">
+    <!-- Card 2: Total Classes Assigned -->
+    <div class="col-md-6">
         <div class="card-custom h-100 p-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Remaining Availability</span>
-                <div class="stat-card__icon {% if workload.is_overloaded %}stat-card__icon--amber bg-danger text-white{% else %}stat-card__icon--emerald{% endif %}" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
-                    <i class="bx {% if workload.is_overloaded %}bx-error-circle{% else %}bx-hourglass{% endif %} fs-5"></i>
+                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Total Classes</span>
+                <div class="stat-card__icon stat-card__icon--emerald" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                    <i class="bx bx-book-open fs-5"></i>
                 </div>
             </div>
-            <h3 class="fw-bold mb-1 {% if workload.is_overloaded %}text-danger{% elif workload.remaining_hours == 0 %}text-warning{% else %}text-success{% endif %}" id="profRemainingHours">
-                {{ workload.remaining_hours_display }} <span class="fs-6 text-muted fw-normal">hrs</span>
+            <h3 class="fw-bold mb-1 text-dark">
+                {{ workload.valid_classes_count }} <span class="fs-6 text-muted fw-normal">class{{ 'es' if workload.valid_classes_count != 1 else '' }}</span>
             </h3>
             <div class="d-flex align-items-center justify-content-between mt-2">
-                {% if workload.is_overloaded %}
-                <span class="badge-custom badge-danger" id="profRemainingText">
-                    <i class="bx bx-error me-1"></i>Overloaded by {{ workload.overload_hours_display }} hrs
-                </span>
-                {% elif workload.remaining_hours == 0 %}
-                <span class="badge-custom badge-warning" id="profRemainingText">
-                    <i class="bx bx-check-double me-1"></i>At Max Capacity
-                </span>
-                {% else %}
-                <span class="badge-custom badge-success" id="profRemainingText">
-                    <i class="bx bx-check me-1"></i>{{ workload.remaining_hours_text }}
-                </span>
-                {% endif %}
-                <small class="text-muted">Available capacity</small>
-            </div>
-        </div>
-    </div>
-
-    <!-- Card 3: Specialization -->
-    <div class="col-md-4">
-        <div class="card-custom h-100 p-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="text-muted small fw-semibold text-uppercase tracking-wider">Specialization</span>
-                <div class="stat-card__icon stat-card__icon--amber" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
-                    <i class="bx bx-star fs-5"></i>
-                </div>
-            </div>
-            <h3 class="fw-bold mb-1 text-dark" id="profSpecialization">
-                {{ professor.specialization or 'General' }}
-            </h3>
-            <div class="d-flex align-items-center justify-content-between mt-2">
-                <span class="badge-custom badge-primary">Faculty Profile</span>
-                <small class="text-muted">Field of expertise</small>
+                <span class="badge-custom badge-info">Active Schedule</span>
+                <small class="text-muted">Assigned sections</small>
             </div>
         </div>
     </div>

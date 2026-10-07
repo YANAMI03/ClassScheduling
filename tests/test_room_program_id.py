@@ -136,42 +136,38 @@ def mock_db(monkeypatch):
     return db
 
 
-def test_rooms_page_shows_program_header_and_values(mock_db):
+def test_rooms_page_shows_no_program_header_common_pool(mock_db):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
-        session['username'] = 'dean_it'
-        session['role'] = 'Dean'
-        session['program_id'] = 1
-        session['program'] = 'BSIT'
+        session['username'] = 'admin_it'
+        session['role'] = 'Admin'
 
     resp = client.get('/rooms')
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
 
-    # Must have Program header and not Department header in table
-    assert '<th>Program</th>' in html
+    # Must NOT have Program header or Department header in table (rooms are shared common pool)
+    assert '<th>Program</th>' not in html
     assert '<th>Department</th>' not in html
-    # Must have Program dropdown in Add Room form
-    assert 'name="program_id"' in html
+    # Must NOT have Program dropdown in Add Room form
+    assert 'name="program_id"' not in html
     assert 'name="department"' not in html
-    # Must show BSIT badge
-    assert 'BSIT' in html
+    # Table must display room headers
+    assert '<th>Room Name</th>' in html
+    assert '<th>Type</th>' in html
 
 
-def test_add_room_saves_program_id_without_department(mock_db):
+def test_add_room_saves_room_in_common_pool(mock_db):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
-        session['username'] = 'dean_it'
-        session['role'] = 'Dean'
-        session['program_id'] = 1
-        session['program'] = 'BSIT'
+        session['username'] = 'admin_it'
+        session['role'] = 'Admin'
 
     resp = client.post('/add_room', data={
         'room_name': 'Room 303',
         'room_type': 'Lecture Room',
-        'program_id': '1'
     }, follow_redirects=True)
 
     assert resp.status_code == 200
@@ -179,11 +175,11 @@ def test_add_room_saves_program_id_without_department(mock_db):
     assert len(inserted) == 1
     new_room = inserted[0]
     assert new_room['room_name'] == 'Room 303'
-    assert new_room['program_id'] == 1
+    assert new_room['room_type'] == 'Lecture Room'
     assert 'department' not in new_room
 
 
-def test_edit_room_updates_program_id(mock_db):
+def test_edit_room_updates_room(mock_db):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 2
@@ -193,16 +189,15 @@ def test_edit_room_updates_program_id(mock_db):
     resp = client.post('/edit_room/1', data={
         'room_name': 'Lab 101 Renamed',
         'room_type': 'Laboratory Room',
-        'program_id': '2'
     }, follow_redirects=True)
 
     assert resp.status_code == 200
     updated_room = next(r for r in mock_db.tables['room'].data if r['room_id'] == 1)
     assert updated_room['room_name'] == 'Lab 101 Renamed'
-    assert updated_room['program_id'] == 2
+    assert updated_room['room_type'] == 'Laboratory Room'
 
 
-def test_search_rooms_returns_program_name(mock_db):
+def test_search_rooms_returns_rooms_without_department(mock_db):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 2
@@ -215,5 +210,5 @@ def test_search_rooms_returns_program_name(mock_db):
     assert 'rooms' in data
     assert len(data['rooms']) >= 1
     room_item = data['rooms'][0]
-    assert 'program_name' in room_item
+    assert 'room_name' in room_item
     assert 'department' not in room_item

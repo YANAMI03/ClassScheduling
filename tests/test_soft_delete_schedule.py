@@ -121,8 +121,8 @@ def test_delete_single_schedule_soft_archives(monkeypatch):
 
     with client.session_transaction() as sess:
         sess['user_id'] = 1
-        sess['username'] = 'admin'
-        sess['role'] = 'Admin'
+        sess['username'] = 'scheduler'
+        sess['role'] = 'Scheduler'
         sess['program'] = 'BSIT'
 
     res = client.get('/delete_schedule/42', follow_redirects=False)
@@ -150,8 +150,8 @@ def test_delete_section_schedule_soft_archives(monkeypatch):
 
     with client.session_transaction() as sess:
         sess['user_id'] = 1
-        sess['username'] = 'admin'
-        sess['role'] = 'Admin'
+        sess['username'] = 'scheduler'
+        sess['role'] = 'Scheduler'
         sess['program'] = 'BSIT'
 
     res = client.post('/delete_section_schedule/BSIT-1A')
@@ -183,9 +183,9 @@ def test_delete_all_schedules_soft_archives(monkeypatch):
 
     with client.session_transaction() as sess:
         sess['user_id'] = 1
-        sess['username'] = 'admin'
-        sess['email'] = 'admin@example.com'
-        sess['role'] = 'Admin'
+        sess['username'] = 'scheduler'
+        sess['email'] = 'scheduler@example.com'
+        sess['role'] = 'Scheduler'
         sess['program'] = 'BSIT'
 
     res = client.post('/delete_all_schedules', json={'password': 'secret'})

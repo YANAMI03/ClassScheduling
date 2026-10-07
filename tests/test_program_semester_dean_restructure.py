@@ -210,20 +210,17 @@ def test_scheduler_zero_crud_enforcement(mock_db):
         session['program'] = 'BSIT'
         session['program_id'] = 1
 
-    # POST to Add Course -> Redirected with access denied
+    # POST to Add Course -> 403 Access Denied under new matrix
     r1 = client.post('/add_course', data={'course_name': 'HACK101', 'units': 3, 'semester': '1st Semester'})
-    assert r1.status_code == 302
-    assert r1.headers['Location'].endswith('/schedules')
+    assert r1.status_code == 403
 
-    # POST to Add Professor -> Denied
+    # POST to Add Professor -> Denied / Removed (403 or 404)
     r2 = client.post('/add_professor', data={'first_name': 'Hack', 'last_name': 'User', 'academic_ranking_id': 1})
-    assert r2.status_code == 302
-    assert r2.headers['Location'].endswith('/schedules')
+    assert r2.status_code in (403, 404)
 
-    # POST to Add Room -> Denied
+    # POST to Add Room -> Denied (403)
     r3 = client.post('/add_room', data={'room_name': 'Room 999', 'room_type': 'Lecture'})
-    assert r3.status_code == 302
-    assert r3.headers['Location'].endswith('/schedules')
+    assert r3.status_code == 403
 
     # POST to Save Section Config -> Removed (404)
     r4 = client.post('/save_section_config', data={'semester_id': 10, 'sections_1': 5})
@@ -235,7 +232,7 @@ def test_scheduler_zero_crud_enforcement(mock_db):
 
 
 def test_scheduler_read_only_access(mock_db):
-    """Requirement 8: Scheduler CAN view faculty, courses, rooms, and rankings in read-only mode."""
+    """Under new matrix, Courses and Rooms are Admin-only (Scheduler 403), while Admin manages them."""
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
@@ -244,13 +241,17 @@ def test_scheduler_read_only_access(mock_db):
         session['program'] = 'BSIT'
         session['program_id'] = 1
 
-    for path in ['/courses', '/professors', '/rooms', '/academic_ranking']:
+    for path in ['/courses', '/rooms']:
         resp = client.get(path)
-        assert resp.status_code == 200, f"Scheduler should be able to view {path} in read-only mode"
-        html = resp.get_data(as_text=True)
-        assert 'read-only' in html.lower(), f"Expected read-only banner in {path} for scheduler"
-        assert not re.search(r'class=["\'][^"\']*\b(?:edit-btn|edit-ranking-btn)\b', html), f"Forbidden edit button found in {path} for scheduler"
-        assert not re.search(r'href=["\'][^"\']*/delete_', html), f"Forbidden delete action found in {path} for scheduler"
+        assert resp.status_code == 403, f"Scheduler should be denied (403) from {path} under new matrix"
+
+    # Admin CAN view courses and rooms
+    with client.session_transaction() as session:
+        session['role'] = 'Admin'
+
+    for path in ['/courses', '/rooms']:
+        resp = client.get(path)
+        assert resp.status_code == 200, f"Admin should be able to view {path}"
 
 
 def test_semester_and_section_config_routes_removed(mock_db):

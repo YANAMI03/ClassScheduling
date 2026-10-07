@@ -222,8 +222,7 @@ def test_users_route_non_admin_redirected():
         sess['username'] = 'viewuser'
 
     res = client.get('/users')
-    assert res.status_code == 302
-    assert '/schedules' in res.location
+    assert res.status_code == 403
 
 
 def test_users_route_admin_success(mock_db):
@@ -489,6 +488,10 @@ def test_find_email_by_username_or_email(mock_db):
 
 def test_set_admin_role_route(mock_db):
     client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1-admin'
+        sess['role'] = 'admin'
+        sess['username'] = 'adminuser'
     res = client.get('/set_admin_role/viewer@example.com')
     assert res.status_code == 200
     assert 'updated to admin role' in res.data.decode('utf-8')
@@ -679,4 +682,57 @@ def test_signup_duplicate_email(mock_db):
     })
     assert res.status_code == 200
     assert 'Email or username already registered.' in res.data.decode('utf-8')
+
+
+def test_create_scheduler_bsds_sets_program_id_9(mock_db):
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1-admin'
+        sess['role'] = 'admin'
+        sess['username'] = 'adminuser'
+
+    res = client.post('/create_user', data={
+        'first_name': 'Data',
+        'last_name': 'Scientist',
+        'email': 'bsds_sched@example.com',
+        'role': 'Scheduler',
+        'program': 'BSDS',
+        'username': 'bsdssched',
+        'password': 'Password123!',
+        'confirm_password': 'Password123!',
+    })
+    assert res.status_code == 200
+    data = json.loads(res.data.decode('utf-8'))
+    assert data['success'] is True
+
+    created = next(u for u in mock_db['users'] if u.get('email') == 'bsds_sched@example.com')
+    # program_id must be 9 (BSDS)
+    assert created.get('program_id') == 9
+    # Legacy program text column must NOT be written
+    assert 'program' not in created
+
+
+def test_user_to_dict_clean_string_formatting():
+    # Test joined dict from Supabase: {'program': {'program_name': 'BSIT'}}
+    row1 = {
+        'id': 'u1',
+        'role': 'scheduler',
+        'program_id': 1,
+        'program': {'program_name': 'BSIT'},
+    }
+    d1 = app_module._user_to_dict(row1)
+    assert d1['program'] == 'BSIT'
+    assert isinstance(d1['program'], str)
+
+    # Test admin role has program = '' and program_id = None
+    row2 = {
+        'id': 'u2',
+        'role': 'admin',
+        'program_id': 1,
+        'program': 'BSIT',
+    }
+    d2 = app_module._user_to_dict(row2)
+    assert d2['program'] == ''
+    assert d2['program_id'] is None
+
 

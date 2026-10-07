@@ -217,8 +217,8 @@ def filter_client(monkeypatch):
     with app.test_client() as client:
         with client.session_transaction() as sess:
             sess['user_id'] = 1
-            sess['role'] = 'admin'
-            sess['email'] = 'admin@example.com'
+            sess['role'] = 'scheduler'
+            sess['email'] = 'scheduler@example.com'
             sess['program_id'] = 1
             sess['department'] = 'CICT'
         yield client, mock_db
@@ -249,15 +249,9 @@ def test_filter_bar_markup_rendered(filter_client):
     rendered_course_options = [opt.text.strip() for opt in course_select.find_all('option')]
     assert 'CC-100' in rendered_course_options
 
-    # 3. Load status filter dropdown
+    # 3. Load status filter dropdown is removed
     status_select = soup.find('select', id='profStatusFilter')
-    assert status_select is not None
-    assert status_select.get('aria-label') == 'Filter by load status'
-    status_options = [opt.text.strip() for opt in status_select.find_all('option')]
-    assert 'All Status' in status_options
-    assert 'Underload' in status_options
-    assert 'Balanced' in status_options
-    assert 'Overload' in status_options
+    assert status_select is None
 
     # Clear filters button
     clear_btn = soup.find('button', id='btnClearFilters')
@@ -276,7 +270,7 @@ def test_filter_bar_markup_rendered(filter_client):
 
 
 def test_professor_rows_have_correct_data_attributes(filter_client):
-    """Test that each professor row has accurate data attributes matching visible content and status badges."""
+    """Test that each professor row has accurate data attributes and does NOT render limit badges or Spec labels."""
     client, _ = filter_client
     response = client.get('/professor_load')
     assert response.status_code == 200
@@ -291,37 +285,29 @@ def test_professor_rows_have_correct_data_attributes(filter_client):
         prof_id = r.get('data-prof-id')
         name = r.get('data-prof-name')
         courses = r.get('data-courses')
-        status = r.get('data-load-status')
-        # Check that the badge inside the row displays the exact same status
+        # Check that overload/underload status badges are NOT rendered
         badge = r.find('span', class_=re.compile(r'badge bg-(danger|warning|success)'))
-        assert badge is not None
-        assert status in badge.text
+        assert badge is None
+        # Check that Spec: label is NOT rendered
+        assert 'spec:' not in r.get_text().lower()
 
         row_data[prof_id] = {
             'name': name,
             'courses': courses.split('|') if courses else [],
-            'status': status,
-            'badge_text': badge.text.strip()
         }
 
-    # Alan Turing (prof_id 1): IT-PF02, Underload
+    # Alan Turing (prof_id 1): IT-PF02
     assert row_data['1']['name'] == 'alan turing'
     assert 'IT-PF02' in row_data['1']['courses']
-    assert row_data['1']['status'] == 'Underload'
-    assert 'Underload' in row_data['1']['badge_text']
 
-    # Ada Lovelace (prof_id 2): IT-PF02, CC-104, Balanced
+    # Ada Lovelace (prof_id 2): IT-PF02, CC-104
     assert row_data['2']['name'] == 'ada lovelace'
     assert 'IT-PF02' in row_data['2']['courses']
     assert 'CC-104' in row_data['2']['courses']
-    assert row_data['2']['status'] == 'Balanced'
-    assert 'Balanced' in row_data['2']['badge_text']
 
-    # Grace Hopper (prof_id 3): CC-104, Overload
+    # Grace Hopper (prof_id 3): CC-104
     assert row_data['3']['name'] == 'grace hopper'
     assert 'CC-104' in row_data['3']['courses']
-    assert row_data['3']['status'] == 'Overload'
-    assert 'Overload' in row_data['3']['badge_text']
 
 
 def test_edit_and_delete_actions_use_professor_id(filter_client):
@@ -369,11 +355,6 @@ def test_filter_matching_logic():
         courses = [c.strip() for c in courses_str.split('|')]
         return selected_course in courses
 
-    def check_status_match(status_str, selected_status):
-        if not selected_status:
-            return True
-        return (status_str or '').lower() == selected_status.lower()
-
     # 1. Professor search tests:
     # Full name, partial name, casing, extra whitespace, reversed tokens
     assert check_prof_name_match("alan turing", "Alan") is True
@@ -393,44 +374,27 @@ def test_filter_matching_logic():
     assert check_course_match("IT-NET01", "IT-NET01") is True
     assert check_course_match("IT-PF02|CC-104", "IT-NET01") is False
 
-    # 3. Status filter tests:
-    assert check_status_match("Underload", "Underload") is True
-    assert check_status_match("Underload", "underload") is True
-    assert check_status_match("Underload", "Balanced") is False
-    assert check_status_match("Underload", "") is True  # All Status
-
-    # 4. Combined AND filters:
-    # Prof 2 (Ada Lovelace): "ada lovelace", courses="IT-PF02|CC-104", status="Balanced"
+    # 3. Combined AND filters:
+    # Prof 2 (Ada Lovelace): "ada lovelace", courses="IT-PF02|CC-104"
     row = {
         'name': 'ada lovelace',
         'courses': 'IT-PF02|CC-104',
-        'status': 'Balanced'
     }
 
-    # Matches when all 3 match
+    # Matches when both match
     assert (
         check_prof_name_match(row['name'], 'ada')
         and check_course_match(row['courses'], 'IT-PF02')
-        and check_status_match(row['status'], 'Balanced')
     ) is True
 
     # Fails if search doesn't match
     assert (
         check_prof_name_match(row['name'], 'alan')
         and check_course_match(row['courses'], 'IT-PF02')
-        and check_status_match(row['status'], 'Balanced')
     ) is False
 
     # Fails if course doesn't match
     assert (
         check_prof_name_match(row['name'], 'ada')
         and check_course_match(row['courses'], 'IT-NET01')
-        and check_status_match(row['status'], 'Balanced')
-    ) is False
-
-    # Fails if status doesn't match
-    assert (
-        check_prof_name_match(row['name'], 'ada')
-        and check_course_match(row['courses'], 'IT-PF02')
-        and check_status_match(row['status'], 'Overload')
     ) is False

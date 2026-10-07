@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Programs - Admin{% endblock %}
+{% block header_title %}<h5 class="header__title">Program Management</h5>{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Academic Programs</h1>
+        <p class="page-subtitle">Configure and manage academic degree programs across the institution</p>
+    </div>
+</div>
+
+{% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set can_edit_programs = (user_role_lower in ['super_admin', 'admin']) %}
+
+{% if can_edit_programs %}
+<div class="card-custom mb-4">
+    <div class="card-custom__header">
+        <h5 class="card-custom__title"><i class="bx bx-plus-circle me-2"></i>Add New Program</h5>
+    </div>
+    <form action="/add_program" method="POST" id="add-program-form">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Program Code / Name <span class="text-danger">*</span></label>
+                <input type="text" name="program_name" id="add_program_name" class="form-control" 
+                       placeholder="e.g. BSIT, BSDS, BSCS" maxlength="100" autocomplete="off" required>
+                <div class="form-text small">Short unique code used throughout schedules and sections.</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Full Program Title (Optional)</label>
+                <input type="text" name="full_name" id="add_full_name" class="form-control" 
+                       placeholder="e.g. Bachelor of Science in Data Science" maxlength="255" autocomplete="off">
+                <div class="form-text small">Official degree program description.</div>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100" id="btn-add-program" data-loading-text="Adding...">
+                    <i class="bx bx-plus me-1"></i> Add Program
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card-custom">
+    <div class="card-custom__header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="card-custom__title mb-0"><i class="bx bx-certification me-2"></i>Program Catalog ({{ programs|length }})</h5>
+        <div style="max-width: 280px; width: 100%;">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="bx bx-search text-muted"></i></span>
+                <input type="text" id="programSearchInput" class="form-control" placeholder="Search programs..." autocomplete="off">
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" id="programsTable">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 20%;">Program</th>
+                    <th style="width: 40%;">Full Description</th>
+                    <th style="width: 15%;" class="text-center">Courses</th>
+                    <th style="width: 15%;" class="text-center">Schedulers</th>
+                    <th style="width: 10%;" class="text-end pe-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if programs %}
+                    {% for p in programs %}
+                    <tr class="program-row" data-search="{{ (p.program_name ~ ' ' ~ (p.full_name or '')) | lower }}">
+                        <td>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-6 px-3 py-1 fw-bold">
+                                {{ p.program_name }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-dark fw-medium">{{ p.full_name or '—' }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">{{ p.course_count or 0 }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">{{ p.scheduler_count or 0 }}</span>
+                        </td>
+                        <td class="text-end pe-3">
+                            {% if can_edit_programs %}
+                            <div class="d-inline-flex gap-1">
+                                <button type="button" class="btn btn-outline-secondary btn-sm edit-program-btn"
+                                        data-bs-toggle="modal" data-bs-target="#editProgramModal"
+                                        data-id="{{ p.id }}"
+                                        data-name="{{ p.program_name }}"
+                                        data-full-name="{{ p.full_name or '' }}"
+                                        title="Rename Program">
+                                    <i class="bx bx-edit-alt"></i>
+                                </button>
+                                <form action="/delete_program/{{ p.id }}" method="POST" class="d-inline m-0"
+                                      onsubmit="return confirm('Are you sure you want to delete program \'{{ p.program_name }}\'? This action cannot be undone.');">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete Program">
+                                        <i class="bx bx-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                            {% else %}
+                            <span class="text-muted small">Read-only</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">
+                            <i class="bx bx-info-circle me-1"></i> No programs declared yet.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Edit Program Modal -->
+<div class="modal fade" id="editProgramModal" tabindex="-1" aria-labelledby="editProgramModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editProgramModalLabel"><i class="bx bx-edit me-2"></i>Edit Program</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editProgramForm" method="POST" action="">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Program Code / Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit_program_name" name="program_name" maxlength="100" required>
+                        <div class="form-text small">Renaming updates display across all courses, loads, and schedules automatically.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Full Program Title</label>
+                        <input type="text" class="form-control" id="edit_full_name" name="full_name" maxlength="255">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-program" data-loading-text="Saving changes...">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Search filter
+    var searchInput = document.getElementById('programSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            var term = this.value.trim().toLowerCase();
+            document.querySelectorAll('.program-row').forEach(function(row) {
+                var text = row.getAttribute('data-search') || '';
+                row.style.display = text.indexOf(term) !== -1 ? '' : 'none';
+            });
+        });
+    }
+
+    // Edit modal population
+    var editModal = document.getElementById('editProgramModal');
+    if (editModal) {
+        editModal.addEventListener('show.bs.modal', function(event) {
+            var btn = event.relatedTarget;
+            if (!btn) return;
+            var pid = btn.getAttribute('data-id');
+            var pname = btn.getAttribute('data-name');
+            var pfullName = btn.getAttribute('data-full-name');
+
+            var form = document.getElementById('editProgramForm');
+            if (form) form.action = '/edit_program/' + pid;
+
+            var nameInput = document.getElementById('edit_program_name');
+            var fullInput = document.getElementById('edit_full_name');
+            if (nameInput) nameInput.value = pname || '';
+            if (fullInput) fullInput.value = pfullName || '';
+        });
+    }
+});
+</script>
+{% endblock %}

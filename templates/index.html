@@ -105,6 +105,21 @@
     </a>
 </div>
 
+{% if not show_preview %}
+<div id="no-loads-banner" class="alert alert-warning d-flex align-items-center justify-content-between mb-4 border-start border-4 border-warning shadow-sm" role="alert" style="{% if has_professor_loads %}display: none;{% endif %}">
+    <div class="d-flex align-items-center">
+        <i class="bx bx-error-circle fs-3 me-3 text-warning"></i>
+        <div>
+            <strong class="d-block">No professor loads yet.</strong>
+            <span>Please import professor loads first to enable schedule generation.</span>
+        </div>
+    </div>
+    <a href="/professor_load" class="btn btn-warning btn-sm fw-semibold text-dark">
+        <i class="bx bx-import me-1"></i> Go to Professor Load
+    </a>
+</div>
+{% endif %}
+
 <div class="card-custom mb-4">
     <div class="card-custom__header">
         <h5 class="card-custom__title"><i class="bx bx-slider-alt me-2"></i>Schedule Configuration</h5>
@@ -784,6 +799,32 @@
                 }
             });
         }
+
+        function refreshProfessorLoadsBanner() {
+            var banner = document.getElementById('no-loads-banner');
+            if (!banner) return;
+            fetch('/api/has_professor_loads', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(res) {
+                if (!res.ok) return null;
+                return res.json();
+            })
+            .then(function(data) {
+                if (!data || typeof data.has_loads === 'undefined') return;
+                banner.style.display = data.has_loads ? 'none' : '';
+            })
+            .catch(function() {
+                // Network or server error: fail safe, keep existing state
+            });
+        }
+
+        window.addEventListener('pageshow', function() {
+            refreshProfessorLoadsBanner();
+        });
+        window.addEventListener('focus', function() {
+            refreshProfessorLoadsBanner();
+        });
 
         function showToast(message, type) {
             if (typeof window.showToast === 'function') {
