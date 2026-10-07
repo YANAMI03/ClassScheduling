@@ -1318,7 +1318,7 @@ def test_view_professor_schedule_calculates_workload(monkeypatch):
     html = resp.get_data(as_text=True)
     assert "Weekly Assigned Workload" in html
     assert "3 hrs assigned" in html
-    assert "Specialization" in html
+    assert "Specialization" not in html
     assert "Duration" in html
     assert "3 hrs" in html
 
@@ -1381,7 +1381,7 @@ def test_view_professor_schedule_preview_mode(monkeypatch):
     html = resp.get_data(as_text=True)
     assert "Preview Mode Active" in html
     assert "6 hours assigned" in html
-    assert "34 hours remaining" in html
+    assert "hours remaining" not in html
 
 
 def test_api_professor_workload_endpoint(monkeypatch):

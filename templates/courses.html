@@ -27,7 +27,7 @@
 </div>
 
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_edit_courses = (user_role_lower in ['scheduler', 'dean', 'chair', 'super_admin', 'admin']) %}
+{% set can_edit_courses = (user_role_lower in ['super_admin', 'admin']) %}
 
 {% if can_edit_courses %}
 <div class="card-custom mb-4">
@@ -70,8 +70,13 @@
                 <input type="number" name="ilp_hours" class="form-control" placeholder="0" min="0" max="1" step="1" value="0">
             </div>
             <div class="col-lg-3 col-md-6">
-                <label class="form-label">Program</label>
-                <input type="text" name="program" class="form-control" placeholder="e.g. BSIT, BSCS" value="{{ program or session.get('program', '') }}" required>
+                <label class="form-label">Program <span class="text-danger">*</span></label>
+                <select name="program_id" id="add_program_id" class="form-select" required>
+                    <option value="" selected disabled>Select Program</option>
+                    {% for p in programs %}
+                    <option value="{{ p.id }}">{{ p.program_name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-lg-3 col-md-6">
                 <label class="form-label">Year Level</label>
@@ -153,14 +158,24 @@
         </ul>
 
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <div style="min-width: 180px;">
+            {% if programs %}
+            <div style="min-width: 160px;">
+                <select id="programFilter" class="form-select form-select-sm" onchange="location.href='/courses?program=' + encodeURIComponent(this.value)">
+                    <option value="all" {% if not selected_program or selected_program.lower() == 'all' %}selected{% endif %}>All Programs</option>
+                    {% for p in programs %}
+                    <option value="{{ p.id }}" {% if selected_program == p.id|string or selected_program == p.program_name %}selected{% endif %}>{{ p.program_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div style="min-width: 160px;">
                 <select id="semesterFilter" class="form-select form-select-sm">
                     <option value="all" selected>All Semesters</option>
                     <option value="1st Semester">1st Semester</option>
                     <option value="2nd Semester">2nd Semester</option>
                 </select>
             </div>
-            <div style="min-width: 240px;">
+            <div style="min-width: 220px;">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-white border-end-0"><i class="bx bx-search text-muted"></i></span>
                     <input type="text" id="tabSearchInput" class="form-control border-start-0 ps-0" placeholder="Search courses in this view...">
@@ -213,7 +228,7 @@
                     <td>{{ course.semester or '—' }}</td>
                     {% if can_edit_courses %}
                     <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program="{{course.program}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-semester="{{course.semester or ''}}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program-id="{{course.program_id or ''}}" data-program="{{course.program or course.program_name or ''}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_course/{{course.course_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this course?">
@@ -258,7 +273,7 @@
 {% endblock %}
 
 {% block scripts %}
-{% set can_edit_courses = ((session.get('role', '') or '') | lower in ['scheduler', 'dean', 'chair', 'super_admin', 'admin']) %}
+{% set can_edit_courses = ((session.get('role', '') or '') | lower in ['super_admin', 'admin']) %}
 {% if can_edit_courses %}
 <div class="modal fade" id="editModal" tabindex="-1">
     <div class="modal-dialog">
@@ -279,8 +294,13 @@
                             <input type="number" name="units" id="edit_units" class="form-control" min="0" step="any" placeholder="0">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Program</label>
-                            <input type="text" name="program" id="edit_program" class="form-control" required>
+                            <label class="form-label">Program <span class="text-danger">*</span></label>
+                            <select name="program_id" id="edit_program_id" class="form-select" required>
+                                <option value="" disabled>Select Program</option>
+                                {% for p in programs %}
+                                <option value="{{ p.id }}">{{ p.program_name }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -407,9 +427,14 @@ $(function(){
         $('#edit_units').val($t.data('units') !== undefined ? $t.data('units') : '');
         $('#edit_lecture').val($t.data('lecture'));
         $('#edit_lab').val($t.data('lab'));
-        $('#edit_ilp').val($t.data('ilp'));
-        $('#edit_program').val($t.data('program'));
-        $('#edit_year_level').val($t.data('yearlevel'));
+        var progIdVal = $t.data('program-id');
+        if (progIdVal) {
+            $('#edit_program_id').val(progIdVal);
+        } else {
+            // Match by program text if ID not present
+            var progName = $t.data('program');
+            $('#edit_program_id option').filter(function(){ return $(this).text().trim() === progName; }).prop('selected', true);
+        }
         $('#edit_semester').val($t.data('semester') || '');
         var specVal = $t.data('specialization') || '';
         $('#edit_specialization').val(specVal);

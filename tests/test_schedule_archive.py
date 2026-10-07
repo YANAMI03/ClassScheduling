@@ -228,35 +228,34 @@ def test_restore_schedule_archive_viewer_forbidden(monkeypatch):
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
 
     response = client.post('/restore_schedule_archive/batch-1', follow_redirects=False)
-    assert response.status_code == 302
-    assert '/schedule_archive' in response.headers.get('Location', '')
+    assert response.status_code == 403
 
 
-def test_delete_schedule_archive_admin_only(monkeypatch):
+def test_delete_schedule_archive_permissions(monkeypatch):
     client = app_module.app.test_client()
-
-    # Scheduler cannot delete
-    with client.session_transaction() as session:
-        session['user_id'] = 1
-        session['program'] = 'BSIT'
-        session['username'] = 'scheduler'
-        session['role'] = 'Scheduler'
 
     fake_sb = FakeArchiveSupabase()
     monkeypatch.setattr(app_module, 'supabase', fake_sb)
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
+    # Scheduler CAN delete
+    with client.session_transaction() as session:
+        session['user_id'] = 1
+        session['program'] = 'BSIT'
+        session['username'] = 'scheduler'
+        session['role'] = 'Scheduler'
+
     res_sched = client.post('/delete_schedule_archive/batch-1', follow_redirects=False)
     assert res_sched.status_code == 302
 
-    # Admin can delete
+    # Admin CANNOT delete (Admin is read-only on archive, writes are 403)
     with client.session_transaction() as session:
+        session['user_id'] = 2
         session['role'] = 'Admin'
 
     res_admin = client.post('/delete_schedule_archive/batch-1', follow_redirects=False)
-    assert res_admin.status_code == 302
-    assert '/schedule_archive' in res_admin.headers.get('Location', '')
+    assert res_admin.status_code == 403
 
 
 def test_confirm_preview_second_semester_sets_active_semester_and_redirects(monkeypatch):

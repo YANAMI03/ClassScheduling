@@ -96,17 +96,11 @@
                     {% if professor.time_designation %}
                     <span class="badge bg-info-subtle text-info border border-info-subtle" title="Days on campus">{{ professor.time_designation }} Days / Wk</span>
                     {% endif %}
-                    {% if professor.ranking_name %}
-                    <span class="badge bg-secondary-subtle text-secondary">{{ professor.ranking_name }}</span>
-                    {% endif %}
                 </div>
                 <div class="section-card__meta d-flex align-items-center gap-3 flex-wrap text-muted small">
                     <span><i class="bx bx-book-open me-1 text-primary"></i><strong>{{ professor.class_count }}</strong> class{{ 'es' if professor.class_count != 1 else '' }} assigned</span>
                     {% if professor.total_hours is defined %}
                     <span><i class="bx bx-time-five me-1 text-primary"></i><strong>{{ professor.total_hours }} hrs</strong> assigned</span>
-                    {% endif %}
-                    {% if professor.specialization %}
-                    <span><i class="bx bx-star me-1 text-warning"></i>{{ professor.specialization }}</span>
                     {% endif %}
                 </div>
             </div>

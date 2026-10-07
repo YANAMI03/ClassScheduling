@@ -6,12 +6,14 @@ import pytest
 class MockTable:
     def __init__(self, table_name, data=None):
         self.table_name = table_name
-        self.data = data or []
+        self.data = list(data or [])
         self.inserted = []
         self.updated = []
         self.deleted = []
         self._filters = {}
         self._in_filters = {}
+        self._neq_filters = {}
+        self._pending_update = None
 
     def select(self, *args, **kwargs):
         return self
@@ -19,31 +21,45 @@ class MockTable:
     def insert(self, rows):
         if isinstance(rows, list):
             self.inserted.extend(rows)
+            self.data.extend(rows)
         else:
             self.inserted.append(rows)
+            self.data.append(rows)
         return self
 
     def update(self, payload):
+        self._pending_update = dict(payload)
         self.updated.append(payload)
         return self
 
     def delete(self):
         self.deleted.append(dict(self._filters))
+        self.data = [
+            item for item in self.data
+            if not all(str(item.get(k)) == str(v) for k, v in self._filters.items())
+        ]
         return self
 
     def eq(self, col, val):
         self._filters[col] = val
         return self
 
+    def neq(self, col, val):
+        self._neq_filters[col] = val
+        return self
+
     def in_(self, col, val):
         self._in_filters[col] = val
+        return self
+
+    def limit(self, count):
         return self
 
     def order(self, *args, **kwargs):
         return self
 
     def execute(self):
-        # Filter self.data according to eq and in_
+        # Filter self.data according to eq, neq, and in_
         res = []
         for item in self.data:
             match = True
@@ -51,12 +67,35 @@ class MockTable:
                 if str(item.get(col)) != str(val):
                     match = False
                     break
+            for col, val in self._neq_filters.items():
+                if str(item.get(col)) == str(val):
+                    match = False
+                    break
             for col, val_list in self._in_filters.items():
                 if item.get(col) not in val_list and int(item.get(col, -999)) not in val_list:
                     match = False
                     break
             if match:
-                res.append(item)
+                res.append(dict(item))
+
+        if self._pending_update is not None:
+            for item in self.data:
+                match = True
+                for col, val in self._filters.items():
+                    if str(item.get(col)) != str(val):
+                        match = False
+                        break
+                for col, val in self._neq_filters.items():
+                    if str(item.get(col)) == str(val):
+                        match = False
+                        break
+                if match:
+                    item.update(self._pending_update)
+            self._pending_update = None
+
+        self._filters = {}
+        self._neq_filters = {}
+        self._in_filters = {}
 
         class Response:
             pass
@@ -67,11 +106,12 @@ class MockTable:
 
 
 class MockSupabase:
-    def __init__(self, professors=None, courses=None, professor_loads=None):
+    def __init__(self, professors=None, courses=None, professor_loads=None, schedules=None):
         self.tables = {
             'professor': MockTable('professor', professors or []),
             'course': MockTable('course', courses or []),
             'professor_load': MockTable('professor_load', professor_loads or []),
+            'schedule': MockTable('schedule', schedules or []),
         }
 
     def table(self, name):
@@ -145,8 +185,8 @@ def test_setup(monkeypatch):
     with client.session_transaction() as session:
         session['user_id'] = 1
         session['program'] = 'BSIT'
-        session['username'] = 'admin_user'
-        session['role'] = 'admin'
+        session['username'] = 'scheduler_user'
+        session['role'] = 'scheduler'
         session['department'] = 'CICT'
 
     db = _build_mock_db()
@@ -319,7 +359,7 @@ def test_professor_load_page_renders_load_components(test_setup):
     assert 'handleAddSectionChange' in html
     assert 'handleAddRemove' in html
     assert 'Pending Professor' not in html
-    assert 'Limit Exceeded' in html
+    assert 'Limit Exceeded' not in html
 
 
 def test_api_professor_load_returns_assignments(test_setup):
@@ -333,10 +373,12 @@ def test_api_professor_load_returns_assignments(test_setup):
     response = client.get('/api/professor_load/1')
 
     assert response.status_code == 200
-    assert response.get_json() == {
-        'prof_id': 1,
-        'assignments': [{'course_id': 101, 'sections': 2}],
-    }
+    data = response.get_json()
+    assert data['prof_id'] == 1
+    assert data['assignments'] == [{'course_id': 101, 'sections': 2}]
+    # API now also returns cross-program load totals for the workload gauge
+    assert 'other_units' in data
+    assert 'other_hours' in data
 
 
 def test_professor_load_template_contains_existing_assignments(test_setup):
@@ -356,5 +398,146 @@ def test_professor_load_template_contains_existing_assignments(test_setup):
     assert 'applyProfessorAssignments(preloaded)' in html
     assert 'academic_ranking_name' in html
     assert '&#34;&#34;' not in html
+
+
+def test_edit_professor_load_success(test_setup):
+    client, db = test_setup
+    db.table('professor_load').data.append({
+        'id': 10,
+        'prof_id': 1,
+        'course_id': 101,
+        'sections': 1,
+        'ilp_hours': 0,
+    })
+
+    response = client.post('/edit_professor_load/10', data={
+        'prof_id': '2',
+        'course_id': '102',
+        'sections': '3',
+        'ilp_hours': '1',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+
+    assert response.status_code == 200
+    res_json = response.get_json()
+    assert res_json['success'] is True
+    updated_row = next(r for r in db.table('professor_load').data if r['id'] == 10)
+    assert updated_row['prof_id'] == 2
+    assert updated_row['course_id'] == 102
+    assert updated_row['sections'] == 3
+    assert updated_row['ilp_hours'] == 1
+
+
+def test_edit_professor_load_validation_errors(test_setup):
+    client, db = test_setup
+    db.table('professor_load').data.append({
+        'id': 10,
+        'prof_id': 1,
+        'course_id': 101,
+        'sections': 1,
+        'ilp_hours': 0,
+    })
+
+    # Test sections <= 0
+    res_sec = client.post('/edit_professor_load/10', data={
+        'prof_id': '1',
+        'course_id': '101',
+        'sections': '0',
+        'ilp_hours': '0',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert res_sec.status_code == 400
+    assert 'Sections must be greater than 0' in res_sec.get_json()['message']
+
+    # Test invalid ilp_hours (not in (0, 1))
+    res_ilp = client.post('/edit_professor_load/10', data={
+        'prof_id': '1',
+        'course_id': '101',
+        'sections': '2',
+        'ilp_hours': '2',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert res_ilp.status_code == 400
+    assert 'ILP hours must be 0 or 1' in res_ilp.get_json()['message']
+
+
+def test_edit_professor_load_duplicate_prevented(test_setup):
+    client, db = test_setup
+    db.table('professor_load').data.extend([
+        {'id': 10, 'prof_id': 1, 'course_id': 101, 'sections': 1, 'ilp_hours': 0},
+        {'id': 11, 'prof_id': 1, 'course_id': 102, 'sections': 2, 'ilp_hours': 0},
+    ])
+
+    res = client.post('/edit_professor_load/10', data={
+        'prof_id': '1',
+        'course_id': '102',
+        'sections': '2',
+        'ilp_hours': '0',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert res.status_code == 400
+    assert 'already assigned' in res.get_json()['message']
+
+
+def test_edit_professor_load_cross_program_tampering_403(test_setup):
+    client, db = test_setup
+    db.table('course').data.append({
+        'course_id': 999,
+        'course_name': 'Financial Management',
+        'program': 'BSBA',
+        'program_id': 2,
+    })
+    db.table('professor_load').data.append({
+        'id': 10,
+        'prof_id': 1,
+        'course_id': 101,
+        'sections': 1,
+        'ilp_hours': 0,
+    })
+
+    with client.session_transaction() as sess:
+        sess['program_id'] = 1
+        sess['program'] = 'BSIT'
+
+    res = client.post('/edit_professor_load/10', data={
+        'prof_id': '1',
+        'course_id': '999',
+        'sections': '1',
+        'ilp_hours': '0',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert res.status_code == 403
+    assert 'Course belongs to another program' in res.get_json()['message']
+
+
+def test_edit_professor_load_blocked_by_active_schedule(test_setup):
+    client, db = test_setup
+    db.table('professor_load').data.append({
+        'id': 10,
+        'prof_id': 1,
+        'course_id': 101,
+        'sections': 1,
+        'ilp_hours': 0,
+    })
+    db.table('schedule').data.append({
+        'schedule_id': 501,
+        'professor_load_id': 10,
+        'archive': False,
+    })
+
+    # Changing course or professor must be blocked
+    res = client.post('/edit_professor_load/10', data={
+        'prof_id': '2',
+        'course_id': '101',
+        'sections': '2',
+        'ilp_hours': '0',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert res.status_code == 400
+    assert 'active schedule' in res.get_json()['message']
+
+    # Changing only sections is allowed
+    res_sections = client.post('/edit_professor_load/10', data={
+        'prof_id': '1',
+        'course_id': '101',
+        'sections': '2',
+        'ilp_hours': '0',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert res_sections.status_code == 200
+    assert res_sections.get_json()['success'] is True
 
 

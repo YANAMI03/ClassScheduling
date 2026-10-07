@@ -428,7 +428,7 @@ def test_add_timeslot_day(monkeypatch):
     }, follow_redirects=False)
 
     assert resp.status_code == 302
-    assert not any(ts.get('day') == 'Thursday' for ts in db.timeslots)
+    assert any(ts.get('day') == 'Thursday' for ts in db.timeslots)
 
 
 def test_add_timeslot_duplicate_rejected(monkeypatch):
