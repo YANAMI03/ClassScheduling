@@ -142,8 +142,11 @@
                                 <i class="bx bx-reset"></i> Restore
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-danger delete-batch-btn"
-                                    data-batch-id="{{ batch.batch_id }}"
-                                    data-batch-label="{{ batch.semester }} ({{ batch.archived_at_fmt }})"
+                                    data-action="delete"
+                                    data-url="/delete_schedule_archive/{{ batch.batch_id }}"
+                                    data-method="POST"
+                                    data-confirm="Are you sure you want to permanently delete the archived schedule records for {{ batch.semester }} ({{ batch.archived_at_fmt }})? This action cannot be undone."
+                                    data-title="Delete Archive Version"
                                     title="Delete this archive version">
                                 <i class="bx bx-trash"></i>
                             </button>
@@ -242,7 +245,7 @@
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">
+                    <button type="submit" class="btn btn-danger" data-action="delete" data-loading-text="Deleting...">
                         <i class="bx bx-trash me-1"></i> Permanently Delete
                     </button>
                 </div>

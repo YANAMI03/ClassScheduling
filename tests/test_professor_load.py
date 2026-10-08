@@ -106,12 +106,13 @@ class MockTable:
 
 
 class MockSupabase:
-    def __init__(self, professors=None, courses=None, professor_loads=None, schedules=None):
+    def __init__(self, professors=None, courses=None, professor_loads=None, schedules=None, professor_programs=None):
         self.tables = {
             'professor': MockTable('professor', professors or []),
             'course': MockTable('course', courses or []),
             'professor_load': MockTable('professor_load', professor_loads or []),
             'schedule': MockTable('schedule', schedules or []),
+            'professor_program': MockTable('professor_program', professor_programs or []),
         }
 
     def table(self, name):
@@ -130,6 +131,7 @@ def _build_mock_db():
             'specialization': 'Computer Science',
             'min_units': 6.0,
             'max_units': 15.0,
+            'program_id': 1,
         },
         {
             'prof_id': 2,
@@ -139,6 +141,7 @@ def _build_mock_db():
             'specialization': 'Algorithms',
             'min_units': 12.0,
             'max_units': 24.0,
+            'program_id': 1,
         }
     ]
 
@@ -147,6 +150,7 @@ def _build_mock_db():
             'course_id': 101,
             'course_name': 'Intro to Programming',
             'program': 'BSIT',
+            'program_id': 1,
             'year_level': 1,
             'lecture_hours': 2.0,
             'lab_hours': 3.0,
@@ -157,6 +161,7 @@ def _build_mock_db():
             'course_id': 102,
             'course_name': 'Data Structures',
             'program': 'BSIT',
+            'program_id': 1,
             'year_level': 2,
             'lecture_hours': 3.0,
             'lab_hours': 0.0,
@@ -167,6 +172,7 @@ def _build_mock_db():
             'course_id': 103,
             'course_name': 'Capstone Project',
             'program': 'BSIT',
+            'program_id': 1,
             'year_level': 4,
             'lecture_hours': 5.0,
             'lab_hours': 5.0,
@@ -175,7 +181,12 @@ def _build_mock_db():
         }
     ]
 
-    return MockSupabase(profs, courses)
+    professor_programs = [
+        {'prof_id': 1, 'program_id': 1},
+        {'prof_id': 2, 'program_id': 1},
+    ]
+
+    return MockSupabase(profs, courses, professor_programs=professor_programs)
 
 
 @pytest.fixture
@@ -185,6 +196,7 @@ def test_setup(monkeypatch):
     with client.session_transaction() as session:
         session['user_id'] = 1
         session['program'] = 'BSIT'
+        session['program_id'] = 1
         session['username'] = 'scheduler_user'
         session['role'] = 'scheduler'
         session['department'] = 'CICT'
@@ -396,7 +408,7 @@ def test_professor_load_template_contains_existing_assignments(test_setup):
     assert 'existingProfAssignments' in html
     assert '"1": [{"course_id": 101, "sections": 3}]' in html or '"1": [{"course_id": 101' in html
     assert 'applyProfessorAssignments(preloaded)' in html
-    assert 'academic_ranking_name' in html
+    assert 'specialization' in html
     assert '&#34;&#34;' not in html
 
 

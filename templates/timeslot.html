@@ -82,7 +82,12 @@
                                 <i class="bx bx-edit me-1"></i> Edit Hours
                             </button>
                             <button type="button" class="btn btn-outline-danger btn-sm"
-                                    onclick="openDeleteTimeslotModal({{ ts.timeslot_id }}, '{{ ts.day }}')">
+                                    data-action="delete"
+                                    data-url="/delete_timeslot/{{ ts.timeslot_id }}"
+                                    data-method="POST"
+                                    data-confirm="Are you sure you want to remove {{ ts.day }} from active schedule windows?"
+                                    data-title="Remove Operating Day"
+                                    data-subtext="No classes will be scheduled on this day during automatic schedule generation.">
                                 <i class="bx bx-trash me-1"></i> Remove
                             </button>
                         </div>
@@ -231,7 +236,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger"><i class="bx bx-trash me-1"></i> Remove Day</button>
+                    <button type="submit" class="btn btn-danger" data-action="delete" data-loading-text="Removing..."><i class="bx bx-trash me-1"></i> Remove Day</button>
                 </div>
             </form>
         </div>

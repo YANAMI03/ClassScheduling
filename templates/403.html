@@ -81,11 +81,11 @@
         <div>
             {% set role_lower = (session.get('role', '') or '') | lower %}
             {% if role_lower in ['admin', 'super_admin', 'super admin', 'viewer', 'instructor'] %}
-            <a href="{{ url_for('schedules') }}" class="denied-action-btn" id="btn-back-home">
+            <a href="{{ url_for('schedules') }}" class="btn denied-action-btn" id="btn-back-home">
                 <i class="bx bx-arrow-back"></i> Go to Section Schedule
             </a>
             {% else %}
-            <a href="{{ url_for('home') }}" class="denied-action-btn" id="btn-back-home">
+            <a href="{{ url_for('home') }}" class="btn denied-action-btn" id="btn-back-home">
                 <i class="bx bx-arrow-back"></i> Go to Generate Schedule
             </a>
             {% endif %}

@@ -27,9 +27,10 @@
 </div>
 
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
+{% set can_add_courses = (user_role_lower in ['super_admin', 'admin', 'scheduler']) %}
 {% set can_edit_courses = (user_role_lower in ['super_admin', 'admin']) %}
 
-{% if can_edit_courses %}
+{% if can_add_courses %}
 <div class="card-custom mb-4">
     <div class="card-custom__header">
         <h5 class="card-custom__title"><i class="bx bx-plus-circle me-2"></i>Add New Course</h5>
@@ -71,12 +72,25 @@
             </div>
             <div class="col-lg-3 col-md-6">
                 <label class="form-label">Program <span class="text-danger">*</span></label>
+                {% if is_admin %}
                 <select name="program_id" id="add_program_id" class="form-select" required>
-                    <option value="" selected disabled>Select Program</option>
+                    <option value="" disabled {% if not active_program_id %}selected{% endif %}>Select Program</option>
                     {% for p in programs %}
-                    <option value="{{ p.id }}">{{ p.program_name }}</option>
+                    <option value="{{ p.id }}" {% if active_program_id and active_program_id|string == p.id|string %}selected{% endif %}>{{ p.program_name }}</option>
                     {% endfor %}
                 </select>
+                {% else %}
+                {% set sched_p = None %}
+                {% for p in programs %}
+                    {% if user_program_id and user_program_id|string == p.id|string %}
+                        {% set sched_p = p %}
+                    {% endif %}
+                {% endfor %}
+                <input type="hidden" name="program_id" value="{{ user_program_id or '' }}">
+                <select class="form-select" disabled>
+                    <option selected>{{ sched_p.program_name if sched_p else (program or 'Assigned Program') }}</option>
+                </select>
+                {% endif %}
             </div>
             <div class="col-lg-3 col-md-6">
                 <label class="form-label">Year Level</label>
@@ -123,6 +137,48 @@
 {% endif %}
 
 <div class="card-custom">
+    <!-- Program Tabs -->
+    <div class="program-tabs-bar mb-4 pb-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="text-muted fw-semibold small text-uppercase" style="letter-spacing: 0.5px;">
+                <i class="bx bx-buildings me-1"></i> Academic Program
+            </span>
+        </div>
+        <ul class="nav custom-nav-pills flex-wrap gap-2" id="programTabsNav" role="tablist">
+            {% if is_admin %}
+            <li class="nav-item">
+                <a class="nav-link {% if selected_program == 'all' or not selected_program %}active{% endif %}" 
+                   href="/courses?program=all" id="program-tab-all">
+                    <i class="bx bx-grid-alt me-1"></i> All Programs
+                    <span class="badge ms-1">{{ program_counts.get('all', counts.all) }}</span>
+                </a>
+            </li>
+            {% for p in programs %}
+            <li class="nav-item">
+                <a class="nav-link {% if selected_program == p.id|string %}active{% endif %}" 
+                   href="/courses?program={{ p.id }}" id="program-tab-{{ p.id }}">
+                    <i class="bx bx-book-open me-1"></i> {{ p.program_name }}
+                    <span class="badge ms-1">{{ program_counts.get(p.id|string, 0) }}</span>
+                </a>
+            </li>
+            {% endfor %}
+            {% else %}
+            {% set sched_p = None %}
+            {% for p in programs %}
+                {% if user_program_id and user_program_id|string == p.id|string %}
+                    {% set sched_p = p %}
+                {% endif %}
+            {% endfor %}
+            <li class="nav-item">
+                <span class="nav-link active" id="program-tab-scheduler" style="cursor: default;">
+                    <i class="bx bx-book-open me-1"></i> {{ sched_p.program_name if sched_p else (program or 'Assigned Program') }}
+                    <span class="badge ms-1">{{ program_counts.get(user_program_id|string, counts.all) }}</span>
+                </span>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <ul class="nav custom-nav-pills" id="courseTabs" role="tablist">
             <li class="nav-item" role="presentation">
@@ -158,7 +214,7 @@
         </ul>
 
         <div class="d-flex flex-wrap align-items-center gap-2">
-            {% if programs %}
+            {% if is_admin and programs %}
             <div style="min-width: 160px;">
                 <select id="programFilter" class="form-select form-select-sm" onchange="location.href='/courses?program=' + encodeURIComponent(this.value)">
                     <option value="all" {% if not selected_program or selected_program.lower() == 'all' %}selected{% endif %}>All Programs</option>
@@ -231,7 +287,7 @@
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program-id="{{course.program_id or ''}}" data-program="{{course.program or course.program_name or ''}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
-                        <a href="/delete_course/{{course.course_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this course?">
+                        <a href="/delete_course/{{course.course_id}}" class="btn btn-danger btn-sm" data-action="delete" data-title="Delete Course" data-confirm="Are you sure you want to delete this course?">
                             <i class="bx bx-trash"></i> Delete
                         </a>
                     </td>

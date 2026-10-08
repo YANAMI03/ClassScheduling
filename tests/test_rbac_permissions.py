@@ -243,8 +243,8 @@ def test_scheduler_allowed_pages(test_client):
 def test_scheduler_restricted_pages_return_403(test_client):
     _login_as(test_client, 'scheduler')
 
-    # Blocked: Courses, Rooms, Timeslots, Users, Activity Log
-    for path in ['/courses', '/rooms', '/timeslot', '/users', '/activity_log']:
+    # Blocked: Rooms, Timeslots, Users, Activity Log
+    for path in ['/rooms', '/timeslot', '/users', '/activity_log']:
         res = test_client.get(path)
         assert res.status_code == 403, f"Scheduler should receive 403 on {path}, got {res.status_code}"
         soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
@@ -254,11 +254,9 @@ def test_scheduler_restricted_pages_return_403(test_client):
 def test_scheduler_restricted_write_actions_return_403_json(test_client):
     _login_as(test_client, 'scheduler')
 
-    # Blocked writes: Courses, Rooms, Timeslots, Users, Backup & Restore
+    # Blocked writes: Rooms, Timeslots, Users, Backup & Restore, Edit Course
     endpoints = [
-        ('POST', '/add_course', {'course_name': 'test'}),
         ('POST', '/edit_course/1', {'course_name': 'test'}),
-        ('GET', '/delete_course/1', None),
         ('POST', '/add_room', {'room_name': 'test'}),
         ('POST', '/edit_room/1', {'room_name': 'test'}),
         ('GET', '/delete_room/1', None),
@@ -339,13 +337,14 @@ def test_scheduler_sidebar_visibility(test_client):
     assert res.status_code == 200
     soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
 
-    # Scheduler should see Generate Schedule, Professor Load, Schedules Dropdown
+    # Scheduler should see Generate Schedule, Courses, Professors, Professor Load, Schedules Dropdown
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is not None
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professors') is not None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professor_load') is not None
     assert soup.find('a', href=lambda h: h and '/schedules' in h) is not None
     assert soup.find('a', href=lambda h: h and '/schedule_archive' in h) is not None
 
-    # Scheduler should NOT see Courses, Rooms, Timeslots, Users, Activity Log
-    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is None
+    # Scheduler should NOT see Rooms, Timeslots, Users, Activity Log
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/rooms') is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/timeslot') is None
     assert soup.find('a', href=lambda h: h and '/users' in h) is None
@@ -373,22 +372,16 @@ def test_viewer_sidebar_visibility(test_client):
     assert soup.find('a', href=lambda h: h and '/activity_log' in h) is None
 
 
-def test_deleted_routes_return_404(test_client):
-    """Confirm deleted professors and academic ranking routes return 404 regardless of role."""
-    for role in ['admin', 'scheduler', 'viewer']:
+def test_restored_professor_routes_permissions(test_client):
+    """Confirm restored professors route has correct RBAC and academic ranking is removed."""
+    for role in ['admin', 'scheduler']:
         _login_as(test_client, role)
-        deleted_urls = [
-            '/professors',
-            '/academic_ranking',
-            '/add_professor',
-            '/add_academic_ranking',
-            '/edit_professor/1',
-            '/edit_academic_ranking/1',
-            '/delete_professor/1',
-            '/delete_academic_ranking/1',
-        ]
-        for url in deleted_urls:
-            assert test_client.get(url).status_code == 404, f"Expected 404 on {url} for role {role}"
+        assert test_client.get('/professors').status_code == 200, f"Expected 200 on /professors for {role}"
+        assert test_client.get('/academic_ranking').status_code == 404, f"Expected 404 on /academic_ranking for {role}"
+
+    _login_as(test_client, 'viewer')
+    assert test_client.get('/professors').status_code == 403, "Viewer should be blocked from /professors"
+    assert test_client.get('/academic_ranking').status_code == 404, "/academic_ranking should be 404"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

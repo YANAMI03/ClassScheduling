@@ -1677,9 +1677,11 @@ a {
    ============================================================ */
 
 .btn-loading {
-    opacity: 0.78;
+    opacity: 0.82;
     cursor: progress !important;
-    pointer-events: none;
+    pointer-events: none !important;
+    user-select: none;
+    box-sizing: border-box;
 }
 
 .btn-loading-spinner {
@@ -1692,9 +1694,29 @@ a {
     flex-shrink: 0;
     vertical-align: middle;
     animation: btnSpinnerRotate 0.65s linear infinite;
-    margin-right: 0.4em;
+    margin-right: 0.45em;
     position: relative;
     top: -1px;
+}
+
+.btn-loading-spinner--icon-only {
+    margin-right: 0 !important;
+}
+
+/* Class B: purely client-side active press feedback (NO spinner) */
+.btn:active:not(:disabled):not(.btn-loading),
+button:active:not(:disabled):not(.btn-loading),
+a.btn:active:not(.btn-loading),
+[data-press]:active {
+    transform: scale(0.97);
+    transition: transform 0.12s ease;
+}
+
+/* Sibling locking while button in container is loading */
+.sibling-locked-mid-load {
+    opacity: 0.65 !important;
+    pointer-events: none !important;
+    cursor: not-allowed !important;
 }
 
 @keyframes btnSpinnerRotate {
@@ -1892,9 +1914,15 @@ a {
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
     .btn-loading-spinner {
-        animation: none;
+        animation: none !important;
         border-right-color: currentColor;
-        opacity: 0.5;
+        opacity: 0.65;
+    }
+    .btn:active,
+    button:active,
+    a.btn:active,
+    [data-press]:active {
+        transform: none !important;
     }
     .gen-ring {
         animation: none;
@@ -1913,4 +1941,89 @@ a {
         animation: none;
         stroke-dashoffset: 0;
     }
+    .row-deleting-fade {
+        transition: none !important;
+        opacity: 0 !important;
+        transform: none !important;
+    }
+    .row-delete-shake {
+        animation: none !important;
+        outline: 2px solid #ef4444 !important;
+    }
+    .import-modal-overlay {
+        animation: none !important;
+    }
 }
+
+/* ============================================================
+   UNIVERSAL DELETE BUTTON ANIMATIONS & ROW TRANSITIONS
+   ============================================================ */
+.row-deleting-fade {
+    transition: opacity 280ms ease, transform 280ms ease !important;
+    opacity: 0 !important;
+    transform: scale(0.97) !important;
+    pointer-events: none !important;
+}
+
+.row-delete-shake {
+    animation: deleteShake 0.4s ease;
+    outline: 2px solid #ef4444 !important;
+}
+
+.row-disabled-mid-delete {
+    opacity: 0.65;
+    pointer-events: none !important;
+}
+
+@keyframes deleteShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-5px); }
+    40%, 80% { transform: translateX(5px); }
+}
+
+/* ============================================================
+   IMPORT PROFESSOR LOAD MODAL OVERLAY
+   ============================================================ */
+.import-modal-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1060;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: inherit;
+    animation: fadeInOverlay 0.2s ease;
+}
+
+.import-overlay-card {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 2rem 2.5rem;
+    text-align: center;
+    max-width: 440px;
+    width: 90%;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .row-deleting-fade {
+        transition: none !important;
+        opacity: 0 !important;
+        transform: none !important;
+    }
+    .row-delete-shake {
+        animation: none !important;
+        outline: 2px solid #ef4444 !important;
+    }
+    .import-modal-overlay {
+        animation: none !important;
+    }
+}
+

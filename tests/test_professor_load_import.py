@@ -939,7 +939,7 @@ def test_scheduler_scoped_to_own_program_cross_program_error(test_client, monkey
 def test_import_ilp_hours_parsing_and_validation(test_client, monkeypatch):
     """Confirm ILP hours in (0, 1) are accepted and invalid values are rejected."""
     mock_db = MockSupabase(
-        professors=[{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}],
+        professors=[{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1}],
         courses=[
             {'course_id': 101, 'course_name': 'CS-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
             {'course_id': 102, 'course_name': 'CS-102', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},

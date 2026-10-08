@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib import colors
-from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.platypus import Table, TableStyle, Paragraph, KeepTogether, Flowable
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -579,60 +579,190 @@ def _build_timetable_grid(entries, mode='room', hours=None, col_w=None, row_h=No
 
 
 # ---------------------------------------------------------------------------
+# SafeKeepTogether and Flowable Signatures Area
+# ---------------------------------------------------------------------------
+
+class SafeKeepTogether(KeepTogether):
+    """
+    Subclass of ReportLab KeepTogether that supports direct canvas drawing via wrapOn/drawOn,
+    while guaranteeing that isinstance(obj, KeepTogether) is True and preventing signature
+    blocks from splitting across pages.
+    """
+    def wrapOn(self, canv, aW, aH):
+        w, h = 0, 0
+        for f in self._content:
+            fw, fh = f.wrapOn(canv, aW, aH)
+            w = max(w, fw)
+            h += fh
+        self.width, self.height = w, h
+        return w, h
+
+    def drawOn(self, canv, x, y, _sW=0):
+        curr_y = y + self.height
+        for f in self._content:
+            fh = getattr(f, 'height', 0)
+            curr_y -= fh
+            f.drawOn(canv, x, curr_y)
+
+
+class SignatureAreaFlowable(Flowable):
+    """
+    Flowable rendering the full signature area (Prepared by blocks, Verified by, Approved by).
+    Arranges blocks side-by-side or stacked according to the number of program preparers,
+    autoscaling font sizes to prevent text overflow.
+    """
+    def __init__(self, preparers=None, pw=PAGE_WIDTH, max_w=145.0):
+        super().__init__()
+        self.preparers = preparers or [{'name': None, 'title': 'Program Scheduler - BSIT'}]
+        self.pw = pw
+        self.lw = max_w
+        self.width = 540.0
+
+        num_prep = len(self.preparers)
+        if num_prep <= 2:
+            self.height = 84.0
+        else:
+            extra_rows = (num_prep - 1) // 2
+            self.height = 84.0 + extra_rows * 44.0
+
+    def wrap(self, availWidth, availHeight):
+        return self.width, self.height
+
+    def _draw_block(self, canv, x, y, header, name, title, max_w, show_date=True):
+        canv.setFillColor(colors.black)
+        canv.setFont(_FONT_BODY, 7.5)
+        canv.drawString(x, y, header)
+
+        # Name line & underline
+        line_y = y - 20.0
+        name_clean = str(name).strip().upper() if name else ''
+        if name_clean:
+            base_size = 7.5
+            w = canv.stringWidth(name_clean, _FONT_TITLE, base_size)
+            if w > max_w and w > 0:
+                base_size = max(4.5, base_size * (max_w / w))
+            canv.setFont(_FONT_TITLE, base_size)
+            canv.drawString(x, y - 18.0, name_clean)
+
+        # Draw signature line
+        canv.setLineWidth(0.5)
+        canv.line(x, line_y, x + max_w, line_y)
+
+        # Title line
+        title_clean = str(title).strip() if title else ''
+        if title_clean:
+            t_size = 7.0
+            tw = canv.stringWidth(title_clean, _FONT_BODY, t_size)
+            if tw > max_w and tw > 0:
+                t_size = max(4.5, t_size * (max_w / tw))
+            canv.setFont(_FONT_BODY, t_size)
+            canv.drawString(x, y - 28.0, title_clean)
+
+        # Date Signed line
+        if show_date:
+            canv.setFont(_FONT_ITALIC, 7.0)
+            canv.drawString(x, y - 36.0, 'Date Signed: _______________')
+
+    def _draw_approved_by(self, c, ay, lw):
+        x_appr = (self.width - lw) / 2.0
+        abl = 'Approved by:'
+        c.setFont(_FONT_BODY, 7.5)
+        c.drawString((self.width - c.stringWidth(abl, _FONT_BODY, 7.5)) / 2.0, ay, abl)
+
+        c.setFont(_FONT_TITLE, 7.5)
+        avp_name = 'ENGR. FELICIANA P. JACOBA, Ed.D.'
+        c.drawString((self.width - c.stringWidth(avp_name, _FONT_TITLE, 7.5)) / 2.0, ay - 16.0, avp_name)
+
+        c.setLineWidth(0.5)
+        c.line(x_appr, ay - 18.0, x_appr + lw, ay - 18.0)
+
+        c.setFont(_FONT_BODY, 7.0)
+        avp_title = 'Vice President for Academic Affairs'
+        c.drawString((self.width - c.stringWidth(avp_title, _FONT_BODY, 7.0)) / 2.0, ay - 26.0, avp_title)
+
+        c.setFont(_FONT_ITALIC, 7.0)
+        ads = 'Date Signed: _______________'
+        c.drawString((self.width - c.stringWidth(ads, _FONT_ITALIC, 7.0)) / 2.0, ay - 34.0, ads)
+
+    def draw(self):
+        c = self.canv
+        num_prep = len(self.preparers)
+        lw = self.lw
+        y_top = self.height
+
+        if num_prep == 1:
+            cw = 540.0 / 3.0
+            x_prep = 0.0
+            x_ver = cw * 2.0 + 5.0
+
+            p = self.preparers[0]
+            self._draw_block(c, x_prep, y_top, 'Prepared by:', p.get('name'), p.get('title'), lw)
+            self._draw_block(c, x_ver, y_top, 'Verified by:', 'DR. RONALD S. SANTOS, REE', 'College Dean/Campus Director', lw)
+
+            ay = y_top - 46.0
+            self._draw_approved_by(c, ay, lw)
+
+        elif num_prep == 2:
+            cw = 540.0 / 3.0
+            col_lw = min(lw, cw - 10.0)
+            x_p1 = 0.0
+            x_p2 = cw
+            x_ver = cw * 2.0
+
+            p1, p2 = self.preparers[0], self.preparers[1]
+            self._draw_block(c, x_p1, y_top, 'Prepared by:', p1.get('name'), p1.get('title'), col_lw)
+            self._draw_block(c, x_p2, y_top, 'Prepared by:', p2.get('name'), p2.get('title'), col_lw)
+            self._draw_block(c, x_ver, y_top, 'Verified by:', 'DR. RONALD S. SANTOS, REE', 'College Dean/Campus Director', col_lw)
+
+            ay = y_top - 46.0
+            self._draw_approved_by(c, ay, lw)
+
+        else:
+            cw = 540.0 / 3.0
+            col_lw = min(lw, cw - 10.0)
+
+            # Row 1: Preparer 1, Preparer 2, Verified by
+            self._draw_block(c, 0.0, y_top, 'Prepared by:', self.preparers[0].get('name'), self.preparers[0].get('title'), col_lw)
+            self._draw_block(c, cw, y_top, 'Prepared by:', self.preparers[1].get('name'), self.preparers[1].get('title'), col_lw)
+            self._draw_block(c, cw * 2.0, y_top, 'Verified by:', 'DR. RONALD S. SANTOS, REE', 'College Dean/Campus Director', col_lw)
+
+            # Subsequent rows of preparers
+            curr_y = y_top - 44.0
+            idx = 2
+            while idx < num_prep:
+                p_a = self.preparers[idx]
+                self._draw_block(c, 0.0, curr_y, 'Prepared by:', p_a.get('name'), p_a.get('title'), col_lw)
+                if idx + 1 < num_prep:
+                    p_b = self.preparers[idx + 1]
+                    self._draw_block(c, cw, curr_y, 'Prepared by:', p_b.get('name'), p_b.get('title'), col_lw)
+                curr_y -= 44.0
+                idx += 2
+
+            ay = curr_y - 4.0
+            self._draw_approved_by(c, ay, lw)
+
+
+# ---------------------------------------------------------------------------
 # Footer & Signatures (Exact Reproduction of HEADER_FOOTER.pdf)
 # ---------------------------------------------------------------------------
 
-def _draw_footer(c, pw=PAGE_WIDTH, table_bottom_y=250.0):
+def _draw_footer(c, pw=PAGE_WIDTH, table_bottom_y=250.0, preparers=None):
     """
-    Draw 3-signatory approval block and official Vision/Mission footer banner.
+    Draw approval block wrapped in KeepTogether and official Vision/Mission footer banner.
     """
-    # 1. Signatures Block
+    # 1. Signatures Block wrapped in SafeKeepTogether
+    sig_flowable = SignatureAreaFlowable(preparers=preparers, pw=pw)
+    kt = SafeKeepTogether([sig_flowable])
+    w, h = kt.wrapOn(c, 540.0, 300.0)
+
+    # Position so top of signatures block aligns with sig_y
     sig_y = min(table_bottom_y - 12.0, 240.0)
-    cw = 540.0 / 3.0
-    lw = 145.0
-    x0 = 36.0
-
-    c.setFillColor(colors.black)
-    c.setFont(_FONT_BODY, 7.5)
-    c.drawString(x0, sig_y, 'Prepared by:')
-    c.drawString(x0 + cw * 2.0 + 5.0, sig_y, 'Verified by:')
-
-    c.setFont(_FONT_TITLE, 7.5)
-    c.drawString(x0, sig_y - 18.0, 'ANDREW CAEZAR A. VILLEGAS, MSIT')
-    c.drawString(x0 + cw * 2.0 + 5.0, sig_y - 18.0, 'DR. RONALD S. SANTOS, REE')
-
-    c.setLineWidth(0.5)
-    c.line(x0, sig_y - 20.0, x0 + lw, sig_y - 20.0)
-    c.line(x0 + cw * 2.0 + 5.0, sig_y - 20.0, x0 + cw * 2.0 + 5.0 + lw, sig_y - 20.0)
-
-    c.setFont(_FONT_BODY, 7.0)
-    c.drawString(x0, sig_y - 28.0, 'Program Chair/Head')
-    c.drawString(x0 + cw * 2.0 + 5.0, sig_y - 28.0, 'College Dean/Campus Director')
-
-    c.setFont(_FONT_ITALIC, 7.0)
-    c.drawString(x0, sig_y - 36.0, 'Date Signed: _______________')
-    c.drawString(x0 + cw * 2.0 + 5.0, sig_y - 36.0, 'Date Signed: _______________')
-
-    ay = sig_y - 44.0
-    c.setFont(_FONT_BODY, 7.5)
-    abl = 'Approved by:'
-    c.drawString((pw - c.stringWidth(abl, _FONT_BODY, 7.5)) / 2.0, ay, abl)
-
-    c.setFont(_FONT_TITLE, 7.5)
-    avp_name = 'ENGR. FELICIANA P. JACOBA, Ed.D.'
-    c.drawString((pw - c.stringWidth(avp_name, _FONT_TITLE, 7.5)) / 2.0, ay - 16.0, avp_name)
-
-    c.line((pw - lw) / 2.0, ay - 18.0, (pw + lw) / 2.0, ay - 18.0)
-
-    c.setFont(_FONT_BODY, 7.0)
-    avp_title = 'Vice President for Academic Affairs'
-    c.drawString((pw - c.stringWidth(avp_title, _FONT_BODY, 7.0)) / 2.0, ay - 26.0, avp_title)
-
-    c.setFont(_FONT_ITALIC, 7.0)
-    ads = 'Date Signed: _______________'
-    c.drawString((pw - c.stringWidth(ads, _FONT_ITALIC, 7.0)) / 2.0, ay - 34.0, ads)
+    draw_y = sig_y - h
+    kt.drawOn(c, 36.0, draw_y)
 
     # 2. Form Revision Code at bottom left
+    x0 = 36.0
+    c.setFillColor(colors.black)
     c.setFont(_FONT_BODY, 6.0)
     c.drawString(x0, 56.0, 'NEUST-AAF-F012')
     c.drawString(x0, 50.0, 'Rev.01 (10.29.2024)')
@@ -645,6 +775,85 @@ def _draw_footer(c, pw=PAGE_WIDTH, table_bottom_y=250.0):
     # 4. Official NEUST Vision, Mission, Global, and Accreditation Badges Banner
     if os.path.exists(LOGO_FOOTER_BANNER):
         c.drawImage(LOGO_FOOTER_BANNER, 0.35, -14.71, width=611.94, height=62.32, mask='auto')
+
+
+def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
+    """
+    Extracts deduplicated preparer blocks for the schedule.
+    - Section timetable: uses the preparer for that section's program.
+    - Room & Professor: produces one block per distinct program appearing in the data.
+    """
+    entries = entries or []
+    filter_metadata = filter_metadata or {}
+    norm_type = 'professor' if schedule_type in ('professor', 'teacher') else ('section' if schedule_type == 'section' else 'room')
+
+    if norm_type == 'section':
+        prog = (filter_metadata.get('program') or
+                (entity_info.get('program') if isinstance(entity_info, dict) else None) or
+                (entity_info.get('program_name') if isinstance(entity_info, dict) else None) or
+                (entries[0].get('program') if entries else None) or
+                'BSIT')
+        
+        name = None
+        title = None
+        for e in entries:
+            if e.get('prepared_by_name'):
+                name = e.get('prepared_by_name')
+            if e.get('prepared_by_title'):
+                title = e.get('prepared_by_title')
+            if name or title:
+                break
+        
+        if not title:
+            title = f"Program Scheduler - {prog}"
+        
+        return [{'name': name, 'title': title, 'program': prog}]
+
+    else:
+        # Multi-program views: Room or Professor
+        prog_order = []
+        entries_by_prog = {}
+        for e in entries:
+            p = e.get('program')
+            if not p:
+                sec = str(e.get('section') or '').strip()
+                if sec:
+                    p = sec.split()[0].split('-')[0]
+            if not p:
+                p = filter_metadata.get('program') or 'BSIT'
+            p = str(p).strip().upper()
+            if p not in entries_by_prog:
+                entries_by_prog[p] = []
+                prog_order.append(p)
+            entries_by_prog[p].append(e)
+
+        if not prog_order:
+            default_p = filter_metadata.get('program') or 'BSIT'
+            return [{'name': None, 'title': f"Program Scheduler - {default_p}", 'program': default_p}]
+
+        preparers = []
+        for p_code in prog_order:
+            p_entries = entries_by_prog[p_code]
+            p_name = None
+            p_title = None
+            for e in p_entries:
+                if e.get('prepared_by_name'):
+                    p_name = e.get('prepared_by_name')
+                if e.get('prepared_by_title'):
+                    p_title = e.get('prepared_by_title')
+                if p_name or p_title:
+                    break
+            
+            if not p_title:
+                p_title = f"Program Scheduler - {p_code}"
+            
+            preparers.append({
+                'name': p_name,
+                'title': p_title,
+                'program': p_code,
+            })
+
+        return preparers
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +935,9 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
 
     ay_str = filter_metadata.get('school_year') or _normalize_academic_year(None, sem_str)
 
+    # Extract dynamic preparers per program
+    preparers = _extract_preparers(norm_type, entity_info, entries, filter_metadata)
+
     # Determine hour range: default PRD range is 7:00 AM to 8:00 PM (hours 7 to 19, ending at 20:00)
     start_h = _BASE_START_H
     end_h   = _BASE_END_H
@@ -744,7 +956,7 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
     hours = list(range(start_h, end_h))
 
     buf = io.BytesIO()
-    c = rl_canvas.Canvas(buf, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
+    c = rl_canvas.Canvas(buf, pagesize=(PAGE_WIDTH, PAGE_HEIGHT), pageCompression=0)
 
     # 1. Draw Header
     hdr_bottom = _draw_header(c, PAGE_WIDTH, PAGE_HEIGHT)
@@ -753,8 +965,10 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
     tbl_top = _draw_title(c, PAGE_WIDTH, hdr_bottom, entity_label, sem_str, ay_str, norm_type)
 
     # 3. Available Height Budget:
-    # Signatures need ~120 pt above footer rule (50 pt). min_tbl_bottom = 175 pt.
-    min_tbl_bottom = 175.0
+    # Signatures need ~120 pt above footer rule (50 pt). Adapt to number of preparers.
+    sig_block = SignatureAreaFlowable(preparers=preparers, pw=PAGE_WIDTH)
+    sig_h = sig_block.height
+    min_tbl_bottom = max(175.0, 56.0 + sig_h + 15.0)
     avail_tbl_h = tbl_top - min_tbl_bottom
 
     # 4. Build Table
@@ -772,9 +986,10 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
     tbl.drawOn(c, tbl_x, tbl_y)
 
     # 5. Draw Footer & Signatures
-    _draw_footer(c, PAGE_WIDTH, tbl_y)
+    _draw_footer(c, PAGE_WIDTH, tbl_y, preparers=preparers)
 
     c.showPage()
     c.save()
     buf.seek(0)
     return buf
+
