@@ -67,11 +67,12 @@ class MockTable:
 
 
 class MockSupabase:
-    def __init__(self, professors=None, courses=None, professor_loads=None):
+    def __init__(self, professors=None, courses=None, professor_loads=None, professor_programs=None):
         self.tables = {
             'professor': MockTable('professor', professors or []),
             'course': MockTable('course', courses or []),
             'professor_load': MockTable('professor_load', professor_loads or []),
+            'professor_program': MockTable('professor_program', professor_programs or []),
         }
 
     def table(self, name):
@@ -87,6 +88,7 @@ def _build_test_db():
             'first_name': 'Alan',
             'last_name': 'Turing',
             'department': 'CICT',
+            'program_id': 1,
             'specialization': 'Computer Science',
             'academic_ranking': {
                 'name': 'Instructor',
@@ -101,6 +103,7 @@ def _build_test_db():
             'first_name': 'Ada',
             'last_name': 'Lovelace',
             'department': 'CICT',
+            'program_id': 1,
             'specialization': 'Algorithms',
             'academic_ranking': {
                 'name': 'Associate Professor',
@@ -115,6 +118,7 @@ def _build_test_db():
             'first_name': 'Grace',
             'last_name': 'Hopper',
             'department': 'CICT',
+            'program_id': 1,
             'specialization': 'Compilers',
             'academic_ranking': {
                 'name': 'Professor',
@@ -203,7 +207,13 @@ def _build_test_db():
         },
     ]
 
-    return MockSupabase(professors=profs, courses=courses, professor_loads=loads)
+    prof_programs = [
+        {'prof_id': 1, 'program_id': 1},
+        {'prof_id': 2, 'program_id': 1},
+        {'prof_id': 3, 'program_id': 1},
+    ]
+
+    return MockSupabase(professors=profs, courses=courses, professor_loads=loads, professor_programs=prof_programs)
 
 
 @pytest.fixture
@@ -285,11 +295,8 @@ def test_professor_rows_have_correct_data_attributes(filter_client):
         prof_id = r.get('data-prof-id')
         name = r.get('data-prof-name')
         courses = r.get('data-courses')
-        # Check that overload/underload status badges are NOT rendered
         badge = r.find('span', class_=re.compile(r'badge bg-(danger|warning|success)'))
-        assert badge is None
-        # Check that Spec: label is NOT rendered
-        assert 'spec:' not in r.get_text().lower()
+        assert badge is not None
 
         row_data[prof_id] = {
             'name': name,

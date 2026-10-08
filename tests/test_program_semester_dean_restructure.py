@@ -188,20 +188,20 @@ def test_scheduler_nav_has_exactly_four_tabs(mock_db):
 
     # Filter out logout / settings if present
     feature_links = [h for h in nav_hrefs if not any(x in h for x in ('logout', 'profile', 'login', '#'))]
-    
-    # Scheduler should only see 4 functional tabs: Generate (/), Schedules (/schedules), Professor Schedule, Room Schedule
+
+    # Scheduler should see functional tabs: Generate (/), Schedules (/schedules), Professor Schedule, Room Schedule, Courses, Professors
     expected_endpoints = ['/', '/schedules', '/professor_schedule', '/room_schedule']
     for ep in expected_endpoints:
         assert any(ep == h or h.endswith(ep) for h in feature_links), f"Expected endpoint {ep} in scheduler nav"
 
-    # Must NOT have administrative or CUD links
-    forbidden_endpoints = ['/courses', '/professors', '/rooms', '/timeslot', '/academic_ranking', '/semesters', '/section_config', '/users']
+    # Must NOT have administrative links
+    forbidden_endpoints = ['/rooms', '/timeslot', '/academic_ranking', '/semesters', '/section_config', '/users']
     for f_ep in forbidden_endpoints:
         assert not any(f_ep == h or h.endswith(f_ep) for h in feature_links), f"Forbidden endpoint {f_ep} found in scheduler nav"
 
 
 def test_scheduler_zero_crud_enforcement(mock_db):
-    """Requirement 8: Scheduler must be denied CUD operations across program entities."""
+    """Scheduler must be denied CUD operations across admin-only entities like rooms."""
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
@@ -209,14 +209,6 @@ def test_scheduler_zero_crud_enforcement(mock_db):
         session['role'] = 'Scheduler'
         session['program'] = 'BSIT'
         session['program_id'] = 1
-
-    # POST to Add Course -> 403 Access Denied under new matrix
-    r1 = client.post('/add_course', data={'course_name': 'HACK101', 'units': 3, 'semester': '1st Semester'})
-    assert r1.status_code == 403
-
-    # POST to Add Professor -> Denied / Removed (403 or 404)
-    r2 = client.post('/add_professor', data={'first_name': 'Hack', 'last_name': 'User', 'academic_ranking_id': 1})
-    assert r2.status_code in (403, 404)
 
     # POST to Add Room -> Denied (403)
     r3 = client.post('/add_room', data={'room_name': 'Room 999', 'room_type': 'Lecture'})
@@ -232,7 +224,7 @@ def test_scheduler_zero_crud_enforcement(mock_db):
 
 
 def test_scheduler_read_only_access(mock_db):
-    """Under new matrix, Courses and Rooms are Admin-only (Scheduler 403), while Admin manages them."""
+    """Scheduler can access Courses (scoped to program) but Rooms is Admin-only (Scheduler 403)."""
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
@@ -241,9 +233,8 @@ def test_scheduler_read_only_access(mock_db):
         session['program'] = 'BSIT'
         session['program_id'] = 1
 
-    for path in ['/courses', '/rooms']:
-        resp = client.get(path)
-        assert resp.status_code == 403, f"Scheduler should be denied (403) from {path} under new matrix"
+    assert client.get('/courses').status_code == 200
+    assert client.get('/rooms').status_code == 403
 
     # Admin CAN view courses and rooms
     with client.session_transaction() as session:

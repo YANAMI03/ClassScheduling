@@ -393,11 +393,14 @@ def validate_import_data(
     existing_loads_list: List[Dict[str, Any]],
     all_courses_list: Optional[List[Dict[str, Any]]] = None,
     target_program_name: Optional[str] = None,
+    all_professors_list: Optional[List[Dict[str, Any]]] = None,
+    allowed_prof_ids: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Validate all parsed rows against database records.
     Auto-creates new professors when names are not found in existing professors.
     Warns on similar names without failing.
+    Rejects professors from other programs with 'Professor not in <Program>'.
     No ranking limits check is enforced.
     Returns comprehensive preview data.
     """
@@ -414,6 +417,10 @@ def validate_import_data(
             c_code = normalize_course_code(c.get('course_name') or '')
             if c_code:
                 all_courses_by_code[c_code] = c
+
+    # Normalize allowed_prof_ids set
+    scoped_pids_set = {int(x) for x in allowed_prof_ids} if allowed_prof_ids is not None else None
+    prof_pool_for_matching = all_professors_list if all_professors_list is not None else professors_list
 
     # Map existing assignments: (prof_id, course_id) -> existing_load
     existing_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
@@ -483,11 +490,16 @@ def validate_import_data(
         if not raw_prof or not str(raw_prof).strip():
             row_errors.append("Professor name is empty.")
         else:
-            matched_prof, prof_match_err = match_professor(raw_prof, professors_list)
+            matched_prof, prof_match_err = match_professor(raw_prof, prof_pool_for_matching)
             if prof_match_err:
                 row_errors.append(prof_match_err)
             elif matched_prof:
-                prof_id = matched_prof.get('prof_id')
+                matched_id = matched_prof.get('prof_id')
+                if scoped_pids_set is not None and matched_id is not None and int(matched_id) not in scoped_pids_set:
+                    pname = target_program_name or "Program"
+                    row_errors.append(f"Professor not in {pname}")
+                else:
+                    prof_id = matched_id
             else:
                 # Unknown professor -> will be auto-created
                 is_new_professor = True
@@ -949,6 +961,13 @@ def execute_bulk_import(
                                 created_prof_ids.append(int(pid))
         except Exception as e:
             return 0, 0, 0, [f"Failed to auto-create professors: {e}"]
+
+        if created_prof_ids and program_id is not None:
+            for c_pid in set(created_prof_ids):
+                try:
+                    supabase_client.table('professor_program').insert({'prof_id': c_pid, 'program_id': int(program_id)}).execute()
+                except Exception as e_link:
+                    logging.debug(f"Error linking new professor to professor_program: {e_link}")
 
     # 2. Map prof_id to rows that were new professors
     for item in valid_rows:

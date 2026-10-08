@@ -106,7 +106,7 @@
 </div>
 
 {% if not show_preview %}
-<div id="no-loads-banner" class="alert alert-warning d-flex align-items-center justify-content-between mb-4 border-start border-4 border-warning shadow-sm" role="alert" style="{% if has_professor_loads %}display: none;{% endif %}">
+<div id="no-loads-banner" class="alert alert-warning {% if has_professor_loads %}d-none{% else %}d-flex{% endif %} align-items-center justify-content-between mb-4 border-start border-4 border-warning shadow-sm" role="alert" style="{% if has_professor_loads %}display: none;{% endif %}">
     <div class="d-flex align-items-center">
         <i class="bx bx-error-circle fs-3 me-3 text-warning"></i>
         <div>
@@ -812,13 +812,26 @@
             })
             .then(function(data) {
                 if (!data || typeof data.has_loads === 'undefined') return;
-                banner.style.display = data.has_loads ? 'none' : '';
+                if (data.has_loads) {
+                    banner.classList.add('d-none');
+                    banner.classList.remove('d-flex');
+                    banner.style.display = 'none';
+                } else {
+                    banner.classList.remove('d-none');
+                    banner.classList.add('d-flex');
+                    banner.style.display = '';
+                }
             })
             .catch(function() {
                 // Network or server error: fail safe, keep existing state
             });
         }
 
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', refreshProfessorLoadsBanner);
+        } else {
+            refreshProfessorLoadsBanner();
+        }
         window.addEventListener('pageshow', function() {
             refreshProfessorLoadsBanner();
         });
@@ -912,8 +925,11 @@
                 return;
             }
 
-            savePreviewEntryBtn.disabled = true;
-            savePreviewEntryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            if (typeof window.setButtonLoading === 'function') {
+                window.setButtonLoading(savePreviewEntryBtn, true, 'Saving...');
+            } else {
+                savePreviewEntryBtn.disabled = true;
+            }
 
             var payload = {
                 id: editEntryId.value,
@@ -981,8 +997,12 @@
                     showToast(err.message || 'Unable to save changes.', 'error');
                 })
                 .finally(function () {
-                    savePreviewEntryBtn.disabled = false;
-                    savePreviewEntryBtn.innerHTML = 'Save';
+                    if (typeof window.setButtonLoading === 'function') {
+                        window.setButtonLoading(savePreviewEntryBtn, false);
+                    } else {
+                        savePreviewEntryBtn.disabled = false;
+                        savePreviewEntryBtn.innerHTML = 'Save';
+                    }
                 });
         });
     });

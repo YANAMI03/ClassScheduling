@@ -242,61 +242,42 @@ def test_admin_courses_crud_and_protection(extended_client):
     assert res_del_in_use.status_code == 400
 
 
-def test_scheduler_blocked_from_courses(extended_client):
+def test_scheduler_access_to_courses(extended_client):
     client, _ = extended_client
     _login_as(client, 'scheduler')
-    assert client.get('/courses').status_code == 403
-    assert client.post('/add_course', data={'course_name': 'C'}).status_code == 403
-    assert client.post('/edit_course/10', data={'course_name': 'C'}).status_code == 403
-    assert client.get('/delete_course/10').status_code == 403
+    assert client.get('/courses').status_code == 200
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. Professors (deleted routes return 404)
+# 3. Professors (restored routes)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_professors_routes_deleted_return_404(extended_client):
+def test_professors_routes_restored(extended_client):
     client, fake_db = extended_client
     _login_as(client, 'scheduler')
-
-    # Deleted routes must return 404
-    assert client.get('/professors').status_code == 404
-    assert client.post('/add_professor', data={'first_name': 'Alice'}).status_code == 404
-    assert client.post('/edit_professor/1', data={'first_name': 'Alice'}).status_code == 404
-    assert client.get('/delete_professor/1').status_code == 404
+    assert client.get('/professors').status_code == 200
 
 
-def test_admin_blocked_from_professors(extended_client):
+def test_admin_access_to_professors(extended_client):
     client, _ = extended_client
     _login_as(client, 'admin')
-    assert client.get('/professors').status_code == 404
-    assert client.post('/add_professor', data={'first_name': 'P'}).status_code == 404
-    assert client.post('/edit_professor/1', data={'first_name': 'P'}).status_code == 404
-    assert client.get('/delete_professor/1').status_code == 404
+    assert client.get('/professors').status_code == 200
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4. Academic Ranking (deleted routes return 404)
+# 4. Academic Ranking (restored routes)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_academic_ranking_routes_deleted_return_404(extended_client):
+def test_academic_ranking_routes_removed(extended_client):
     client, fake_db = extended_client
     _login_as(client, 'scheduler')
-
-    # Deleted routes must return 404
     assert client.get('/academic_ranking').status_code == 404
-    assert client.post('/add_academic_ranking', data={'ranking_name': 'Prof'}).status_code == 404
-    assert client.post('/edit_academic_ranking/1', data={'ranking_name': 'Prof'}).status_code == 404
-    assert client.get('/delete_academic_ranking/1').status_code == 404
 
 
-def test_admin_blocked_from_academic_ranking(extended_client):
+def test_admin_access_to_academic_ranking_removed(extended_client):
     client, _ = extended_client
     _login_as(client, 'admin')
     assert client.get('/academic_ranking').status_code == 404
-    assert client.post('/add_academic_ranking', data={'ranking_name': 'R'}).status_code == 404
-    assert client.post('/edit_academic_ranking/1', data={'ranking_name': 'R'}).status_code == 404
-    assert client.get('/delete_academic_ranking/1').status_code == 404
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -89,40 +89,6 @@
 .stat-pill-ilp { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
 .stat-pill-unit { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
 
-/* ── Workload Gauge ──────────────────────────────────────────────── */
-.gauge-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 0.5rem 0 0.25rem;
-}
-.gauge-svg { overflow: visible; }
-.gauge-track { fill: none; stroke: #e2e8f0; stroke-width: 10; stroke-linecap: round; }
-.gauge-fill  { fill: none; stroke-width: 10; stroke-linecap: round;
-               transition: stroke-dashoffset 0.45s cubic-bezier(.4,0,.2,1), stroke 0.3s; }
-.gauge-fill.under  { stroke: #f59e0b; }
-.gauge-fill.within { stroke: #22c55e; }
-.gauge-fill.over   { stroke: #ef4444; }
-.gauge-value { font-size: 1.35rem; font-weight: 700; fill: #1e293b; }
-.gauge-limit { font-size: 0.72rem; font-weight: 500; fill: #64748b; }
-.gauge-status { font-size: 0.7rem; font-weight: 600; margin-top: 2px; }
-.gauge-status.under  { color: #b45309; }
-.gauge-status.within { color: #15803d; }
-.gauge-status.over   { color: #dc2626; }
-.gauge-status.neutral { color: #64748b; }
-.gauge-toggle-row {
-    display: flex; gap: 4px; margin-bottom: 4px;
-}
-.gauge-toggle-btn {
-    font-size: 0.7rem; padding: 1px 10px;
-    border-radius: 20px; border: 1px solid #cbd5e1;
-    background: #f1f5f9; color: #475569;
-    cursor: pointer; transition: all 0.15s;
-    font-weight: 500;
-}
-.gauge-toggle-btn.active {
-    background: #2563eb; color: #fff; border-color: #2563eb;
-}
 
 .table-custom td {
     vertical-align: middle;
@@ -299,6 +265,7 @@
                     </select>
                     <div id="prof-info-banner" class="mt-2 text-muted small d-none">
                         <span class="badge bg-light text-dark border me-1"><i class="bx bx-building me-1"></i><span id="prof-banner-dept"></span></span>
+                        <span class="badge bg-light text-dark border me-1"><i class="bx bx-star me-1"></i><span id="prof-banner-spec"></span></span>
                     </div>
                 </div>
 
@@ -308,53 +275,51 @@
                         <h6 class="fw-bold mb-0 text-dark">
                             <i class="bx bx-tachometer me-1 text-primary"></i>Teaching Load Summary
                         </h6>
+                        <span class="badge bg-secondary" id="load-status-badge">
+                            Awaiting Selection
+                        </span>
                     </div>
 
-                    <!-- Workload Gauge -->
-                    <div id="gauge-container" class="gauge-wrap mb-2">
-                        <!-- toggle: units / hours -->
-                        <div class="gauge-toggle-row" role="group" aria-label="Gauge metric toggle">
-                            <button type="button" class="gauge-toggle-btn active" id="gauge-btn-units" aria-pressed="true">Units</button>
-                            <button type="button" class="gauge-toggle-btn" id="gauge-btn-hours" aria-pressed="false">Hours</button>
+                    <!-- Weekly Hours Meter -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-baseline mb-1">
+                            <span class="small text-muted fw-semibold">
+                                <i class="bx bx-time-five me-1 text-primary"></i>Weekly Hours
+                            </span>
+                            <span class="small fw-bold">
+                                <span id="lbl-total-hours" class="fs-6">0.0</span> / <span id="lbl-max-hours">40.0</span> hrs
+                            </span>
                         </div>
-                        <!-- SVG semicircle gauge  (viewBox 0 0 100 55) -->
-                        <svg class="gauge-svg" viewBox="0 0 100 55" width="160" height="88"
-                             role="img" aria-label="Workload gauge — select a professor to see their load">
-                            <title id="gauge-svg-title">Workload gauge</title>
-                            <!-- track -->
-                            <path class="gauge-track"
-                                  d="M 10 50 A 40 40 0 0 1 90 50"
-                                  stroke-dasharray="125.66" />
-                            <!-- fill -->
-                            <path class="gauge-fill neutral" id="gauge-fill"
-                                  d="M 10 50 A 40 40 0 0 1 90 50"
-                                  stroke-dasharray="125.66"
-                                  stroke-dashoffset="125.66" />
-                            <!-- value label -->
-                            <text class="gauge-value" id="gauge-value-txt"
-                                  x="50" y="46" text-anchor="middle">—</text>
-                            <!-- limit label -->
-                            <text class="gauge-limit" id="gauge-limit-txt"
-                                  x="50" y="54" text-anchor="middle"></text>
-                        </svg>
-                        <div class="gauge-status neutral" id="gauge-status-txt"
-                             aria-live="polite">Select a professor</div>
+                        <div class="progress" style="height: 10px; border-radius: 5px;">
+                            <div id="bar-total-hours" class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted" style="font-size: 0.75rem;">(Lec + Lab + ILP) × sections</small>
+                            <small id="lbl-hours-percent" class="text-muted fw-semibold" style="font-size: 0.75rem;">0% of max</small>
+                        </div>
+                        <div id="caption-other-hours" class="text-muted small mt-1" style="display: none; font-size: 0.72rem;"></div>
                     </div>
 
-                    <!-- Workload Count Cards -->
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <div class="p-2 rounded bg-white border text-center">
-                                <div class="text-muted small fw-semibold"><i class="bx bx-time-five me-1 text-primary"></i>Weekly Hours</div>
-                                <div class="fw-bold fs-5 text-dark" id="lbl-total-hours">0.0</div>
-                            </div>
+                    <!-- Total Units Meter -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-baseline mb-1">
+                            <span class="small text-muted fw-semibold">
+                                <i class="bx bx-book-bookmark me-1 text-primary"></i>Total Units
+                            </span>
+                            <span class="small fw-bold">
+                                <span id="lbl-total-units" class="fs-6">0.0</span> / <span id="lbl-max-units">24.0</span> units
+                            </span>
                         </div>
-                        <div class="col-6">
-                            <div class="p-2 rounded bg-white border text-center">
-                                <div class="text-muted small fw-semibold"><i class="bx bx-book-bookmark me-1 text-primary"></i>Total Units</div>
-                                <div class="fw-bold fs-5 text-dark" id="lbl-total-units">0.0</div>
-                            </div>
+                        <div class="progress" style="height: 10px; border-radius: 5px;">
+                            <div id="bar-total-units" class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted" style="font-size: 0.75rem;">
+                                Min Target: <span id="lbl-min-units" class="fw-semibold">0.0</span> units
+                            </small>
+                            <small id="lbl-units-percent" class="text-muted fw-semibold" style="font-size: 0.75rem;">0% of max</small>
+                        </div>
+                        <div id="caption-other-units" class="text-muted small mt-1" style="display: none; font-size: 0.72rem;"></div>
                     </div>
 
                     <!-- Summary Stats Box -->
@@ -594,11 +559,23 @@
                 {% set total_prof_hours = prof_group.list|map(attribute='weekly_hours')|sum %}
                 {% set total_prof_units = prof_group.list|map(attribute='total_units')|sum %}
                 {% set total_prof_secs = prof_group.list|map(attribute='sections')|sum %}
+                {% set p_min_u = prof_group.list[0].min_units|default(0, true) %}
+                {% set p_max_u = prof_group.list[0].max_units|default(24, true) %}
+                {% set p_min_h = prof_group.list[0].min_hours|default(0, true) %}
+                {% set p_max_h = prof_group.list[0].max_hours|default(40, true) %}
+                {% if (p_max_u > 0 and total_prof_units > p_max_u) or (p_max_h > 0 and total_prof_hours > p_max_h) %}
+                    {% set prof_status = 'Overloaded' %}
+                {% elif (p_min_h > 0 and total_prof_hours < p_min_h) or (p_min_u > 0 and total_prof_units < p_min_u) %}
+                    {% set prof_status = 'Under Minimum' %}
+                {% else %}
+                    {% set prof_status = 'Balanced' %}
+                {% endif %}
 
                 <tr class="professor-row"
                     data-prof-id="{{ prof_group.grouper }}"
                     data-prof-name="{{ (p_first ~ ' ' ~ p_last)|trim|lower }}"
-                    data-courses="{% for c in prof_group.list %}{{ c.course_name|trim }}{% if not loop.last %}|{% endif %}{% endfor %}">
+                    data-courses="{% for c in prof_group.list %}{{ c.course_name|trim }}{% if not loop.last %}|{% endif %}{% endfor %}"
+                    data-load-status="{{ prof_status }}">
                     <td class="align-middle">
                         <div class="fw-bold text-dark">{{ p_first }} {{ p_last }}</div>
                         {% if p_badge %}
@@ -636,8 +613,17 @@
                         <div class="mb-1 d-flex justify-content-between align-items-center">
                             <span class="small fw-semibold">Units:</span>
                             <span class="small fw-bold text-dark">
-                                {{ total_prof_units }} u
+                                {{ total_prof_units }}{% if p_max_u and p_max_u > 0 %} / {{ p_max_u }} u{% else %} u{% endif %}
                             </span>
+                        </div>
+                        <div class="mt-1">
+                            {% if prof_status == 'Overloaded' %}
+                            <span class="badge bg-danger"><i class="bx bx-error-circle me-1"></i>Overloaded</span>
+                            {% elif prof_status == 'Under Minimum' %}
+                            <span class="badge bg-warning text-dark"><i class="bx bx-info-circle me-1"></i>Under Minimum</span>
+                            {% else %}
+                            <span class="badge bg-success"><i class="bx bx-check-circle me-1"></i>Balanced</span>
+                            {% endif %}
                         </div>
                     </td>
                     <td class="text-end align-middle">
@@ -652,7 +638,7 @@
                                 data-sections="{% for c in prof_group.list %}{{ c.course_id }}:{{ c.sections }}{% if not loop.last %},{% endif %}{% endfor %}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
-                        <a href="{{ url_for('delete_professor_load_all', prof_id=prof_group.grouper) }}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to remove all course assignments for this professor?">
+                        <a href="{{ url_for('delete_professor_load_all', prof_id=prof_group.grouper) }}" class="btn btn-danger btn-sm" data-action="delete" data-title="Delete All Assignments" data-confirm="Are you sure you want to remove all course assignments for this professor?">
                             <i class="bx bx-trash"></i> Delete
                         </a>
                     </td>
@@ -729,34 +715,67 @@
 
                             <!-- Modal Load Summary Panel -->
                             <div class="load-meter-card" id="edit-load-panel">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span class="fw-bold small text-dark"><i class="bx bx-tachometer me-1 text-primary"></i>Workload Summary</span>
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold mb-0 text-dark">
+                                        <i class="bx bx-tachometer me-1 text-primary"></i>Teaching Load Summary
+                                    </h6>
+                                    <span class="badge bg-secondary" id="edit-load-status-badge">
+                                        Awaiting Selection
+                                    </span>
                                 </div>
 
-                                <div class="row g-2 mb-2">
-                                    <div class="col-6">
-                                        <div class="p-2 rounded bg-white border text-center">
-                                            <div class="text-muted small fw-semibold">Weekly Hours</div>
-                                            <div class="fw-bold fs-6 text-dark" id="edit-lbl-hours">0.0</div>
-                                        </div>
+                                <!-- Weekly Hours Meter -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                        <span class="small text-muted fw-semibold">
+                                            <i class="bx bx-time-five me-1 text-primary"></i>Weekly Hours
+                                        </span>
+                                        <span class="small fw-bold">
+                                            <span id="edit-lbl-total-hours" class="fs-6">0.0</span> / <span id="edit-lbl-max-hours">40.0</span> hrs
+                                        </span>
                                     </div>
-                                    <div class="col-6">
-                                        <div class="p-2 rounded bg-white border text-center">
-                                            <div class="text-muted small fw-semibold">Total Units</div>
-                                            <div class="fw-bold fs-6 text-dark" id="edit-lbl-units">0.0</div>
-                                        </div>
+                                    <div class="progress" style="height: 10px; border-radius: 5px;">
+                                        <div id="edit-bar-total-hours" class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                                     </div>
+                                    <div class="d-flex justify-content-between align-items-center mt-1">
+                                        <small class="text-muted" style="font-size: 0.75rem;">(Lec + Lab + ILP) &times; sections</small>
+                                        <small id="edit-lbl-hours-percent" class="text-muted fw-semibold" style="font-size: 0.75rem;">0% of max</small>
+                                    </div>
+                                    <div id="edit-caption-other-hours" class="text-muted small mt-1" style="display: none; font-size: 0.72rem;"></div>
                                 </div>
 
-                                <div class="d-flex justify-content-around py-1 my-2 bg-white rounded border text-center small">
+                                <!-- Total Units Meter -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-baseline mb-1">
+                                        <span class="small text-muted fw-semibold">
+                                            <i class="bx bx-book-bookmark me-1 text-primary"></i>Total Units
+                                        </span>
+                                        <span class="small fw-bold">
+                                            <span id="edit-lbl-total-units" class="fs-6">0.0</span> / <span id="edit-lbl-max-units">24.0</span> units
+                                        </span>
+                                    </div>
+                                    <div class="progress" style="height: 10px; border-radius: 5px;">
+                                        <div id="edit-bar-total-units" class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mt-1">
+                                        <small class="text-muted" style="font-size: 0.75rem;">
+                                            Min Target: <span id="edit-lbl-min-units" class="fw-semibold">0.0</span> units
+                                        </small>
+                                        <small id="edit-lbl-units-percent" class="text-muted fw-semibold" style="font-size: 0.75rem;">0% of max</small>
+                                    </div>
+                                    <div id="edit-caption-other-units" class="text-muted small mt-1" style="display: none; font-size: 0.72rem;"></div>
+                                </div>
+
+                                <!-- Selected Count Card -->
+                                <div class="d-flex justify-content-around py-2 my-2 bg-white rounded border text-center">
                                     <div>
-                                        <span class="text-muted" style="font-size: 0.7rem;">Courses: </span>
-                                        <strong class="text-primary" id="edit-lbl-courses-count">0</strong>
+                                        <span class="text-muted small">Selected Courses</span>
+                                        <div class="fw-bold fs-6 text-primary" id="edit-lbl-courses-count">0</div>
                                     </div>
                                     <div class="border-end"></div>
                                     <div>
-                                        <span class="text-muted" style="font-size: 0.7rem;">Sections: </span>
-                                        <strong class="text-primary" id="edit-lbl-sections-count">0</strong>
+                                        <span class="text-muted small">Total Sections</span>
+                                        <div class="fw-bold fs-6 text-primary" id="edit-lbl-sections-count">0</div>
                                     </div>
                                 </div>
 
@@ -764,14 +783,14 @@
                                 <div class="my-2" id="edit-breakdown-card" style="display: none;">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <span class="small fw-bold text-dark"><i class="bx bx-calculator me-1 text-primary"></i>Assigned Breakdown</span>
-                                        <small class="text-muted" style="font-size: 0.7rem;">(Hours & Units &times; Sec)</small>
+                                        <small class="text-muted" style="font-size: 0.7rem;">(Units &times; Sec = Subtotal)</small>
                                     </div>
-                                    <div class="border rounded bg-white p-1" id="edit-breakdown-list" style="max-height: 140px; overflow-y: auto;">
+                                    <div class="border rounded bg-white p-2" id="edit-breakdown-list" style="max-height: 140px; overflow-y: auto;">
                                         <!-- Populated dynamically via JS -->
                                     </div>
                                 </div>
 
-                                <div id="edit-feedback-alert" class="alert alert-info py-2 px-2 mb-0 small" style="font-size: 0.78rem;">
+                                <div id="edit-feedback-alert" class="alert alert-info py-2 px-3 mb-0 small" style="font-size: 0.8rem;">
                                     Adjust assigned courses or sections to update load.
                                 </div>
                             </div>
@@ -831,7 +850,21 @@
 <!-- Import Professor Load Modal -->
 <div class="modal fade" id="importLoadModal" tabindex="-1" aria-labelledby="importLoadModalLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow">
+        <div class="modal-content border-0 shadow position-relative">
+            <!-- Import Progress Overlay (shared across Preview & Confirm) -->
+            <div id="import-modal-overlay" class="import-modal-overlay d-none" aria-live="polite">
+                <div class="import-overlay-card">
+                    <div class="spinner-border text-primary mb-3" style="width: 2.75rem; height: 2.75rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-1" id="import-overlay-title">Reading and validating file...</h5>
+                    <p class="text-muted small mb-2" id="import-overlay-subtitle">Please wait while the server processes your request.</p>
+                    <div class="text-muted small" id="import-overlay-timer">
+                        <i class="bx bx-time-five me-1"></i>Elapsed: <span id="import-overlay-seconds" class="fw-semibold">0s</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="modal-header border-bottom py-3">
                 <div class="d-flex align-items-center gap-2">
                     <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
@@ -857,10 +890,10 @@
                                 <li><strong>Required Header Columns:</strong> <code>NAME</code> &nbsp;|&nbsp; <code>Course Code</code> &nbsp;|&nbsp; <code>Number of sections</code></li>
                                 <li><strong>Year Dividers:</strong> Merged cells (or Column A alone) such as <code>1st Year</code>, <code>2nd Year</code>, <code>3rd Year</code>, <code>4th Year</code> are recognized as section markers, never as professors.</li>
                                 <li><strong>Course Codes:</strong> Suffixes in parentheses are preserved (e.g. <code>IT-CAP01 (WST)</code>). Stray trailing typos will be auto-cleaned and flagged.</li>
-                                <li><strong>Workload Safety:</strong> Overloaded assignments exceeding professor ranking limits are flagged as errors and skipped. Existing manual loads not in the file remain completely untouched.</li>
+                                <li><strong>Workload Safety:</strong> Overloaded assignments exceeding professor maximum teaching hours ({{ max_teaching_hours }} hrs) are flagged as errors and skipped. Existing manual loads not in the file remain completely untouched.</li>
                             </ul>
                             <div class="d-flex align-items-center flex-wrap gap-3">
-                                <a href="/professor_load/import/template" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
+                                <a href="/professor_load/import/template" id="btn-download-sample-template" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
                                     <i class="bx bx-download"></i> Download Sample Template (.xlsx)
                                 </a>
                                 <span class="text-muted">Supported formats: .xlsx, .csv &bull; Max size: 5 MB</span>
@@ -913,7 +946,7 @@
                             <span class="visually-hidden">Loading...</span>
                         </div>
                         <h6 class="fw-bold mb-1" id="import-loading-title">Parsing & Validating Spreadsheet...</h6>
-                        <p class="text-muted small mb-0">Cross-referencing faculty catalog, course codes, and workload ranking limits</p>
+                        <p class="text-muted small mb-0">Cross-referencing faculty catalog, course codes, and maximum workload limits</p>
                     </div>
                 </div>
 
@@ -1078,6 +1111,7 @@
                     </div>
                     <h5 class="fw-bold text-dark mb-1">Import Completed Successfully</h5>
                     <p class="text-muted small mb-3" id="import-success-message">Assignments have been successfully applied to the database.</p>
+                    <div class="d-flex justify-content-center flex-wrap gap-2 mb-4" id="import-success-counts"></div>
                     <div class="d-flex justify-content-center gap-3">
                         <button type="button" class="btn btn-primary" id="btn-import-finish-reload">
                             <i class="bx bx-check me-1"></i> Done & Refresh Table
@@ -1139,9 +1173,8 @@ $(function(){
         last_name: {{ prof.last_name|tojson }},
         department: {{ prof.department|tojson if prof.department else '""'|tojson }},
         specialization: {{ prof.specialization|tojson if prof.specialization else '""'|tojson }},
-        academic_ranking_name: {{ (prof.academic_ranking_name or '')|tojson }},
-        min_units: {{ prof.min_units|tojson }}, max_units: {{ prof.max_units|tojson }},
-        min_hours: {{ prof.min_hours|tojson }}, max_hours: {{ prof.max_hours|tojson }}
+        min_units: {{ (prof.min_units or 0)|tojson }}, max_units: {{ (prof.max_units or 24)|tojson }},
+        min_hours: {{ (prof.min_hours or 0)|tojson }}, max_hours: {{ (prof.max_hours or 40)|tojson }}
     };
     {% endfor %}
 
@@ -1345,104 +1378,9 @@ $(function(){
     }
 
     // ── Workload Gauge ──────────────────────────────────────────────────────
-    var gaugeMode = 'units'; // 'units' | 'hours'
-    var gaugeCrossUnits = 0;  // units already committed in other programs
-    var gaugeCrossHours = 0;  // hours already committed in other programs
-    var ARC_LEN = 125.66;     // circumference of the 40-radius semicircle path
-
-    function computeGaugeState(value, min, max) {
-        // Guard against divide-by-zero / NaN / null max
-        var safeMax = (max && max > 0) ? max : null;
-        var pct = safeMax ? Math.min(value / safeMax, 1) : 0;
-        var zone = !safeMax ? 'neutral'
-                 : (value > safeMax) ? 'over'
-                 : (value < min)     ? 'under'
-                                     : 'within';
-        return { pct: pct, zone: zone, value: value, min: min, max: max };
-    }
-
-    function renderGauge(totalUnits, totalHours, profLimits) {
-        var $fill   = $('#gauge-fill');
-        var $valTxt = $('#gauge-value-txt');
-        var $limTxt = $('#gauge-limit-txt');
-        var $status = $('#gauge-status-txt');
-        var svgEl   = document.querySelector('.gauge-svg');
-
-        if (!profLimits) {
-            // No professor selected
-            $fill.attr({ 'stroke-dashoffset': ARC_LEN })
-                 .attr('class', 'gauge-fill neutral');
-            $valTxt.text('—');
-            $limTxt.text('');
-            $status.attr('class', 'gauge-status neutral').text('Select a professor');
-            if (svgEl) svgEl.setAttribute('aria-label', 'Workload gauge — select a professor');
-            return;
-        }
-
-        var hasRank = (profLimits.max_units && profLimits.max_units > 0) ||
-                      (profLimits.max_hours && profLimits.max_hours > 0);
-        if (!hasRank) {
-            $fill.attr({ 'stroke-dashoffset': ARC_LEN })
-                 .attr('class', 'gauge-fill neutral');
-            $valTxt.text('—');
-            $limTxt.text('');
-            $status.attr('class', 'gauge-status neutral').text('No rank assigned');
-            if (svgEl) svgEl.setAttribute('aria-label', 'Workload gauge — no rank assigned');
-            return;
-        }
-
-        var isUnits = (gaugeMode === 'units');
-        // True totals = current program selection + other programs
-        var trueUnits = totalUnits + gaugeCrossUnits;
-        var trueHours = totalHours + gaugeCrossHours;
-        var value = isUnits ? trueUnits : trueHours;
-        var min   = isUnits ? (Number(profLimits.min_units) || 0) : (Number(profLimits.min_hours) || 0);
-        var max   = isUnits ? (Number(profLimits.max_units) || 0) : (Number(profLimits.max_hours) || 0);
-        var label = isUnits ? 'units' : 'hrs';
-
-        var g = computeGaugeState(value, min, max);
-        var offset = ARC_LEN - (g.pct * ARC_LEN);
-
-        $fill.attr({ 'stroke-dashoffset': offset.toFixed(2) })
-             .attr('class', 'gauge-fill ' + g.zone);
-
-        var dispVal = (value % 1 === 0) ? value.toFixed(0) : value.toFixed(1);
-        $valTxt.text(dispVal + ' ' + label);
-
-        if (max > 0) {
-            var dispMax = (max % 1 === 0) ? max.toFixed(0) : max.toFixed(1);
-            var dispMin = (min % 1 === 0) ? min.toFixed(0) : min.toFixed(1);
-            $limTxt.text('min ' + dispMin + ' / max ' + dispMax);
-        } else {
-            $limTxt.text('');
-        }
-
-        var statusText = g.zone === 'over'   ? 'Overloaded'
-                       : g.zone === 'under'  ? 'Under minimum'
-                       : g.zone === 'within' ? 'Within limit'
-                       : '';
-        $status.attr('class', 'gauge-status ' + g.zone).text(statusText);
-
-        var ariaLabel = 'Workload gauge: ' + dispVal + ' ' + label +
-                        (max > 0 ? ', limit ' + (isUnits ? profLimits.min_units : profLimits.min_hours) + '–' + max : '') +
-                        ', ' + statusText;
-        if (svgEl) svgEl.setAttribute('aria-label', ariaLabel);
-    }
-
-    // Toggle buttons
-    $('#gauge-btn-units').on('click', function() {
-        gaugeMode = 'units';
-        $(this).addClass('active').attr('aria-pressed', 'true');
-        $('#gauge-btn-hours').removeClass('active').attr('aria-pressed', 'false');
-        updateAddLoadPanel();
-    });
-    $('#gauge-btn-hours').on('click', function() {
-        gaugeMode = 'hours';
-        $(this).addClass('active').attr('aria-pressed', 'true');
-        $('#gauge-btn-units').removeClass('active').attr('aria-pressed', 'false');
-        updateAddLoadPanel();
-    });
-    // ────────────────────────────────────────────────────────────────────────
+    // ── Teaching Load Cross-Program Offsets ──────────────────────────────────
+    var crossProgramUnits = 0; // units committed in other programs
+    var crossProgramHours = 0; // hours committed in other programs
 
     // Core Load Calculation Function
     function calculateLoad(selectedIds, sectionMap, profLimits) {
@@ -1487,12 +1425,6 @@ $(function(){
             });
         });
 
-        var resolvedMinUnits = profLimits ? (Number(profLimits.min_units) || 0) : 0;
-        var resolvedMaxUnits = profLimits ? (Number(profLimits.max_units) || 24) : 24;
-        var resolvedMinHours = profLimits ? (Number(profLimits.min_hours) || 0) : 0;
-        var resolvedMaxHours = profLimits ? (Number(profLimits.max_hours) || 40) : 40;
-
-        // Overload: exceeding either maximum is a hard limit
         return {
             totalHours: totalHours,
             totalUnits: totalUnits,
@@ -1525,18 +1457,22 @@ $(function(){
     function updateAddLoadPanel() {
         var result = calculateLoad(addSelectedIds, addSectionMap, currentProfLimits);
 
-        $('#lbl-total-hours').text(result.totalHours.toFixed(1));
-        $('#lbl-total-units').text(result.totalUnits.toFixed(1));
+        var trueHours = result.totalHours + crossProgramHours;
+        var trueUnits = result.totalUnits + crossProgramUnits;
 
         $('#lbl-selected-courses-count').text(result.courseCount);
         $('#lbl-selected-sections-count').text(result.sectionCount);
 
-        // Update gauge
-        renderGauge(result.totalUnits, result.totalHours, currentProfLimits);
-
+        var $statusBadge = $('#load-status-badge');
         var $alert = $('#load-feedback-alert');
         var $submitBtn = $('#btn-assign-courses');
         var $btnHint = $('#btn-assign-hint');
+
+        var $barHours = $('#bar-total-hours');
+        var $barUnits = $('#bar-total-units');
+
+        $barHours.removeClass('bg-warning bg-success bg-danger bg-secondary bg-primary');
+        $barUnits.removeClass('bg-warning bg-success bg-danger bg-secondary bg-primary');
 
         // Render dynamic course load breakdown list with interactive steppers and working remove
         renderBreakdownList($('#selected-courses-breakdown-list'), result.items, handleAddRemove, handleAddSectionChange);
@@ -1547,43 +1483,177 @@ $(function(){
             $('#selected-courses-breakdown-card').hide();
         }
 
+        // Cross-program captions
+        var $capHours = $('#caption-other-hours');
+        var $capUnits = $('#caption-other-units');
+        if (crossProgramHours > 0) {
+            var hStr = (crossProgramHours % 1 === 0) ? crossProgramHours : crossProgramHours.toFixed(1);
+            $capHours.show().text('includes ' + hStr + ' hrs from other programs');
+        } else {
+            $capHours.hide().text('');
+        }
+        if (crossProgramUnits > 0) {
+            var uStr = (crossProgramUnits % 1 === 0) ? crossProgramUnits : crossProgramUnits.toFixed(1);
+            $capUnits.show().text('includes ' + uStr + ' units from other programs');
+        } else {
+            $capUnits.hide().text('');
+        }
+
+        // Info alert at bottom: shown only while nothing is selected
+        if (!currentProfLimits && result.courseCount === 0) {
+            $alert.show();
+        } else {
+            $alert.hide();
+        }
+
+        // Case 1: No professor selected
         if (!currentProfLimits) {
-            $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-info-circle me-1"></i> Select a professor to assign courses.');
+            $statusBadge.attr('class', 'badge bg-secondary').text('Awaiting Selection');
+            $('#lbl-total-hours').text(result.totalHours.toFixed(1));
+            $('#lbl-max-hours').text('40.0');
+            $('#lbl-total-units').text(result.totalUnits.toFixed(1));
+            $('#lbl-max-units').text('24.0');
+            $('#lbl-min-units').text('0.0');
+            $('#lbl-hours-percent').text('0% of max');
+            $('#lbl-units-percent').text('0% of max');
+            $barHours.css('width', '0%').addClass('bg-secondary');
+            $barUnits.css('width', '0%').addClass('bg-secondary');
             $submitBtn.prop('disabled', true);
             $btnHint.text('Select a professor and at least one course');
             updateAddControlAvailability();
             return;
         }
 
+        var maxHours = Number(currentProfLimits.max_hours);
+        var minHours = Number(currentProfLimits.min_hours) || 0;
+        var maxUnits = Number(currentProfLimits.max_units);
+        var minUnits = Number(currentProfLimits.min_units) || 0;
+
+        var hasRank = (!isNaN(maxHours) && maxHours > 0) || (!isNaN(maxUnits) && maxUnits > 0);
+
+        // Case 2: Professor has no rank assigned
+        if (!hasRank) {
+            $statusBadge.attr('class', 'badge bg-secondary').text('No rank assigned');
+            $('#lbl-total-hours').text(trueHours.toFixed(1));
+            $('#lbl-max-hours').text('—');
+            $('#lbl-total-units').text(trueUnits.toFixed(1));
+            $('#lbl-max-units').text('—');
+            $('#lbl-min-units').text('—');
+            $('#lbl-hours-percent').text('0% of max');
+            $('#lbl-units-percent').text('0% of max');
+            $barHours.css('width', '0%').addClass('bg-secondary');
+            $barUnits.css('width', '0%').addClass('bg-secondary');
+            $submitBtn.prop('disabled', result.courseCount === 0);
+            $btnHint.text(result.courseCount === 0 ? 'Select at least one course' : 'Ready to assign');
+            updateAddControlAvailability();
+            return;
+        }
+
+        // Professor has ranking
+        $('#lbl-total-hours').text(trueHours.toFixed(1));
+        $('#lbl-max-hours').text(maxHours > 0 ? maxHours.toFixed(1) : '—');
+        $('#lbl-total-units').text(trueUnits.toFixed(1));
+        $('#lbl-max-units').text(maxUnits > 0 ? maxUnits.toFixed(1) : '—');
+        $('#lbl-min-units').text(minUnits.toFixed(1));
+
+        var hoursPct = maxHours > 0 ? Math.round((trueHours / maxHours) * 100) : 0;
+        var unitsPct = maxUnits > 0 ? Math.round((trueUnits / maxUnits) * 100) : 0;
+
+        $('#lbl-hours-percent').text(hoursPct + '% of max');
+        $('#lbl-units-percent').text(unitsPct + '% of max');
+
+        var hoursBarFill = maxHours > 0 ? Math.min(100, Math.max(0, (trueHours / maxHours) * 100)) : 0;
+        var unitsBarFill = maxUnits > 0 ? Math.min(100, Math.max(0, (trueUnits / maxUnits) * 100)) : 0;
+
+        $barHours.css('width', hoursBarFill + '%');
+        $barUnits.css('width', unitsBarFill + '%');
+
+        // Bar colors: amber under minimum, green within range, red above max
+        if (maxHours > 0 && trueHours > maxHours) {
+            $barHours.addClass('bg-danger');
+        } else if (minHours > 0 && trueHours < minHours) {
+            $barHours.addClass('bg-warning');
+        } else {
+            $barHours.addClass('bg-success');
+        }
+
+        if (maxUnits > 0 && trueUnits > maxUnits) {
+            $barUnits.addClass('bg-danger');
+        } else if (minUnits > 0 && trueUnits < minUnits) {
+            $barUnits.addClass('bg-warning');
+        } else {
+            $barUnits.addClass('bg-success');
+        }
+
+        // Pill text: "Awaiting Selection" when no course is selected
         if (result.courseCount === 0) {
-            $alert.attr('class', 'alert alert-info py-2 px-3 mt-auto mb-0 small')
-                  .html('<i class="bx bx-info-circle me-1"></i> Check courses and set sections to build the professor\'s teaching load.');
+            $statusBadge.attr('class', 'badge bg-secondary').text('Awaiting Selection');
             $submitBtn.prop('disabled', true);
             $btnHint.text('Select at least one course');
             updateAddControlAvailability();
             return;
         }
 
-        $alert.attr('class', 'alert alert-success py-2 px-3 mt-auto mb-0 small')
-              .html('<i class="bx bx-check-circle me-1"></i> <strong>Load calculated:</strong> ' + result.totalHours.toFixed(1) + ' hrs/wk &bull; ' + result.totalUnits.toFixed(1) + ' units.');
+        // Courses are selected: Under Minimum (amber), Balanced (green), or Overloaded (red)
+        var isOver = (maxHours > 0 && trueHours > maxHours) || (maxUnits > 0 && trueUnits > maxUnits);
+        var isUnder = (minHours > 0 && trueHours < minHours) || (minUnits > 0 && trueUnits < minUnits);
+
+        if (isOver) {
+            $statusBadge.attr('class', 'badge bg-danger').text('Overloaded');
+        } else if (isUnder) {
+            $statusBadge.attr('class', 'badge bg-warning text-dark').text('Under Minimum');
+        } else {
+            $statusBadge.attr('class', 'badge bg-success').text('Balanced');
+        }
+
         $submitBtn.prop('disabled', false);
         $btnHint.text('Ready to assign');
         updateAddControlAvailability();
     }
 
     // Update Edit Modal Load Summary Panel
+    var editCrossUnits = 0;
+    var editCrossHours = 0;
+
     function updateEditLoadPanel() {
         var result = calculateLoad(editSelectedIds, editSectionMap, editProfLimits);
 
-        $('#edit-lbl-hours').text(result.totalHours.toFixed(1));
-        $('#edit-lbl-units').text(result.totalUnits.toFixed(1));
+        var trueHours = result.totalHours + editCrossHours;
+        var trueUnits = result.totalUnits + editCrossUnits;
+
+        $('#edit-lbl-total-hours').text(trueHours.toFixed(1));
+        $('#edit-lbl-total-units').text(trueUnits.toFixed(1));
+        $('#edit-lbl-hours').text(trueHours.toFixed(1));
+        $('#edit-lbl-units').text(trueUnits.toFixed(1));
 
         $('#edit-lbl-courses-count').text(result.courseCount);
         $('#edit-lbl-sections-count').text(result.sectionCount);
 
         var $alert = $('#edit-feedback-alert');
         var $submitBtn = $('#btn-edit-save');
+        var $statusBadge = $('#edit-load-status-badge');
+        var $barHours = $('#edit-bar-total-hours');
+        var $barUnits = $('#edit-bar-total-units');
+        var $capHours = $('#edit-caption-other-hours');
+        var $capUnits = $('#edit-caption-other-units');
+
+        $barHours.removeClass('bg-secondary bg-success bg-warning bg-danger');
+        $barUnits.removeClass('bg-secondary bg-success bg-warning bg-danger');
+
+        // Other-program captions
+        if (editCrossHours > 0) {
+            var hStr = (editCrossHours % 1 === 0) ? editCrossHours : editCrossHours.toFixed(1);
+            $capHours.show().text('includes ' + hStr + ' hrs from other programs');
+        } else {
+            $capHours.hide().text('');
+        }
+
+        if (editCrossUnits > 0) {
+            var uStr = (editCrossUnits % 1 === 0) ? editCrossUnits : editCrossUnits.toFixed(1);
+            $capUnits.show().text('includes ' + uStr + ' units from other programs');
+        } else {
+            $capUnits.hide().text('');
+        }
 
         // Render dynamic course load breakdown list in modal with interactive steppers and working remove
         renderBreakdownList($('#edit-breakdown-list'), result.items, handleEditRemove, handleEditSectionChange);
@@ -1594,16 +1664,93 @@ $(function(){
             $('#edit-breakdown-card').hide();
         }
 
-        if (result.courseCount === 0) {
-            $alert.attr('class', 'alert alert-info py-2 px-2 mb-0 small')
-                  .html('<i class="bx bx-info-circle me-1"></i> Select courses to assign to this professor.');
-            $submitBtn.prop('disabled', false);
+        if (!editProfLimits) {
+            $statusBadge.attr('class', 'badge bg-secondary').text('Awaiting Selection');
+            $('#edit-lbl-max-hours').text('40.0');
+            $('#edit-lbl-max-units').text('24.0');
+            $('#edit-lbl-min-units').text('0.0');
+            $('#edit-lbl-hours-percent').text('0% of max');
+            $('#edit-lbl-units-percent').text('0% of max');
+            $barHours.css('width', '0%').addClass('bg-secondary');
+            $barUnits.css('width', '0%').addClass('bg-secondary');
             return;
         }
 
-        $alert.attr('class', 'alert alert-success py-2 px-2 mb-0 small')
-              .html('<i class="bx bx-check-circle me-1"></i> Workload: ' + result.totalHours.toFixed(1) + ' hrs &bull; ' + result.totalUnits.toFixed(1) + ' units.');
-        $submitBtn.prop('disabled', false);
+        var maxHours = Number(editProfLimits.max_hours);
+        var minHours = Number(editProfLimits.min_hours) || 0;
+        var maxUnits = Number(editProfLimits.max_units);
+        var minUnits = Number(editProfLimits.min_units) || 0;
+
+        var hasRank = (!isNaN(maxHours) && maxHours > 0) || (!isNaN(maxUnits) && maxUnits > 0);
+
+        if (!hasRank) {
+            $statusBadge.attr('class', 'badge bg-secondary').text('No rank assigned');
+            $('#edit-lbl-max-hours').text('—');
+            $('#edit-lbl-max-units').text('—');
+            $('#edit-lbl-min-units').text('—');
+            $('#edit-lbl-hours-percent').text('0% of max');
+            $('#edit-lbl-units-percent').text('0% of max');
+            $barHours.css('width', '0%').addClass('bg-secondary');
+            $barUnits.css('width', '0%').addClass('bg-secondary');
+            if (result.courseCount === 0) {
+                $alert.attr('class', 'alert alert-info py-2 px-3 mb-0 small').html('<i class="bx bx-info-circle me-1"></i> Select courses to assign to this professor.');
+            } else {
+                $alert.attr('class', 'alert alert-success py-2 px-3 mb-0 small').html('<i class="bx bx-check-circle me-1"></i> Workload: ' + trueHours.toFixed(1) + ' hrs &bull; ' + trueUnits.toFixed(1) + ' units.');
+            }
+            return;
+        }
+
+        $('#edit-lbl-max-hours').text(maxHours > 0 ? maxHours.toFixed(1) : '—');
+        $('#edit-lbl-max-units').text(maxUnits > 0 ? maxUnits.toFixed(1) : '—');
+        $('#edit-lbl-min-units').text(minUnits.toFixed(1));
+
+        var hoursPct = maxHours > 0 ? Math.round((trueHours / maxHours) * 100) : 0;
+        var unitsPct = maxUnits > 0 ? Math.round((trueUnits / maxUnits) * 100) : 0;
+
+        $('#edit-lbl-hours-percent').text(hoursPct + '% of max');
+        $('#edit-lbl-units-percent').text(unitsPct + '% of max');
+
+        var hoursBarFill = maxHours > 0 ? Math.min(100, Math.max(0, (trueHours / maxHours) * 100)) : 0;
+        var unitsBarFill = maxUnits > 0 ? Math.min(100, Math.max(0, (trueUnits / maxUnits) * 100)) : 0;
+
+        $barHours.css('width', hoursBarFill + '%');
+        $barUnits.css('width', unitsBarFill + '%');
+
+        if (maxHours > 0 && trueHours > maxHours) {
+            $barHours.addClass('bg-danger');
+        } else if (minHours > 0 && trueHours < minHours) {
+            $barHours.addClass('bg-warning');
+        } else {
+            $barHours.addClass('bg-success');
+        }
+
+        if (maxUnits > 0 && trueUnits > maxUnits) {
+            $barUnits.addClass('bg-danger');
+        } else if (minUnits > 0 && trueUnits < minUnits) {
+            $barUnits.addClass('bg-warning');
+        } else {
+            $barUnits.addClass('bg-success');
+        }
+
+        if (result.courseCount === 0) {
+            $statusBadge.attr('class', 'badge bg-secondary').text('Awaiting Selection');
+            $alert.attr('class', 'alert alert-info py-2 px-3 mb-0 small').html('<i class="bx bx-info-circle me-1"></i> Select courses to assign to this professor.');
+            return;
+        }
+
+        var isOver = (maxHours > 0 && trueHours > maxHours) || (maxUnits > 0 && trueUnits > maxUnits);
+        var isUnder = (minHours > 0 && trueHours < minHours) || (minUnits > 0 && trueUnits < minUnits);
+
+        if (isOver) {
+            $statusBadge.attr('class', 'badge bg-danger').text('Overloaded');
+            $alert.attr('class', 'alert alert-danger py-2 px-3 mb-0 small').html('<i class="bx bx-error me-1"></i> Workload exceeds recommended limits.');
+        } else if (isUnder) {
+            $statusBadge.attr('class', 'badge bg-warning text-dark').text('Under Minimum');
+            $alert.attr('class', 'alert alert-warning py-2 px-3 mb-0 small').html('<i class="bx bx-info-circle me-1"></i> Workload is below target minimum units.');
+        } else {
+            $statusBadge.attr('class', 'badge bg-success').text('Balanced');
+            $alert.attr('class', 'alert alert-success py-2 px-3 mb-0 small').html('<i class="bx bx-check-circle me-1"></i> Workload is balanced within targets.');
+        }
     }
 
     // Render Course List for container (Add or Edit)
@@ -1973,11 +2120,11 @@ $(function(){
         }
         if (!profId) {
             currentProfLimits = null;
-            gaugeCrossUnits = 0;
-            gaugeCrossHours = 0;
-            renderGauge(0, 0, null);
+            crossProgramUnits = 0;
+            crossProgramHours = 0;
             $('#prof-info-banner').addClass('d-none');
             applyProfessorAssignments([]);
+            updateAddLoadPanel();
             return;
         }
         var selectedOption = $(this).find('option:selected');
@@ -1985,7 +2132,6 @@ $(function(){
             prof_id: profId,
             department: selectedOption.data('dept') || '',
             specialization: selectedOption.data('specialization') || '',
-            academic_ranking_name: '',
             min_units: selectedOption.data('min-units'),
             max_units: selectedOption.data('max-units'),
             min_hours: selectedOption.data('min-hours'),
@@ -2004,6 +2150,7 @@ $(function(){
 
         // Update Info Banner
         $('#prof-banner-dept').text(prof.department || 'General');
+        $('#prof-banner-spec').text(prof.specialization || 'General');
         $('#prof-info-banner').removeClass('d-none');
 
         // Immediately populate preloaded assignments from page load if available
@@ -2044,9 +2191,9 @@ $(function(){
                 if (!Array.isArray(data.assignments)) {
                     throw new Error('Professor load response is missing the assignments array.');
                 }
-                // Store cross-program load for the gauge
-                gaugeCrossUnits = Number(data.other_units) || 0;
-                gaugeCrossHours = Number(data.other_hours) || 0;
+                // Store cross-program load for calculation
+                crossProgramUnits = Number(data.other_units) || 0;
+                crossProgramHours = Number(data.other_hours) || 0;
                 var assignments = data.assignments.length > 0 || !hasPreloaded
                     ? data.assignments
                     : preloaded;
@@ -2141,9 +2288,8 @@ $(function(){
         $('#prof-search-input').val('');
         $('#professor-option-list .professor-option').show();
         currentProfLimits = null;
-        gaugeCrossUnits = 0;
-        gaugeCrossHours = 0;
-        renderGauge(0, 0, null);
+        crossProgramUnits = 0;
+        crossProgramHours = 0;
         $('#prof-info-banner').addClass('d-none');
         addSelectedIds.clear();
         addSectionMap = {};
@@ -2381,6 +2527,25 @@ $(function(){
 
         renderCourseList(editCourseList, allCoursesList, editSelectedIds, editSectionMap, 'edit_sections_', 'edit_course_');
         syncHiddenInputs(editHiddenCourseInputs, editSelectedIds, editSectionMap, 'edit_sections_');
+
+        editCrossUnits = 0;
+        editCrossHours = 0;
+        if (profId) {
+            $.ajax({
+                url: '/api/professor_load/' + profId,
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                dataType: 'json',
+                success: function(data) {
+                    if (data) {
+                        editCrossUnits = Number(data.other_units) || 0;
+                        editCrossHours = Number(data.other_hours) || 0;
+                        updateEditLoadPanel();
+                    }
+                }
+            });
+        }
+
         updateEditLoadPanel();
         updateEditControlAvailability();
         applyCourseFilter('', editCourseList);
@@ -2623,12 +2788,27 @@ $(function(){
     $profCourseFilter.on('change', applyAssignmentsFilter);
     $(document).on('click', '.btn-clear-filters', clearAssignmentsFilters);
 
-    // Initial state setup
-    updateAddLoadPanel();
-    applyCourseFilter('', addCourseList);
+    // Initial state setup: scan DOM checkboxes in case of browser state restoration / prefill
+    $(addCourseList).find('.course-card-item').each(function() {
+        var $card = $(this);
+        var cid = String($card.data('cid'));
+        var $chk = $card.find('.course-check');
+        if ($chk.is(':checked')) {
+            addSelectedIds.add(cid);
+            var secVal = parseInt($card.find('.section-input').val(), 10) || 1;
+            addSectionMap[cid] = secVal;
+            updateAssignedBadge($card, true);
+            updateCourseSubtotalCard($card, cid, secVal);
+        }
+    });
+    syncHiddenInputs(hiddenCourseInputs, addSelectedIds, addSectionMap, 'sections_');
+
     if ($('#prof_select').val()) {
         $('#prof_select').trigger('change');
+    } else {
+        updateAddLoadPanel();
     }
+    applyCourseFilter('', addCourseList);
 
     // Restore saved filter state on page load
     var savedFilterState = null;
@@ -2680,7 +2860,53 @@ $(function(){
     var $previewCoursesTbody = $('#preview-courses-tbody');
     var $previewWorkloadsTbody = $('#preview-workloads-tbody');
 
+    var importTimerInterval = null;
+    var importStartTime = null;
+    var isImportPreviewing = false;
+    var isImportConfirming = false;
+
+    function showImportOverlay(title, subtitle) {
+        var $overlay = $('#import-modal-overlay');
+        $('#import-overlay-title').text(title || 'Processing...');
+        $('#import-overlay-subtitle').text(subtitle || 'Please wait while the server processes your request.');
+        $('#import-overlay-seconds').text('0s');
+        importStartTime = Date.now();
+        if (importTimerInterval) clearInterval(importTimerInterval);
+        importTimerInterval = setInterval(function() {
+            var elapsedSec = Math.floor((Date.now() - importStartTime) / 1000);
+            $('#import-overlay-seconds').text(elapsedSec + 's');
+        }, 1000);
+        $overlay.removeClass('d-none');
+
+        // Disable modal controls to prevent breaking flow mid-import
+        $('#btn-close-import-modal').prop('disabled', true);
+        $('#btn-import-cancel').prop('disabled', true);
+        $('#btn-remove-selected-file').prop('disabled', true);
+        $('#btn-browse-file').prop('disabled', true);
+        $('#import-file-input').prop('disabled', true);
+        $('#btn-import-reupload').prop('disabled', true);
+    }
+
+    function hideImportOverlay() {
+        var $overlay = $('#import-modal-overlay');
+        $overlay.addClass('d-none');
+        if (importTimerInterval) {
+            clearInterval(importTimerInterval);
+            importTimerInterval = null;
+        }
+        // Re-enable modal controls
+        $('#btn-close-import-modal').prop('disabled', false);
+        $('#btn-import-cancel').prop('disabled', false);
+        $('#btn-remove-selected-file').prop('disabled', false);
+        $('#btn-browse-file').prop('disabled', false);
+        $('#import-file-input').prop('disabled', false);
+        $('#btn-import-reupload').prop('disabled', false);
+    }
+
     function resetImportModal() {
+        hideImportOverlay();
+        isImportPreviewing = false;
+        isImportConfirming = false;
         currentImportFile = null;
         currentImportToken = null;
         currentImportData = null;
@@ -2692,10 +2918,16 @@ $(function(){
         $uploadView.removeClass('d-none');
         $previewView.addClass('d-none');
         $successView.addClass('d-none');
+        if ($btnPreviewAction.length && typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading($btnPreviewAction[0], false);
+        }
+        if ($btnConfirmImport.length && typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading($btnConfirmImport[0], false);
+        }
         $btnPreviewAction.removeClass('d-none').prop('disabled', true).html('<i class="bx bx-show me-1"></i> Preview Import');
         $btnConfirmImport.addClass('d-none').prop('disabled', false).html('<i class="bx bx-check-double me-1"></i> Confirm & Save Import');
         $btnDownloadErrors.addClass('d-none');
-        $btnCancelImport.removeClass('d-none').text('Cancel');
+        $btnCancelImport.removeClass('d-none').text('Cancel').prop('disabled', false);
         $previewRowSearch.val('');
         $previewRowFilterStatus.val('');
         $previewRowsTbody.empty();
@@ -2710,10 +2942,12 @@ $(function(){
     // Browse click
     $btnBrowse.on('click', function(e) {
         e.stopPropagation();
+        if (isImportPreviewing || isImportConfirming) return;
         document.getElementById('import-file-input').click();
     });
 
     $dropzone.on('click', function() {
+        if (isImportPreviewing || isImportConfirming) return;
         document.getElementById('import-file-input').click();
     });
 
@@ -2721,6 +2955,7 @@ $(function(){
     $dropzone.on('dragover dragenter', function(e) {
         e.preventDefault();
         e.stopPropagation();
+        if (isImportPreviewing || isImportConfirming) return;
         $(this).addClass('dragover');
     });
 
@@ -2733,6 +2968,7 @@ $(function(){
     $dropzone.on('drop', function(e) {
         e.preventDefault();
         e.stopPropagation();
+        if (isImportPreviewing || isImportConfirming) return;
         $(this).removeClass('dragover');
         var files = e.originalEvent.dataTransfer.files;
         if (files && files.length > 0) {
@@ -2741,6 +2977,7 @@ $(function(){
     });
 
     $fileInput.on('change', function() {
+        if (isImportPreviewing || isImportConfirming) return;
         if (this.files && this.files.length > 0) {
             handleFileSelection(this.files[0]);
         }
@@ -2776,6 +3013,7 @@ $(function(){
 
     $btnRemoveFile.on('click', function(e) {
         e.stopPropagation();
+        if (isImportPreviewing || isImportConfirming) return;
         currentImportFile = null;
         $fileInput.val('');
         $fileSelectedBox.addClass('d-none');
@@ -2785,6 +3023,7 @@ $(function(){
     });
 
     $btnReupload.on('click', function() {
+        if (isImportPreviewing || isImportConfirming) return;
         resetImportModal();
     });
 
@@ -2800,20 +3039,27 @@ $(function(){
 
     // Trigger Preview
     $btnPreviewAction.on('click', function() {
-        if (!currentImportFile) return;
+        if (!currentImportFile || isImportPreviewing) return;
+        isImportPreviewing = true;
 
-        $btnPreviewAction.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Uploading...');
-        $dropzone.addClass('d-none');
-        $fileSelectedBox.addClass('d-none');
-        $loadingState.removeClass('d-none');
+        if (typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading(this, true, 'Validating...');
+        } else {
+            $btnPreviewAction.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Validating...');
+        }
+        showImportOverlay('Reading and validating file...', 'Parsing rows, verifying faculty codes and checking workload limits...');
         $uploadError.addClass('d-none');
 
         var formData = new FormData();
         formData.append('file', currentImportFile);
 
+        var controller = window.AbortController ? new AbortController() : null;
+        var timeoutId = controller ? setTimeout(function() { controller.abort(); }, 60000) : null;
+
         fetch('/professor_load/import/preview', {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller ? controller.signal : undefined
         })
         .then(function(res) {
             var contentType = res.headers.get('content-type') || '';
@@ -2836,14 +3082,13 @@ $(function(){
             }
         })
         .then(function(result) {
-            $loadingState.addClass('d-none');
             var isSuccess = result.ok && (result.data.ok === true || result.data.success === true);
             if (!isSuccess) {
                 var err = (result.data && (result.data.error || result.data.message)) ? (result.data.error || result.data.message) : ('Server error (' + result.status + '). Check the server log.');
                 $uploadErrorMsg.text(err);
                 $uploadError.removeClass('d-none');
                 $fileSelectedBox.removeClass('d-none');
-                $btnPreviewAction.prop('disabled', false).html('<i class="bx bx-show me-1"></i> Preview Import');
+                $dropzone.addClass('d-none');
                 return;
             }
 
@@ -2853,11 +3098,21 @@ $(function(){
             renderPreviewData(result.data);
         })
         .catch(function(err) {
-            $loadingState.addClass('d-none');
-            $uploadErrorMsg.text(err.message || 'Could not communicate with the server.');
+            var msg = err.name === 'AbortError' ? 'Request timed out after 60 seconds.' : (err.message || 'Could not communicate with the server.');
+            $uploadErrorMsg.text(msg);
             $uploadError.removeClass('d-none');
             $fileSelectedBox.removeClass('d-none');
-            $btnPreviewAction.prop('disabled', false).html('<i class="bx bx-show me-1"></i> Preview Import');
+            $dropzone.addClass('d-none');
+        })
+        .finally(function() {
+            if (timeoutId) clearTimeout(timeoutId);
+            isImportPreviewing = false;
+            hideImportOverlay();
+            if (typeof window.setButtonLoading === 'function') {
+                window.setButtonLoading($btnPreviewAction[0], false);
+            } else {
+                $btnPreviewAction.prop('disabled', false).html('<i class="bx bx-show me-1"></i> Preview Import');
+            }
         });
     });
 
@@ -3018,7 +3273,12 @@ $(function(){
     // Download Error Report
     $btnDownloadErrors.on('click', function() {
         if (!currentImportToken) return;
-        $btnDownloadErrors.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Generating...');
+        var btn = this;
+        if (typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading(btn, true, 'Generating...');
+        } else {
+            $btnDownloadErrors.prop('disabled', true);
+        }
 
         fetch('/professor_load/import/error-report', {
             method: 'POST',
@@ -3030,7 +3290,6 @@ $(function(){
             return res.blob();
         })
         .then(function(blob) {
-            $btnDownloadErrors.prop('disabled', false).html('<i class="bx bx-download me-1"></i> Download Error Report (.xlsx)');
             var url = window.URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
@@ -3041,27 +3300,78 @@ $(function(){
             window.URL.revokeObjectURL(url);
         })
         .catch(function(err) {
-            $btnDownloadErrors.prop('disabled', false).html('<i class="bx bx-download me-1"></i> Download Error Report (.xlsx)');
             if (typeof window.showToast === 'function') {
                 window.showToast(err.message || 'Error downloading report.', 'error');
             } else {
                 alert(err.message || 'Error downloading report.');
+            }
+        })
+        .finally(function() {
+            if (typeof window.setButtonLoading === 'function') {
+                window.setButtonLoading(btn, false);
+            } else {
+                $btnDownloadErrors.prop('disabled', false);
+            }
+        });
+    });
+
+    // Download Sample Template
+    $('#btn-download-sample-template').on('click', function(e) {
+        e.preventDefault();
+        var btn = this;
+        if (typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading(btn, true, 'Downloading...');
+        }
+
+        fetch('/professor_load/import/template')
+        .then(function(res) {
+            if (!res.ok) throw new Error('Failed to download template.');
+            return res.blob();
+        })
+        .then(function(blob) {
+            var url = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'teaching_load_import_template.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        })
+        .catch(function(err) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(err.message || 'Error downloading template.', 'error');
+            } else {
+                alert(err.message || 'Error downloading template.');
+            }
+        })
+        .finally(function() {
+            if (typeof window.setButtonLoading === 'function') {
+                window.setButtonLoading(btn, false);
             }
         });
     });
 
     // Confirm Import Action
     $btnConfirmImport.on('click', function() {
-        if (!currentImportToken) return;
+        if (!currentImportToken || isImportConfirming) return;
+        isImportConfirming = true;
 
-        $btnConfirmImport.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Saving to Database...');
-        $btnCancelImport.prop('disabled', true);
-        $btnDownloadErrors.prop('disabled', true);
+        if (typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading(this, true, 'Importing...');
+        } else {
+            $btnConfirmImport.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Importing...');
+        }
+        showImportOverlay('Importing professor loads...', 'Writing assignments to database and updating workloads...');
+
+        var controller = window.AbortController ? new AbortController() : null;
+        var timeoutId = controller ? setTimeout(function() { controller.abort(); }, 90000) : null;
 
         fetch('/professor_load/import/confirm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ token: currentImportToken })
+            body: new URLSearchParams({ token: currentImportToken }),
+            signal: controller ? controller.signal : undefined
         })
         .then(function(res) {
             var contentType = res.headers.get('content-type') || '';
@@ -3087,10 +3397,11 @@ $(function(){
             var isSuccess = result.ok && (result.data.ok === true || result.data.success === true);
             if (!isSuccess) {
                 var err = (result.data && (result.data.error || result.data.message)) ? (result.data.error || result.data.message) : ('Import failed (status ' + result.status + ').');
-                alert('Import failed: ' + err);
-                $btnConfirmImport.prop('disabled', false).html('<i class="bx bx-check-double me-1"></i> Try Again');
-                $btnCancelImport.prop('disabled', false);
-                $btnDownloadErrors.prop('disabled', false);
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Import failed: ' + err, 'error');
+                } else {
+                    alert('Import failed: ' + err);
+                }
                 return;
             }
 
@@ -3102,6 +3413,11 @@ $(function(){
             $btnDownloadErrors.addClass('d-none');
 
             $('#import-success-message').text(data.message || 'Assignments have been saved successfully.');
+            $('#import-success-counts').html(
+                '<span class="badge bg-success-subtle text-success border px-3 py-2 fs-6"><i class="bx bx-plus-circle me-1"></i>' + (data.new_count || 0) + ' Created</span>' +
+                '<span class="badge bg-primary-subtle text-primary border px-3 py-2 fs-6"><i class="bx bx-refresh me-1"></i>' + (data.updated_count || 0) + ' Updated</span>' +
+                '<span class="badge bg-secondary-subtle text-secondary border px-3 py-2 fs-6"><i class="bx bx-skip-next-circle me-1"></i>' + (data.skipped_count || 0) + ' Skipped</span>'
+            );
             $successView.removeClass('d-none');
 
             if (typeof window.showToast === 'function') {
@@ -3109,11 +3425,41 @@ $(function(){
             }
         })
         .catch(function(err) {
-            alert('Error during save: ' + (err.message || 'Please check your connection.'));
-            $btnConfirmImport.prop('disabled', false).html('<i class="bx bx-check-double me-1"></i> Confirm & Save Import');
-            $btnCancelImport.prop('disabled', false);
-            $btnDownloadErrors.prop('disabled', false);
+            var msg = err.name === 'AbortError' ? 'Save timed out after 90 seconds.' : (err.message || 'Please check your connection.');
+            if (typeof window.showToast === 'function') {
+                window.showToast('Error during save: ' + msg, 'error');
+            } else {
+                alert('Error during save: ' + msg);
+            }
+        })
+        .finally(function() {
+            if (timeoutId) clearTimeout(timeoutId);
+            isImportConfirming = false;
+            hideImportOverlay();
+            if (typeof window.setButtonLoading === 'function') {
+                window.setButtonLoading($btnConfirmImport[0], false);
+            } else {
+                $btnConfirmImport.prop('disabled', false).html('<i class="bx bx-check-double me-1"></i> Confirm & Save Import');
+            }
         });
+    });
+
+    // bfcache restore handler
+    window.addEventListener('pageshow', function() {
+        hideImportOverlay();
+        if ($btnPreviewAction.length && typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading($btnPreviewAction[0], false);
+        }
+        if ($btnConfirmImport.length && typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading($btnConfirmImport[0], false);
+        }
+        var sampleBtn = document.getElementById('btn-download-sample-template');
+        if (sampleBtn && typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading(sampleBtn, false);
+        }
+        if ($btnDownloadErrors.length && typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading($btnDownloadErrors[0], false);
+        }
     });
 
     // Reload page on Finish

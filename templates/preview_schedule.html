@@ -424,8 +424,11 @@ $(function(){
             return;
         }
 
-        savePreviewEntryBtn.disabled = true;
-        savePreviewEntryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+        if (typeof window.setButtonLoading === 'function') {
+            window.setButtonLoading(savePreviewEntryBtn, true, 'Saving...');
+        } else {
+            savePreviewEntryBtn.disabled = true;
+        }
 
         var payload = {
             id: editEntryId.value,
@@ -493,8 +496,12 @@ $(function(){
             showToast(err.message || 'Unable to save changes.', 'error');
         })
         .finally(function(){
-            savePreviewEntryBtn.disabled = false;
-            savePreviewEntryBtn.innerHTML = 'Save';
+            if (typeof window.setButtonLoading === 'function') {
+                window.setButtonLoading(savePreviewEntryBtn, false);
+            } else {
+                savePreviewEntryBtn.disabled = false;
+                savePreviewEntryBtn.innerHTML = 'Save';
+            }
         });
     });
 });

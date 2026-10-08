@@ -37,6 +37,9 @@
         {% if can_edit_schedule and entries %}
         <a href="{{ url_for('delete_section_schedule', section_name=section.section or section.section_name, semester=section.semester, major=section.major) }}"
             class="btn btn-danger btn-sm stop-prop"
+            data-action="delete"
+            data-method="POST"
+            data-title="Delete Section Schedule"
             data-confirm="Are you sure you want to delete the entire schedule for Section {{ section.section_name or section.section }}?">
             <i class="bx bx-trash"></i> Delete Section Schedule
         </a>
@@ -527,9 +530,6 @@
 
         if (saveEntryBtn) {
             saveEntryBtn.addEventListener('click', function () {
-                saveEntryBtn.disabled = true;
-                saveEntryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-
                 var payload = {
                     professor_load_id: editEntryProfessorLoad.value ? parseInt(editEntryProfessorLoad.value, 10) : null,
                     room_id: editEntryRoomSelect.value ? parseInt(editEntryRoomSelect.value, 10) : null,
@@ -539,14 +539,18 @@
 
                 var clientConflict = findClientRoomConflict(editEntryId.value, payload.room_id, payload.timeslot);
                 if (clientConflict) {
-                    saveEntryBtn.disabled = false;
-                    saveEntryBtn.innerHTML = 'Save Changes';
                     showToast(
                         'Room conflict: ' + (clientConflict.data('room') || 'The selected room') +
                         ' is already booked by Section ' + (clientConflict.data('section') || 'another section') + '.',
                         'error'
                     );
                     return;
+                }
+
+                if (typeof window.setButtonLoading === 'function') {
+                    window.setButtonLoading(saveEntryBtn, true, 'Saving...');
+                } else {
+                    saveEntryBtn.disabled = true;
                 }
 
                 fetch('/edit_schedule_entry/' + encodeURIComponent(editEntryId.value), {
@@ -571,8 +575,11 @@
                         showToast(err.message || 'Something went wrong. Please try again.', 'error');
                     })
                     .finally(function () {
-                        saveEntryBtn.disabled = false;
-                        saveEntryBtn.innerHTML = 'Save Changes';
+                        if (typeof window.setButtonLoading === 'function') {
+                            window.setButtonLoading(saveEntryBtn, false);
+                        } else {
+                            saveEntryBtn.disabled = false;
+                        }
                     });
             });
         }

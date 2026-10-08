@@ -87,7 +87,7 @@
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{room.room_id}}" data-name="{{room.room_name}}" data-room_type="{{room.room_type}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
-                        <a href="/delete_room/{{room.room_id}}" class="btn btn-danger btn-sm" data-confirm="Are you sure you want to delete this room?">
+                        <a href="/delete_room/{{room.room_id}}" class="btn btn-danger btn-sm" data-action="delete" data-title="Delete Room" data-confirm="Are you sure you want to delete this room?">
                             <i class="bx bx-trash"></i> Delete
                         </a>
                     </td>

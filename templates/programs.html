@@ -94,12 +94,15 @@
                                         title="Rename Program">
                                     <i class="bx bx-edit-alt"></i>
                                 </button>
-                                <form action="/delete_program/{{ p.id }}" method="POST" class="d-inline m-0"
-                                      onsubmit="return confirm('Are you sure you want to delete program \'{{ p.program_name }}\'? This action cannot be undone.');">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete Program">
-                                        <i class="bx bx-trash"></i>
-                                    </button>
-                                </form>
+                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                        data-action="delete"
+                                        data-url="/delete_program/{{ p.id }}"
+                                        data-method="POST"
+                                        data-confirm="Are you sure you want to delete program '{{ p.program_name }}'? This action cannot be undone."
+                                        data-title="Delete Program"
+                                        title="Delete Program">
+                                    <i class="bx bx-trash"></i>
+                                </button>
                             </div>
                             {% else %}
                             <span class="text-muted small">Read-only</span>
