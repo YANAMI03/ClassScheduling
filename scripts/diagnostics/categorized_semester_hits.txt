@@ -1,0 +1,92 @@
+[READ/LOGIC] app.py:558 -> 'api_semester_section_counts': {'scheduler'},
+[READ/LOGIC] app.py:1282 -> def _get_active_semester(program_id=None):
+[READ/LOGIC] app.py:2209 -> Enforces active schedule rule (same semester blocks generation).
+[READ/LOGIC] app.py:2216 -> 'active_schedule': {'exists': False, 'same_semester': False}
+[FILTER (.eq)] app.py:2226 -> ).eq('semester', semester)
+[FILTER (.eq)] app.py:2232 -> c_query = supabase.table('course').select('*').eq('semester', semester)
+[FILTER (.eq)] app.py:2241 -> fb_c = supabase.table('course').select('*').eq('semester', semester).execute().data or []
+[READ/LOGIC] app.py:2252 -> 'active_schedule': {'exists': False, 'same_semester': False}
+[READ/LOGIC] app.py:2274 -> 'active_schedule': {'exists': False, 'same_semester': False}
+[READ (.select)] app.py:2502 -> sched_q = supabase.table('schedule').select('schedule_id, semester, program_id').eq('archive', False)
+[READ/LOGIC] app.py:2537 -> active_semesters = list({r.get('semester') for r in sched_rows if r.get('semester')})
+[READ/LOGIC] app.py:2538 -> has_same_sem = semester in active_semesters
+[READ/LOGIC] app.py:2539 -> display_sem = semester if has_same_sem else (active_semesters[0] if active_semesters else None)
+[READ/LOGIC] app.py:2547 -> errors.append(f"An active schedule for {semester} already exists. Archive it first to generate a new one.")
+[READ/LOGIC] app.py:2575 -> 'active_schedule': {'exists': False, 'same_semester': False}
+[FILTER (.eq)] app.py:3923 -> query = query.eq('semester', semester)
+[READ/LOGIC] app.py:6170 -> active_semester = _get_active_semester(user_prog_id)
+[READ/LOGIC] app.py:6178 -> if not semester_filter and active_semester:
+[READ/LOGIC] app.py:6179 -> semester_filter = active_semester.get('term') or ''
+[READ/LOGIC] app.py:6300 -> sched_cols = 'schedule_id, professor_load_id, section, day, class_start, class_end, session_type, program_id, room(room_name), professor_load(id, course_id, professor_name, course(course_name, semester, specialization))'
+[READ/LOGIC] app.py:6405 -> active_semester=active_semester,
+[READ/LOGIC] app.py:6969 -> active_sem = _get_active_semester(user_prog_id)
+[READ/LOGIC] app.py:6970 -> sem_label = semester_filter or (active_sem.get('term') if active_sem else '') or '1st Semester'
+[READ/LOGIC] app.py:6986 -> return redirect(url_for('view_professor_schedule', prof_identifier=prof_identifier, year=year_filter, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+[READ/LOGIC] app.py:6997 -> active_sem = _get_active_semester(user_prog_id)
+[READ/LOGIC] app.py:7182 -> active_semester = _get_active_semester(user_prog_id)
+[READ/LOGIC] app.py:7191 -> if not semester_filter and active_semester:
+[READ/LOGIC] app.py:7192 -> semester_filter = active_semester.get('term') or ''
+[READ/LOGIC] app.py:7208 -> sched_cols = 'schedule_id, professor_load_id, room_id, section, semester, major, program_id, day, class_start, class_end'
+[READ/LOGIC] app.py:7265 -> active_semester=active_semester,
+[READ/LOGIC] app.py:7768 -> return redirect(url_for('view_room_schedule', room_id=room_id, year=year_filter, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+[READ/LOGIC] app.py:7779 -> active_sem = _get_active_semester(user_program_id)
+[READ/LOGIC] app.py:7936 -> active_sem = session.get('active_semester', '')
+[READ/LOGIC] app.py:7937 -> if active_sem in semester_options:
+[READ/LOGIC] app.py:7938 -> semester_filter = active_sem
+[READ/LOGIC] app.py:8541 -> return redirect(url_for('view_schedule', section_name=section_name, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+[READ/LOGIC] app.py:8552 -> active_sem = _get_active_semester(user_program_id)
+[READ/LOGIC] app.py:8694 -> return redirect(url_for('view_schedule', section_name=section_name, semester=semester, major=major))
+[READ/LOGIC] app.py:8705 -> return redirect(url_for('view_schedule', section_name=section_name, semester=semester, major=major))
+[FILTER (.eq)] app.py:8728 -> query = query.eq('semester', semester)
+[READ/LOGIC] app.py:9638 -> selected_sem = _get_active_semester(user_prog_id)
+[FILTER (.eq)] app.py:9744 -> query = supabase.table('schedule').select('section, program_id, major').eq('semester', semester).eq('archive', False)
+[READ/LOGIC] app.py:9765 -> view_url = url_for('schedules', semester=semester)
+[READ/LOGIC] app.py:9813 -> return jsonify({'success': False, 'error': 'Semester is required to generate a schedule.'}), 400
+[READ/LOGIC] app.py:9814 -> return "Error: Semester is required to generate a schedule."
+[READ/LOGIC] app.py:9834 -> msg = f"Schedule generation for {program or 'current program'} ({standard_semester}) is already running. Please wait for it to complete."
+[READ/LOGIC] app.py:9857 -> flash(f"An active schedule for {standard_semester} already exists. Archive it first to generate a new one.", 'danger')
+[READ/LOGIC] app.py:9868 -> logging.warning(f"Failed to soft-archive different semester active schedule: {e}")
+[FILTER (.eq)] app.py:9876 -> query = supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester)
+[FILTER (.eq)] app.py:11250 -> ).eq('archive', False).eq('semester', sem_val)
+[FILTER (.eq)] app.py:11339 -> tag_query = tag_query.eq('semester', sem_val)
+[FILTER (.eq)] app.py:11388 -> old_update = old_update.eq('semester', sem_val)
+[FILTER (.eq)] app.py:11396 -> old_update = old_update.eq('semester', sem_val)
+[READ/LOGIC] app.py:11423 -> session['active_semester'] = sem_val
+[READ/LOGIC] app.py:11432 -> return redirect(url_for('schedules', semester=sem_val))
+[READ/LOGIC] app.py:11545 -> session.pop('active_semester', None)
+[READ/LOGIC] app.py:11661 -> cols = 'schedule_id, semester, program_id, program:program_id(program_name), section, major, archive, archive_batch_id, archived_at' if use_batch_cols else 'schedule_id, semester, program_id, program:program_id(program_name), section, major, archive'
+[FILTER (.eq)] app.py:11666 -> query = query.eq('semester', semester_filter)
+[FILTER (.eq)] app.py:11806 -> query = query.eq('semester', sem_name)
+[READ (.select)] app.py:12038 -> sample_q = supabase.table('schedule').select('semester, program_id, program:program_id(program_name)').eq('archive', True)
+[FILTER (.eq)] app.py:12043 -> sample_q = sample_q.eq('semester', sem_part.replace('_', ' '))
+[READ/LOGIC] app.py:12050 -> target_sem = (sample_rows[0].get('semester') if sample_rows else None) or '1st Semester'
+[FILTER (.eq)] app.py:12083 -> restore_q = restore_q.eq('semester', target_sem)
+[FILTER (.eq)] app.py:12090 -> restore_q = restore_q.eq('semester', target_sem).eq('archive', True)
+[READ/LOGIC] app.py:12107 -> res_data = {'semester': target_sem, 'restored_count': restored_count}
+[READ/LOGIC] app.py:12109 -> target_semester = (res_data or {}).get('semester') or '1st Semester'
+[READ/LOGIC] app.py:12112 -> session['active_semester'] = target_semester
+[READ/LOGIC] app.py:12113 -> log_activity('restore', 'schedule', f'Restored schedule batch {batch_id} ({target_semester})')
+[READ/LOGIC] app.py:12115 -> return redirect(url_for('schedules', semester=target_semester))
+[FILTER (.eq)] app.py:12143 -> del_q = del_q.eq('semester', target_sem)
+[READ/LOGIC] templates/schedules.html:159 -> <a href="/schedule/{{ item.section.section }}/export?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-success btn-sm stop-prop" title="Export Section Timetable to Excel">
+[READ/LOGIC] templates/schedules.html:162 -> <a href="/schedule/{{ item.section.section }}/export_pdf?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-danger btn-sm stop-prop" title="Export Section Timetable to PDF">
+[READ/LOGIC] templates/schedules.html:165 -> <a href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Section Timetable Schedule">
+[READ/LOGIC] templates/schedules.html:177 -> <a href="{{ url_for('delete_section_schedule', section_name=item.section.section, semester=item.section.semester, major=item.section.major) }}" class="btn btn-danger btn-sm stop-prop" data-action="delete" data-method="POST" data-confirm="Are you sure you want to delete the entire schedule for Section {{ item.section.section }}?" data-title="Delete Section Schedule" title="Delete Section Schedule">
+[READ/LOGIC] templates/schedules.html:223 -> <a href="/delete_schedule/{{ entry.schedule_id }}?section_name={{ item.section.section }}&semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-danger btn-sm stop-prop" data-action="delete" data-method="GET" data-confirm="Delete this schedule entry?" data-title="Delete Schedule Entry" title="Delete Entry">
+[READ/LOGIC] templates/schedules.html:262 -> There is currently no active schedule for this program. You can generate a new schedule for either semester or restore an archived schedule version.
+[READ/LOGIC] templates/schedule_archive.html:148 -> data-confirm="Are you sure you want to permanently delete the archived schedule records for {{ batch.semester }} ({{ batch.archived_at_fmt }})? This action cannot be undone."
+[READ/LOGIC] templates/schedule_archive.html:171 -> We couldn't find any archived schedules matching the selected semester, program, or date range. Try clearing your filters or selecting a broader date range.
+[READ/LOGIC] templates/preview_schedule.html:126 -> <a href="/schedule/{{ item.section.section }}?mode=preview&semester={{ (item.section.semester or '') | urlencode }}&major={{ (item.section.major or '') | urlencode }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Weekly Grid Preview">
+[READ/LOGIC] templates/generated_schedule.html:26 -> href="/schedule/{{ section.section_name or section.section }}/export?semester={{ semester_filter }}&major={{ major_filter }}&theme={{ current_theme or 'Blue' }}{% if is_preview %}&mode=preview{% endif %}"
+[READ/LOGIC] templates/generated_schedule.html:30 -> <a href="/schedule/{{ section.section_name or section.section }}/export_pdf?semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}"
+[READ/LOGIC] templates/generated_schedule.html:38 -> <a href="{{ url_for('delete_section_schedule', section_name=section.section or section.section_name, semester=section.semester, major=section.major) }}"
+[READ/LOGIC] templates/generated_schedule.html:61 -> <a href="/schedule/{{ section.section_name or section.section }}?semester={{ semester_filter }}&major={{ major_filter }}"
+[READ/LOGIC] templates/generated_schedule.html:76 -> <a href="/schedule/{{ section.section_name or section.section }}?mode=preview&semester={{ semester_filter }}&major={{ major_filter }}"
+[READ/LOGIC] templates/professor_schedule.html:9 -> <p class="page-subtitle">Read-only view of teaching schedules grouped by professor for the active semester</p>
+[READ/LOGIC] templates/professor_schedule.html:11 -> {% if active_semester %}
+[READ/LOGIC] templates/professor_schedule.html:13 -> <i class="bx bx-calendar me-1"></i> Active Semester: S.Y. {{ active_semester.school_year }} — {{ active_semester.term }}
+[READ/LOGIC] templates/professor_schedule.html:91 -> <div class="section-card card-custom p-3 transition" data-href="/professor_schedule/{{ professor.professor_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}" tabindex="0" role="button" aria-label="View schedule for Professor {{ professor.professor_name }}" style="cursor: pointer;">
+[READ/LOGIC] templates/generated_professor_schedule.html:12 -> <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Professor Schedule to Excel">
+[READ/LOGIC] templates/generated_professor_schedule.html:15 -> <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Professor Schedule to PDF (NEUST format)">
+[READ/LOGIC] templates/generated_professor_schedule.html:33 -> <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-outline-dark">
+[READ/LOGIC] templates/generated_professor_schedule.html:46 -> <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?mode=preview&year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-info text-white">

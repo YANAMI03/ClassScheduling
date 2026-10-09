@@ -41,6 +41,7 @@
             <div class="gen-overlay-success-msg" id="gen-overlay-success-msg"></div>
             <div class="gen-overlay-error-msg" id="gen-overlay-error-msg"></div>
             <div class="gen-overlay-error-actions" id="gen-overlay-error-actions">
+                <button type="button" class="btn btn-primary btn-sm me-2" id="gen-overlay-retry-btn" data-loader-skip>Try again</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="gen-overlay-close-btn">Close</button>
             </div>
         </div>
@@ -127,14 +128,6 @@
                 <i class="bx bx-calendar-plus sidebar__icon"></i>
                 <span class="sidebar__label">Generate Schedule</span>
             </a>
-            <a href="/courses" class="sidebar__link {% if active_page == 'courses' %}sidebar__link--active{% endif %}" title="Courses">
-                <i class="bx bx-book sidebar__icon"></i>
-                <span class="sidebar__label">Courses</span>
-            </a>
-            <a href="/professors" class="sidebar__link {% if active_page == 'professors' %}sidebar__link--active{% endif %}" title="Professors">
-                <i class="bx bx-id-card sidebar__icon"></i>
-                <span class="sidebar__label">Professors</span>
-            </a>
             <a href="/professor_load" class="sidebar__link {% if active_page == 'professor_load' %}sidebar__link--active{% endif %}" title="Professor Load">
                 <i class="bx bx-book-open sidebar__icon"></i>
                 <span class="sidebar__label">Professor Load</span>
@@ -176,10 +169,6 @@
             <a href="/courses" class="sidebar__link {% if active_page == 'courses' %}sidebar__link--active{% endif %}" title="Courses">
                 <i class="bx bx-book sidebar__icon"></i>
                 <span class="sidebar__label">Courses</span>
-            </a>
-            <a href="/professors" class="sidebar__link {% if active_page == 'professors' %}sidebar__link--active{% endif %}" title="Professors">
-                <i class="bx bx-id-card sidebar__icon"></i>
-                <span class="sidebar__label">Professors</span>
             </a>
             <a href="/rooms" class="sidebar__link {% if active_page == 'rooms' %}sidebar__link--active{% endif %}" title="Rooms">
                 <i class="bx bx-building sidebar__icon"></i>
@@ -844,12 +833,11 @@
                     var s = genElapsedSec % 60;
                     if (genElapsed) genElapsed.textContent = 'Elapsed: ' + padTwo(m) + ':' + padTwo(s);
                 }, 1000);
-                // 5-minute failsafe
-                var FAILSAFE_MS = 5 * 60 * 1000;
+                // 125-second failsafe (120s budget + 5s margin)
+                var FAILSAFE_MS = 125 * 1000;
                 genFailsafeTimer = setTimeout(function() {
                     window.AppLoader.genOverlayError(
-                        'This is taking longer than expected. The generation may still be running. ' +
-                        'Please check the Schedules page, or try again if nothing was saved.'
+                        'Generation is taking longer than expected. Please check the Schedules page, or try again.'
                     );
                 }, FAILSAFE_MS);
                 if (genOverlay) genOverlay.classList.add('gen-overlay-active');
@@ -861,6 +849,14 @@
                 resetGenOverlayUI();
                 document.querySelectorAll('.btn-loading').forEach(function(btn) {
                     window.setButtonLoading(btn, false);
+                });
+                document.querySelectorAll('form').forEach(function(f) {
+                    delete f.__isSubmitting;
+                });
+                document.querySelectorAll('.sibling-locked-mid-load').forEach(function(el) {
+                    el.disabled = false;
+                    el.style.pointerEvents = '';
+                    el.classList.remove('sibling-locked-mid-load');
                 });
             },
             genOverlaySuccess: function(msg) {
@@ -885,13 +881,16 @@
             }
         };
 
-        // Close button for error state
+        // Close and Try again buttons for error state
         if (genCloseBtn) {
             genCloseBtn.addEventListener('click', function() {
                 window.AppLoader.hideGenOverlay();
-                document.querySelectorAll('.btn-loading').forEach(function(btn) {
-                    window.setButtonLoading(btn, false);
-                });
+            });
+        }
+        var genRetryBtn = document.getElementById('gen-overlay-retry-btn');
+        if (genRetryBtn) {
+            genRetryBtn.addEventListener('click', function() {
+                window.AppLoader.hideGenOverlay();
             });
         }
 
@@ -1066,89 +1065,93 @@
         };
 
         /* ---- Universal Event Delegation on document ---- */
-        // 1. Form Submits (including Enter-key submissions)
-        document.addEventListener('submit', function(e) {
-            var form = e.target;
-            if (!form || form.hasAttribute('data-loader-skip')) return;
-            if (e.defaultPrevented) return;
+        if (!window.__buttonDelegationBound) {
+            window.__buttonDelegationBound = true;
 
-            var submitBtn = e.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
-            if (!submitBtn || submitBtn.hasAttribute('data-loader-skip')) return;
-            if (submitBtn.getAttribute('data-action') === 'delete') return; // Handled by universal delete
+            // 1. Form Submits (including Enter-key submissions)
+            document.addEventListener('submit', function(e) {
+                var form = e.target;
+                if (!form || form.hasAttribute('data-loader-skip')) return;
+                if (e.defaultPrevented) return;
 
-            // Block double submission
-            if (submitBtn.__loaderState || form.__isSubmitting) {
-                e.preventDefault();
-                return;
-            }
-            form.__isSubmitting = true;
+                var submitBtn = e.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
+                if (!submitBtn || submitBtn.hasAttribute('data-loader-skip')) return;
+                if (submitBtn.getAttribute('data-action') === 'delete') return; // Handled by universal delete
 
-            window.setButtonLoading(submitBtn, true);
+                // Block double submission
+                if (submitBtn.__loaderState || form.__isSubmitting) {
+                    e.preventDefault();
+                    return;
+                }
+                form.__isSubmitting = true;
 
-            // bfcache / navigation recovery
-            window.addEventListener('pageshow', function restore() {
-                delete form.__isSubmitting;
-                window.setButtonLoading(submitBtn, false);
-                window.removeEventListener('pageshow', restore);
-            }, { once: true });
-        }, false);
+                window.setButtonLoading(submitBtn, true);
 
-        // 2. Link Clicks (Navigation & File Downloads)
-        document.addEventListener('click', function(e) {
-            var link = e.target.closest('a.btn, a[class*="btn-"], a.sidebar__link, a.sidebar__link--logout');
-            if (!link || link.hasAttribute('data-loader-skip')) return;
-
-            // Ignore modified clicks (Ctrl / Cmd / Shift / Alt opens in new tab)
-            if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-
-            // Ignore dropdown/modal openers and client-side toggles (Class B)
-            if (link.hasAttribute('data-bs-toggle') || link.hasAttribute('data-bs-dismiss') || link.getAttribute('data-action') === 'delete') return;
-
-            var href = link.getAttribute('href');
-            if (!href || href === '#' || href.startsWith('javascript:')) return;
-
-            // File Download Links
-            var isDownload = href.indexOf('export') !== -1 || href.indexOf('download') !== -1 || href.indexOf('template') !== -1 || href.indexOf('backup') !== -1;
-            if (isDownload) {
-                var downloadText = link.getAttribute('data-loading-text') || (href.indexOf('export') !== -1 ? 'Exporting...' : 'Preparing...');
-                window.setButtonLoading(link, true, downloadText);
-                setTimeout(function() {
-                    window.setButtonLoading(link, false);
-                }, 3500);
-                return;
-            }
-
-            // Normal Navigation Links
-            if (link.classList.contains('sidebar__link') || link.classList.contains('sidebar__link--logout')) {
-                window.AppLoader.startBar();
-            }
-
-            if (link.classList.contains('btn') || link.className.indexOf('btn-') !== -1) {
-                window.setButtonLoading(link, true);
-                var safetyTimer = setTimeout(function() {
-                    window.setButtonLoading(link, false);
-                }, 12000);
+                // bfcache / navigation recovery
                 window.addEventListener('pageshow', function restore() {
-                    clearTimeout(safetyTimer);
-                    window.setButtonLoading(link, false);
+                    delete form.__isSubmitting;
+                    window.setButtonLoading(submitBtn, false);
                     window.removeEventListener('pageshow', restore);
                 }, { once: true });
-            }
-        }, false);
+            }, false);
 
-        // 3. Auto-restore on bfcache (back/forward navigation)
-        window.addEventListener('pageshow', function() {
-            window.AppLoader.finishBar();
-            window.AppLoader.hideGenOverlay();
-            document.querySelectorAll('.btn-loading').forEach(function(btn) {
-                window.setButtonLoading(btn, false);
+            // 2. Link Clicks (Navigation & File Downloads)
+            document.addEventListener('click', function(e) {
+                var link = e.target.closest('a.btn, a[class*="btn-"], a.sidebar__link, a.sidebar__link--logout');
+                if (!link || link.hasAttribute('data-loader-skip')) return;
+
+                // Ignore modified clicks (Ctrl / Cmd / Shift / Alt opens in new tab)
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+                // Ignore dropdown/modal openers and client-side toggles (Class B)
+                if (link.hasAttribute('data-bs-toggle') || link.hasAttribute('data-bs-dismiss') || link.getAttribute('data-action') === 'delete') return;
+
+                var href = link.getAttribute('href');
+                if (!href || href === '#' || href.startsWith('javascript:')) return;
+
+                // File Download Links
+                var isDownload = href.indexOf('export') !== -1 || href.indexOf('download') !== -1 || href.indexOf('template') !== -1 || href.indexOf('backup') !== -1;
+                if (isDownload) {
+                    var downloadText = link.getAttribute('data-loading-text') || (href.indexOf('export') !== -1 ? 'Exporting...' : 'Preparing...');
+                    window.setButtonLoading(link, true, downloadText);
+                    setTimeout(function() {
+                        window.setButtonLoading(link, false);
+                    }, 3500);
+                    return;
+                }
+
+                // Normal Navigation Links
+                if (link.classList.contains('sidebar__link') || link.classList.contains('sidebar__link--logout')) {
+                    window.AppLoader.startBar();
+                }
+
+                if (link.classList.contains('btn') || link.className.indexOf('btn-') !== -1) {
+                    window.setButtonLoading(link, true);
+                    var safetyTimer = setTimeout(function() {
+                        window.setButtonLoading(link, false);
+                    }, 12000);
+                    window.addEventListener('pageshow', function restore() {
+                        clearTimeout(safetyTimer);
+                        window.setButtonLoading(link, false);
+                        window.removeEventListener('pageshow', restore);
+                    }, { once: true });
+                }
+            }, false);
+
+            // 3. Auto-restore on bfcache (back/forward navigation)
+            window.addEventListener('pageshow', function() {
+                window.AppLoader.finishBar();
+                window.AppLoader.hideGenOverlay();
+                document.querySelectorAll('.btn-loading').forEach(function(btn) {
+                    window.setButtonLoading(btn, false);
+                });
+                document.querySelectorAll('.sibling-locked-mid-load').forEach(function(el) {
+                    el.disabled = false;
+                    el.style.pointerEvents = '';
+                    el.classList.remove('sibling-locked-mid-load');
+                });
             });
-            document.querySelectorAll('.sibling-locked-mid-load').forEach(function(el) {
-                el.disabled = false;
-                el.style.pointerEvents = '';
-                el.classList.remove('sibling-locked-mid-load');
-            });
-        });
+        }
     }());
     </script>
     {% block scripts %}{% endblock %}

@@ -1,0 +1,62 @@
+Line 558: 'api_semester_section_counts': {'scheduler'},
+Line 1963: semester = entry.get('semester', '')
+Line 1965: key = (section_name, semester, major_key)
+Line 2502: sched_q = supabase.table('schedule').select('schedule_id, semester, program_id').eq('archive', False)
+Line 6514: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 6607: year_filter=year_filter, semester_filter=semester_filter,
+Line 6694: 'semester': sem,
+Line 6701: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 6917: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 6986: return redirect(url_for('view_professor_schedule', prof_identifier=prof_identifier, year=year_filter, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+Line 7208: sched_cols = 'schedule_id, professor_load_id, room_id, section, semester, major, program_id, day, class_start, class_end'
+Line 7359: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 7448: year_filter=year_filter, semester_filter=semester_filter,
+Line 7528: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 7686: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 7768: return redirect(url_for('view_room_schedule', room_id=room_id, year=year_filter, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+Line 7900: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 8078: sem = str(p_entry.get('semester') or '')
+Line 8125: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 8251: semester_filter=semester_filter,
+Line 8287: sem = str(p_entry.get('semester') or '')
+Line 8326: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 8438: sem = str(p_entry.get('semester') or '')
+Line 8481: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester, specialization)), '
+Line 8541: return redirect(url_for('view_schedule', section_name=section_name, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+Line 8694: return redirect(url_for('view_schedule', section_name=section_name, semester=semester, major=major))
+Line 8727: if semester:
+Line 8808: 'semester': semester,
+Line 9398: # All schedule entries for the student's program / semester
+Line 9401: 'professor_load(id, course_id, professor_name, course(course_id, course_name, semester)), '
+Line 9740: if not semester:
+Line 9744: query = supabase.table('schedule').select('section, program_id, major').eq('semester', semester).eq('archive', False)
+Line 9788: semesters = ['1st Semester', '2nd Semester']
+Line 9798: semesters=semesters,
+Line 9847: _ensure_course_semester_column()
+Line 9860: # If active schedule exists for DIFFERENT semester, soft-archive it
+Line 9861: if active_sched.get('exists') and not active_sched.get('same_semester'):
+Line 9868: logging.warning(f"Failed to soft-archive different semester active schedule: {e}")
+Line 10148: # Load existing bookings from DB to avoid collision across different programs in the SAME semester
+Line 10830: semesters=semesters,
+Line 11101: # Determine the semester, program, and sections from preview
+Line 11102: sem_val = (preview[0].get('semester') or '').strip()
+Line 11179: entry_sem = (entry.get('semester') or sem_val).strip()
+Line 11244: logging.info(f"[confirm_preview] Confirming {len(rows)} entries for semester='{sem_val}', program='{prog_val}', user='{archived_by}'")
+Line 11250: ).eq('archive', False).eq('semester', sem_val)
+Line 11339: tag_query = tag_query.eq('semester', sem_val)
+Line 11349: 'p_semester': sem_val,
+Line 11388: old_update = old_update.eq('semester', sem_val)
+Line 11396: old_update = old_update.eq('semester', sem_val)
+Line 11407: # Update session generated_sections and active semester so state is consistent
+Line 11412: sec_key = (sec, entry.get('major'), entry.get('semester'))
+Line 11423: session['active_semester'] = sem_val
+Line 11432: return redirect(url_for('schedules', semester=sem_val))
+Line 11661: cols = 'schedule_id, semester, program_id, program:program_id(program_name), section, major, archive, archive_batch_id, archived_at' if use_batch_cols else 'schedule_id, semester, program_id, program:program_id(program_name), section, major, archive'
+Line 11665: if semester_filter:
+Line 11666: query = query.eq('semester', semester_filter)
+Line 12038: sample_q = supabase.table('schedule').select('semester, program_id, program:program_id(program_name)').eq('archive', True)
+Line 12043: sample_q = sample_q.eq('semester', sem_part.replace('_', ' '))
+Line 12054: # Archive ANY currently active schedule for this semester & program
+Line 12083: restore_q = restore_q.eq('semester', target_sem)
+Line 12107: res_data = {'semester': target_sem, 'restored_count': restored_count}
+Line 12109: target_semester = (res_data or {}).get('semester') or '1st Semester'

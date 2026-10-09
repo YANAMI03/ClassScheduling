@@ -27,7 +27,7 @@
 </div>
 
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_add_courses = (user_role_lower in ['super_admin', 'admin', 'scheduler']) %}
+{% set can_add_courses = (user_role_lower in ['super_admin', 'admin']) %}
 {% set can_edit_courses = (user_role_lower in ['super_admin', 'admin']) %}
 
 {% if can_add_courses %}
@@ -114,10 +114,9 @@
                 <label class="form-label">Specialization</label>
                 <select name="specialization" id="add_specialization" class="form-select">
                     <option value="" selected>None / Select</option>
-                    <option value="Database Systems">Database Systems</option>
-                    <option value="Web Systems">Web Systems</option>
-                    <option value="Networking">Networking</option>
-                    <option value="General">General</option>
+                    {% for sc in specialization_choices or ['Database Systems', 'Web Systems', 'Networking', 'General'] %}
+                    <option value="{{ sc }}">{{ sc }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="col-12">
@@ -395,10 +394,9 @@
                             <label class="form-label">Specialization</label>
                             <select name="specialization" id="edit_specialization" class="form-select">
                                 <option value="">None / Select</option>
-                                <option value="Database Systems">Database Systems</option>
-                                <option value="Web Systems">Web Systems</option>
-                                <option value="Networking">Networking</option>
-                                <option value="General">General</option>
+                                {% for sc in specialization_choices or ['Database Systems', 'Web Systems', 'Networking', 'General'] %}
+                                <option value="{{ sc }}">{{ sc }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                     </div>

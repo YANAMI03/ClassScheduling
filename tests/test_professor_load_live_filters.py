@@ -296,7 +296,9 @@ def test_professor_rows_have_correct_data_attributes(filter_client):
         name = r.get('data-prof-name')
         courses = r.get('data-courses')
         badge = r.find('span', class_=re.compile(r'badge bg-(danger|warning|success)'))
-        assert badge is not None
+        assert badge is None
+        assert '/ 24 u' not in r.text
+        assert 'hrs' in r.text
 
         row_data[prof_id] = {
             'name': name,
@@ -318,7 +320,7 @@ def test_professor_rows_have_correct_data_attributes(filter_client):
 
 
 def test_edit_and_delete_actions_use_professor_id(filter_client):
-    """Test that Edit and Delete buttons on each row act on the correct professor id, not row index."""
+    """Test that Edit and Delete buttons are removed from professor rows."""
     client, _ = filter_client
     response = client.get('/professor_load')
     assert response.status_code == 200
@@ -328,14 +330,11 @@ def test_edit_and_delete_actions_use_professor_id(filter_client):
     rows = soup.find_all('tr', class_='professor-row')
 
     for r in rows:
-        prof_id = r.get('data-prof-id')
         edit_btn = r.find('button', class_='edit-btn')
-        assert edit_btn is not None
-        assert str(edit_btn.get('data-id')) == prof_id
+        assert edit_btn is None
 
         delete_link = r.find('a', href=re.compile(r'/delete_professor_load_all/'))
-        assert delete_link is not None
-        assert f'/delete_professor_load_all/{prof_id}' in delete_link.get('href')
+        assert delete_link is None
 
 
 def test_filter_matching_logic():

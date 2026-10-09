@@ -24,8 +24,8 @@
             <select id="profFilter" name="prof_id" class="form-select form-select-sm">
                 <option value="">All Professors</option>
                 {% for p in all_prof_options %}
-                <option value="{{ p.prof_id }}" {% if selected_prof_id == p.prof_id|string or selected_prof_id == p.prof_id %}selected{% endif %}>
-                    {{ p.first_name }} {{ p.last_name }}
+                <option value="{{ p.professor_key or p.prof_id }}" {% if selected_prof_id == (p.professor_key|string) or selected_prof_id == (p.prof_id|string) %}selected{% endif %}>
+                    {{ p.professor_name or (p.first_name ~ ' ' ~ p.last_name)|trim }}
                 </option>
                 {% endfor %}
             </select>

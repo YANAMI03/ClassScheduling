@@ -137,7 +137,7 @@ class MockSupabase:
             return MockQuery(self.courses)
         elif table_name == 'professor_load':
             return MockQuery(self.loads)
-        elif table_name == 'schedule':
+        elif table_name in ('schedule', 'schedule_with_semester'):
             return MockQuery(self.schedules)
         elif table_name == 'professor':
             return MockQuery(self.professors)
@@ -364,21 +364,22 @@ def test_checklist_restore_schedule_enforces_one_active(monkeypatch):
 
     schedules = [
         # Currently active batch
-        {'schedule_id': 100, 'program_id': 1, 'program': 'BSIT', 'archive': False, 'batch_id': 'current-active'},
+        {'schedule_id': 100, 'program_id': 1, 'program': 'BSIT', 'archive': False, 'batch_id': 'current-active', 'semester': '1st Semester'},
         # Archived batch to restore
-        {'schedule_id': 200, 'program_id': 1, 'program': 'BSIT', 'archive': True, 'batch_id': 'target-restore'},
+        {'schedule_id': 200, 'program_id': 1, 'program': 'BSIT', 'archive': True, 'batch_id': 'target-restore', 'semester': '1st Semester'},
     ]
     db = MockSupabase(schedules=schedules)
     monkeypatch.setattr(app_module, 'supabase', db)
 
-    resp = client.post('/restore_schedule/target-restore', follow_redirects=False)
-    assert resp.status_code == 302
+    resp = client.post('/restore_schedule/target-restore', follow_redirects=True)
+    assert resp.status_code == 200
+    assert 'Cannot restore schedule: An active schedule already exists' in resp.data.decode('utf-8')
 
-    # Verify: previous active is archived, restored batch is active
+    # Verify: active schedule is NOT overwritten, archived batch remains archived
     s100 = [s for s in db.schedules if s['schedule_id'] == 100][0]
     s200 = [s for s in db.schedules if s['schedule_id'] == 200][0]
-    assert s100['archive'] is True
-    assert s200['archive'] is False
+    assert s100['archive'] is False
+    assert s200['archive'] is True
 
 
 # --------------------------------------------------------------------------

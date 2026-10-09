@@ -1,0 +1,515 @@
+app.py:558: 'api_semester_section_counts': {'scheduler'},
+app.py:1963: semester = entry.get('semester', '')
+app.py:2104: def _generate_mock_registrar_data(semester=None):
+app.py:2181: data = _generate_mock_registrar_data(semester=semester)
+app.py:2202: return jsonify(_generate_mock_registrar_data(semester=semester))
+app.py:2209: Enforces active schedule rule (same semester blocks generation).
+app.py:2216: 'active_schedule': {'exists': False, 'same_semester': False}
+app.py:2252: 'active_schedule': {'exists': False, 'same_semester': False}
+app.py:2274: 'active_schedule': {'exists': False, 'same_semester': False}
+app.py:2502: sched_q = supabase.table('schedule').select('schedule_id, semester, program_id').eq('archive', False)
+app.py:2547: errors.append(f"An active schedule for {semester} already exists. Archive it first to generate a new one.")
+app.py:2575: 'active_schedule': {'exists': False, 'same_semester': False}
+app.py:6300: sched_cols = 'schedule_id, professor_load_id, section, day, class_start, class_end, session_type, program_id, room(room_name), professor_load(id, course_id, professor_name, course(course_name, semester, specialization))'
+app.py:6466: sem = str(p_entry.get('semester') or '')
+app.py:6660: sem = str(p_entry.get('semester') or '')
+app.py:6873: sem = str(p_entry.get('semester') or '')
+app.py:6986: return redirect(url_for('view_professor_schedule', prof_identifier=prof_identifier, year=year_filter, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+app.py:7208: sched_cols = 'schedule_id, professor_load_id, room_id, section, semester, major, program_id, day, class_start, class_end'
+app.py:7312: sem = str(p_entry.get('semester') or '')
+app.py:7487: sem = str(p_entry.get('semester') or '')
+app.py:7641: sem = str(p_entry.get('semester') or '')
+app.py:7768: return redirect(url_for('view_room_schedule', room_id=room_id, year=year_filter, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+app.py:7934: # Default to active semester from session or the latest confirmed semester if not specified
+app.py:8078: sem = str(p_entry.get('semester') or '')
+app.py:8187: 'semester': semester_filter or (entries[0].get('semester', '') if entries else ''),
+app.py:8287: sem = str(p_entry.get('semester') or '')
+app.py:8379: 'semester': semester_filter or (entries[0].get('semester', '') if entries else ''),
+app.py:8438: sem = str(p_entry.get('semester') or '')
+app.py:8541: return redirect(url_for('view_schedule', section_name=section_name, semester=semester_filter, major=major_filter, mode=mode if is_preview else None))
+app.py:8558: 'semester': semester_filter or (entries[0].get('semester', '') if entries else ''),
+app.py:8694: return redirect(url_for('view_schedule', section_name=section_name, semester=semester, major=major))
+app.py:8705: return redirect(url_for('view_schedule', section_name=section_name, semester=semester, major=major))
+app.py:9398: # All schedule entries for the student's program / semester
+app.py:9615: # Semesters are now standardized text attributes ("1st Semester", "2nd Semester") on courses and schedules.
+app.py:9645: q = supabase.table('timeslot').select('*').eq('semester_id', sem_id)
+app.py:9712: existing = supabase.table('timeslot').select('timeslot_id').eq('semester_id', sem_id).eq('day', d).execute().data or []
+app.py:9724: log_activity('create', 'timeslot', f'Initialized week for semester {sem_id}')
+app.py:9729: return redirect(url_for('timeslot', semester_id=sem_id))
+app.py:9744: query = supabase.table('schedule').select('section, program_id, major').eq('semester', semester).eq('archive', False)
+app.py:9765: view_url = url_for('schedules', semester=semester)
+app.py:9813: return jsonify({'success': False, 'error': 'Semester is required to generate a schedule.'}), 400
+app.py:9814: return "Error: Semester is required to generate a schedule."
+app.py:9834: msg = f"Schedule generation for {program or 'current program'} ({standard_semester}) is already running. Please wait for it to complete."
+app.py:9854: # Archive rule check: If active schedule has the SAME semester, block generation
+app.py:9857: flash(f"An active schedule for {standard_semester} already exists. Archive it first to generate a new one.", 'danger')
+app.py:9860: # If active schedule exists for DIFFERENT semester, soft-archive it
+app.py:9868: logging.warning(f"Failed to soft-archive different semester active schedule: {e}")
+app.py:11101: # Determine the semester, program, and sections from preview
+app.py:11102: sem_val = (preview[0].get('semester') or '').strip()
+app.py:11179: entry_sem = (entry.get('semester') or sem_val).strip()
+app.py:11226: 'semester': entry_sem,
+app.py:11244: logging.info(f"[confirm_preview] Confirming {len(rows)} entries for semester='{sem_val}', program='{prog_val}', user='{archived_by}'")
+app.py:11250: ).eq('archive', False).eq('semester', sem_val)
+app.py:11330: # Pre-tag currently active schedule records for this semester/program with the new batch ID and timestamp
+app.py:11407: # Update session generated_sections and active semester so state is consistent
+app.py:11412: sec_key = (sec, entry.get('major'), entry.get('semester'))
+app.py:11418: 'semester': entry.get('semester') or sem_val,
+app.py:11432: return redirect(url_for('schedules', semester=sem_val))
+app.py:11661: cols = 'schedule_id, semester, program_id, program:program_id(program_name), section, major, archive, archive_batch_id, archived_at' if use_batch_cols else 'schedule_id, semester, program_id, program:program_id(program_name), section, major, archive'
+app.py:11730: batches_map[bid]['semesters_set'].add(sem)
+app.py:12038: sample_q = supabase.table('schedule').select('semester, program_id, program:program_id(program_name)').eq('archive', True)
+app.py:12053: # Rule: One active schedule per semester.
+app.py:12054: # Archive ANY currently active schedule for this semester & program
+app.py:12083: restore_q = restore_q.eq('semester', target_sem)
+app.py:12090: restore_q = restore_q.eq('semester', target_sem).eq('archive', True)
+app.py:12107: res_data = {'semester': target_sem, 'restored_count': restored_count}
+app.py:12113: log_activity('restore', 'schedule', f'Restored schedule batch {batch_id} ({target_semester})')
+app.py:12115: return redirect(url_for('schedules', semester=target_semester))
+room_utilization_pdf.py:625: def generate_room_utilization_pdf(pages, semester=None, academic_year=None,
+room_utilization_pdf.py:637: 'semester': str,  # optional; derived from entries if omitted
+migrations\20260831_backup_restore_rpc.sql:233: INSERT INTO public.schedule (schedule_id, course_id, prof_id, room_id, day, class_start, class_end, session_type, section, semester, major, program)
+migrations\20260901_confirm_schedule_transaction_rpc.sql:3: -- Atomically deletes existing schedule entries within the target scope (semester/program)
+migrations\20260901_confirm_schedule_transaction_rpc.sql:9: p_semester text,
+migrations\20260901_confirm_schedule_transaction_rpc.sql:26: sem_clean := trim(COALESCE(p_semester, ''));
+migrations\20260901_confirm_schedule_transaction_rpc.sql:30: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20260901_confirm_schedule_transaction_rpc.sql:33: -- Normalize semester aliases
+migrations\20260901_confirm_schedule_transaction_rpc.sql:35: sem_aliases := ARRAY['1st Semester', '1st', '1'];
+migrations\20260901_confirm_schedule_transaction_rpc.sql:37: sem_aliases := ARRAY['2nd Semester', '2nd', '2'];
+migrations\20260901_confirm_schedule_transaction_rpc.sql:51: WHERE semester = ANY(sem_aliases)
+migrations\20260901_confirm_schedule_transaction_rpc.sql:55: -- Delete all schedule records matching semester and program
+migrations\20260901_confirm_schedule_transaction_rpc.sql:58: WHERE semester = ANY(sem_aliases)
+migrations\20260901_confirm_schedule_transaction_rpc.sql:64: -- Global / All programs scope: delete all schedule records for the semester
+migrations\20260901_confirm_schedule_transaction_rpc.sql:68: WHERE semester = ANY(sem_aliases)
+migrations\20260901_confirm_schedule_transaction_rpc.sql:73: WHERE semester = ANY(sem_aliases)
+migrations\20260901_confirm_schedule_transaction_rpc.sql:93: semester,
+migrations\20260901_confirm_schedule_transaction_rpc.sql:106: COALESCE(NULLIF(x->>'semester', ''), sem_clean),
+migrations\20260901_confirm_schedule_transaction_rpc.sql:121: 'semester', sem_clean,
+migrations\20260901_schedule_archive_and_restore.sql:18: semester VARCHAR(50) NOT NULL,
+migrations\20260901_schedule_archive_and_restore.sql:28: CREATE INDEX IF NOT EXISTS idx_schedule_archive_scope ON public.schedule_archive(semester, program);
+migrations\20260901_schedule_archive_and_restore.sql:44: p_semester text,
+migrations\20260901_schedule_archive_and_restore.sql:64: sem_clean := trim(COALESCE(p_semester, ''));
+migrations\20260901_schedule_archive_and_restore.sql:68: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20260901_schedule_archive_and_restore.sql:71: -- Normalize semester aliases
+migrations\20260901_schedule_archive_and_restore.sql:73: sem_aliases := ARRAY['1st Semester', '1st', '1'];
+migrations\20260901_schedule_archive_and_restore.sql:75: sem_aliases := ARRAY['2nd Semester', '2nd', '2'];
+migrations\20260901_schedule_archive_and_restore.sql:97: semester,
+migrations\20260901_schedule_archive_and_restore.sql:115: semester,
+migrations\20260901_schedule_archive_and_restore.sql:153: semester,
+migrations\20260901_schedule_archive_and_restore.sql:171: semester,
+migrations\20260901_schedule_archive_and_restore.sql:178: WHERE semester = ANY(sem_aliases);
+migrations\20260901_schedule_archive_and_restore.sql:186: WHERE semester = ANY(sem_aliases)
+migrations\20260901_schedule_archive_and_restore.sql:191: WHERE semester = ANY(sem_aliases)
+migrations\20260901_schedule_archive_and_restore.sql:211: semester,
+migrations\20260901_schedule_archive_and_restore.sql:224: COALESCE(NULLIF(x->>'semester', ''), sem_clean),
+migrations\20260901_schedule_archive_and_restore.sql:241: 'semester', sem_clean,
+migrations\20260901_schedule_archive_and_restore.sql:259: v_semester text;
+migrations\20260901_schedule_archive_and_restore.sql:267: SELECT semester, program
+migrations\20260901_schedule_archive_and_restore.sql:268: INTO v_semester, v_program
+migrations\20260901_schedule_archive_and_restore.sql:273: IF v_semester IS NULL THEN
+migrations\20260901_schedule_archive_and_restore.sql:277: -- Normalize semester aliases
+migrations\20260901_schedule_archive_and_restore.sql:278: IF v_semester ILIKE '1st%' OR v_semester = '1' THEN
+migrations\20260901_schedule_archive_and_restore.sql:279: sem_aliases := ARRAY['1st Semester', '1st', '1'];
+migrations\20260901_schedule_archive_and_restore.sql:280: ELSIF v_semester ILIKE '2nd%' OR v_semester = '2' THEN
+migrations\20260901_schedule_archive_and_restore.sql:281: sem_aliases := ARRAY['2nd Semester', '2nd', '2'];
+migrations\20260901_schedule_archive_and_restore.sql:283: sem_aliases := ARRAY[v_semester];
+migrations\20260901_schedule_archive_and_restore.sql:299: semester,
+migrations\20260901_schedule_archive_and_restore.sql:317: semester,
+migrations\20260901_schedule_archive_and_restore.sql:324: WHERE semester = ANY(sem_aliases)
+migrations\20260901_schedule_archive_and_restore.sql:333: WHERE semester = ANY(sem_aliases)
+migrations\20260901_schedule_archive_and_restore.sql:339: WHERE semester = ANY(sem_aliases)
+migrations\20260901_schedule_archive_and_restore.sql:355: semester,
+migrations\20260901_schedule_archive_and_restore.sql:373: semester,
+migrations\20260901_schedule_archive_and_restore.sql:380: WHERE semester = ANY(sem_aliases);
+migrations\20260901_schedule_archive_and_restore.sql:388: WHERE semester = ANY(sem_aliases)
+migrations\20260901_schedule_archive_and_restore.sql:393: WHERE semester = ANY(sem_aliases);
+migrations\20260901_schedule_archive_and_restore.sql:408: semester,
+migrations\20260901_schedule_archive_and_restore.sql:421: semester,
+migrations\20260901_schedule_archive_and_restore.sql:438: 'semester', v_semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:141: p_semester text,
+migrations\20260910_replace_schedule_prof_course_fk.sql:161: sem_clean := trim(COALESCE(p_semester, ''));
+migrations\20260910_replace_schedule_prof_course_fk.sql:165: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20260910_replace_schedule_prof_course_fk.sql:168: -- Normalize semester aliases
+migrations\20260910_replace_schedule_prof_course_fk.sql:170: sem_aliases := ARRAY['1st Semester', '1st', '1'];
+migrations\20260910_replace_schedule_prof_course_fk.sql:172: sem_aliases := ARRAY['2nd Semester', '2nd', '2'];
+migrations\20260910_replace_schedule_prof_course_fk.sql:191: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:208: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:245: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:262: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:269: WHERE semester = ANY(sem_aliases);
+migrations\20260910_replace_schedule_prof_course_fk.sql:276: WHERE semester = ANY(sem_aliases)
+migrations\20260910_replace_schedule_prof_course_fk.sql:281: WHERE semester = ANY(sem_aliases)
+migrations\20260910_replace_schedule_prof_course_fk.sql:298: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:310: COALESCE(NULLIF(x->>'semester', ''), sem_clean),
+migrations\20260910_replace_schedule_prof_course_fk.sql:327: 'semester', sem_clean,
+migrations\20260910_replace_schedule_prof_course_fk.sql:351: v_semester text;
+migrations\20260910_replace_schedule_prof_course_fk.sql:358: SELECT semester, program
+migrations\20260910_replace_schedule_prof_course_fk.sql:359: INTO v_semester, v_program
+migrations\20260910_replace_schedule_prof_course_fk.sql:364: IF v_semester IS NULL THEN
+migrations\20260910_replace_schedule_prof_course_fk.sql:368: IF v_semester ILIKE '1st%' OR v_semester = '1' THEN
+migrations\20260910_replace_schedule_prof_course_fk.sql:369: sem_aliases := ARRAY['1st Semester', '1st', '1'];
+migrations\20260910_replace_schedule_prof_course_fk.sql:370: ELSIF v_semester ILIKE '2nd%' OR v_semester = '2' THEN
+migrations\20260910_replace_schedule_prof_course_fk.sql:371: sem_aliases := ARRAY['2nd Semester', '2nd', '2'];
+migrations\20260910_replace_schedule_prof_course_fk.sql:373: sem_aliases := ARRAY[v_semester];
+migrations\20260910_replace_schedule_prof_course_fk.sql:388: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:405: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:412: WHERE semester = ANY(sem_aliases)
+migrations\20260910_replace_schedule_prof_course_fk.sql:420: WHERE semester = ANY(sem_aliases)
+migrations\20260910_replace_schedule_prof_course_fk.sql:425: WHERE semester = ANY(sem_aliases)
+migrations\20260910_replace_schedule_prof_course_fk.sql:440: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:457: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:464: WHERE semester = ANY(sem_aliases);
+migrations\20260910_replace_schedule_prof_course_fk.sql:471: WHERE semester = ANY(sem_aliases)
+migrations\20260910_replace_schedule_prof_course_fk.sql:475: WHERE semester = ANY(sem_aliases);
+migrations\20260910_replace_schedule_prof_course_fk.sql:489: semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:505: sa.semester,
+migrations\20260910_replace_schedule_prof_course_fk.sql:521: 'semester', v_semester,
+migrations\20260923_rename_prof_course_to_professor_load.sql:133: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20260926_restructure_programs_semesters_roles.sql:6: --   2. Create semester table and convert course.semester and schedule.semester to semester_id FK.
+migrations\20260926_restructure_programs_semesters_roles.sql:7: --   3. Restructure timeslot to one row per day scoped to semester_id.
+migrations\20260926_restructure_programs_semesters_roles.sql:127: -- Add semester_id FK to course and schedule
+migrations\20260926_restructure_programs_semesters_roles.sql:129: ALTER TABLE public.schedule ADD COLUMN IF NOT EXISTS semester_id INTEGER REFERENCES public.semester(id) ON DELETE SET NULL;
+migrations\20260926_restructure_programs_semesters_roles.sql:149: IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='schedule' AND column_name='semester') THEN
+migrations\20260926_restructure_programs_semesters_roles.sql:150: UPDATE public.schedule SET semester_id = v_second_sem_id WHERE semester ILIKE '%2nd%' AND v_second_sem_id IS NOT NULL;
+migrations\20260926_restructure_programs_semesters_roles.sql:151: UPDATE public.schedule SET semester_id = v_active_sem_id WHERE semester_id IS NULL;
+migrations\20260926_restructure_programs_semesters_roles.sql:153: UPDATE public.schedule SET semester_id = v_active_sem_id WHERE semester_id IS NULL;
+migrations\20260926_restructure_programs_semesters_roles.sql:160: ALTER TABLE public.timeslot ADD COLUMN IF NOT EXISTS semester_id INTEGER REFERENCES public.semester(id) ON DELETE CASCADE;
+migrations\20260926_restructure_programs_semesters_roles.sql:172: -- Create standard 6-day slots for active semester
+migrations\20260926_restructure_programs_semesters_roles.sql:175: INSERT INTO public.timeslot (semester_id, day, start_time, end_time, lunch_time)
+migrations\20260926_restructure_programs_semesters_roles.sql:196: ALTER TABLE public.timeslot DROP CONSTRAINT IF EXISTS uq_timeslot_semester_day;
+migrations\20260926_restructure_programs_semesters_roles.sql:197: ALTER TABLE public.timeslot ADD CONSTRAINT uq_timeslot_semester_day UNIQUE (semester_id, day);
+migrations\20260926_restructure_programs_semesters_roles.sql:241: ALTER TABLE public.schedule DROP COLUMN IF EXISTS semester;
+migrations\20260926_restructure_programs_semesters_roles.sql:518: -- TIMESLOT: Dean full CRUD for own program's semesters; Scheduler READ ONLY; SuperAdmin full CRUD
+migrations\20261001_ensure_schedule_program_id_fk.sql:135: p_semester text,
+migrations\20261001_ensure_schedule_program_id_fk.sql:160: IF p_semester IS NULL OR trim(p_semester) = '' THEN
+migrations\20261001_ensure_schedule_program_id_fk.sql:161: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20261001_ensure_schedule_program_id_fk.sql:184: AND (p_semester IS NULL OR semester = p_semester)
+migrations\20261001_ensure_schedule_program_id_fk.sql:192: session_type, section, semester, major, archive
+migrations\20261001_ensure_schedule_program_id_fk.sql:204: x->>'section', coalesce(nullif(x->>'semester', ''), p_semester),
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:2: -- Migration: 20261001_remove_semester_add_specialization_rework_archive.sql
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:18: --   - Schedules retain their program_id, section, semester, and time allocation.
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:79: ALTER TABLE public.schedule ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:85: WHERE table_schema = 'public' AND table_name = 'schedule' AND column_name = 'semester_id'
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:106: UPDATE public.schedule SET semester = '1st Semester' WHERE semester IS NULL OR semester = '';
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:108: -- Drop FK constraint and semester_id column from schedule
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:116: WHERE conrelid = 'public.schedule'::regclass AND confrelid = 'public.semester'::regclass
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:123: ALTER TABLE public.schedule DROP COLUMN IF EXISTS semester_id CASCADE;
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:128: ALTER TABLE public.timeslot DROP CONSTRAINT IF EXISTS uq_timeslot_semester_day;
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:134: IF to_regclass('public.timeslot') IS NOT NULL AND to_regclass('public.semester') IS NOT NULL THEN
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:137: WHERE conrelid = 'public.timeslot'::regclass AND confrelid = 'public.semester'::regclass
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:144: ALTER TABLE public.timeslot DROP COLUMN IF EXISTS semester_id CASCADE;
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:146: -- Deduplicate timeslots by day if multiple semesters left duplicate days
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:336: -- TIMESLOT policies (recreated without semester_id dependency)
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:375: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20261001_remove_semester_add_specialization_rework_archive.sql:399: session_type, section, semester, major, archive
+migrations\20261002_archive_rpc_and_get_batches.sql:21: --      one-active-schedule-per-semester rule by soft-archiving active schedules first.
+migrations\20261002_archive_rpc_and_get_batches.sql:37: CREATE INDEX IF NOT EXISTS idx_schedule_archived_prog_sem ON public.schedule (archive, program_id, semester) WHERE archive = true;
+migrations\20261002_archive_rpc_and_get_batches.sql:134: (array_agg(bd.b_semester ORDER BY bd.b_archived_at DESC NULLS LAST))[1] AS semester,
+migrations\20261002_archive_rpc_and_get_batches.sql:191: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20261002_archive_rpc_and_get_batches.sql:226: session_type, section, semester, major, archive
+migrations\20261002_archive_rpc_and_get_batches.sql:261: --    Maintains the "one active schedule per semester" rule by archiving
+migrations\20261002_archive_rpc_and_get_batches.sql:262: --    any active schedule for the target semester & program first.
+migrations\20261002_archive_rpc_and_get_batches.sql:300: -- 1. Soft-archive ANY currently active schedule for the same semester and program
+migrations\20261007_multi_program_support.sql:72: -- 5. Schedules: Ensure index on (program_id, semester, archive) for fast scoping
+migrations\20261007_multi_program_support.sql:74: ON public.schedule (program_id, semester) WHERE archive = false;
+migrations\20261007_schedule_prepared_by.sql:30: -- Backfill active schedules from the most recent confirm log matching semester and program
+migrations\20261007_schedule_prepared_by.sql:42: AND (l.target_detail ILIKE '%' || s.semester || '%' OR s.semester IS NULL)
+migrations\20261007_schedule_prepared_by.sql:72: AND (l.target_detail ILIKE '%' || s.semester || '%' OR s.semester IS NULL)
+migrations\20261007_schedule_prepared_by.sql:96: p_semester text,
+migrations\20261007_schedule_prepared_by.sql:128: IF p_semester IS NULL OR trim(p_semester) = '' THEN
+migrations\20261007_schedule_prepared_by.sql:129: RAISE EXCEPTION 'Semester is required to confirm schedule.';
+migrations\20261007_schedule_prepared_by.sql:181: AND (p_semester IS NULL OR semester = p_semester)
+migrations\20261007_schedule_prepared_by.sql:189: session_type, section, semester, major, archive,
+migrations\20261007_schedule_prepared_by.sql:202: x->>'section', coalesce(nullif(x->>'semester', ''), p_semester),
+migrations\20261007_schedule_prepared_by.sql:215: 'semester', p_semester,
+scripts\diagnostics\audit_7_unscheduled_rejections.py:18: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\audit_moment_with_flask.py:28: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\audit_schedule_semester.py:20: print("\n=== 2. ALL REFERENCES TO 'semester' IN A SCHEDULE CONTEXT ===")
+scripts\diagnostics\audit_schedule_semester.py:23: if 'semester' in line:
+scripts\diagnostics\audit_schedule_semester.py:26: print(f"Total lines mentioning 'semester' in app.py: {len(sem_hits)}")
+scripts\diagnostics\bisect_commits.py:60: response = test_client.post('/generate_schedule', data={{'semester': '2nd Semester'}}, follow_redirects=False)
+scripts\diagnostics\capacity_analysis.py:24: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\check_affinity_bug.py:10: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\check_baseline_order_coverage.py:10: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\check_corpuz_slots.py:23: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\check_lab_occupancy.py:23: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\check_monday_evening.py:46: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\check_olipas_current.py:44: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\check_other_pages_and_rows.py:24: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\check_santos_slots.py:23: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\classify_legacy_hits.py:67: elif any(k in func for k in ['view_professor_schedule', 'view_room_schedule', 'schedules', 'export_section', 'calculate_semester_section_counts', '_build_preview_context']):
+scripts\diagnostics\compare_assignments.py:39: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\compare_placements.py:22: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\compare_section_counts.py:23: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\compare_with_backup.py:25: resp = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=False)
+scripts\diagnostics\detailed_slot_audit.py:27: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\diagnose_professor_map_and_rejections.py:16: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\diagnose_sort.py:4: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\find_best_sort.py:73: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=False)
+scripts\diagnostics\inspect_c50_loads.py:19: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\inspect_current_unscheduled.py:15: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\inspect_flask_preview.py:22: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\inspect_trace.py:79: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\profile_generation_phases.py:58: res = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\run_and_inspect_unscheduled.py:14: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\run_baseline.py:25: resp = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\scan_schedule_semester.py:13: print(f"Scanning {len(files_to_check)} files for schedule.semester references...")
+scripts\diagnostics\scan_schedule_semester.py:16: pattern = re.compile(r'semester', re.IGNORECASE)
+scripts\diagnostics\scan_schedule_semester.py:38: with open('scripts/diagnostics/schedule_semester_hits.txt', 'w', encoding='utf-8') as out:
+scripts\diagnostics\scan_schedule_semester.py:41: print("Saved to scripts/diagnostics/schedule_semester_hits.txt")
+scripts\diagnostics\test_determinism.py:25: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\test_exact_canonical_timeslots.py:40: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\test_fix_simulation.py:40: resp = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\test_flask_generate.py:24: response = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\test_load_sorting.py:56: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=False)
+scripts\diagnostics\test_patched_gen.py:17: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\test_sim_fix_all.py:52: resp = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\test_sorted_loads.py:60: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=False)
+scripts\diagnostics\test_trace_no_room_sort.py:44: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\test_with_2000_and_canonical.py:64: resp = test_client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+scripts\diagnostics\test_year_workload_sort.py:78: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'}, follow_redirects=False)
+scripts\diagnostics\trace_exact_rejections.py:20: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\trace_exact_rejections_updated.py:18: with app.app.test_request_context('/generate_schedule', method='POST', data={'semester': '2nd Semester'}):
+scripts\diagnostics\verify_dry_run_previews.py:22: resp = client.post('/generate_schedule', data={'semester': '2nd Semester', 'number_of_sections': '1'}, follow_redirects=True)
+scripts\diagnostics\verify_rendered_html.py:17: # Generate schedule for 2nd Semester
+scripts\diagnostics\verify_rendered_html.py:18: gen_res = client.post('/generate_schedule', data={'semester': '2nd Semester', 'number_of_sections': '1'}, follow_redirects=True)
+scripts\diagnostics\verify_route_map.py:42: 'api_semester_section_counts': {'scheduler'},
+templates\generated_professor_schedule.html:12: <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Professor Schedule to Excel">
+templates\generated_professor_schedule.html:15: <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Professor Schedule to PDF (NEUST format)">
+templates\generated_professor_schedule.html:33: <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-outline-dark">
+templates\generated_professor_schedule.html:46: <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?mode=preview&year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-info text-white">
+templates\generated_professor_schedule.html:190: data-semester="{{ block.semester or semester_filter or '' }}"
+templates\generated_professor_schedule.html:347: $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
+templates\generated_room_schedule.html:18: <a href="/room_schedule/{{ room.room_id }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Room Utilization to PDF (NEUST format)">
+templates\generated_room_schedule.html:21: <a href="/room_schedule/{{ room.room_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Room Schedule to Excel">
+templates\generated_room_schedule.html:39: <a href="/room_schedule/{{ room.room_id }}?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-outline-dark">
+templates\generated_room_schedule.html:52: <a href="/room_schedule/{{ room.room_id }}?mode=preview&year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-info text-white">
+templates\generated_room_schedule.html:222: {% if semester_filter %}
+templates\generated_room_schedule.html:223: <span class="badge-custom badge-success">{{ semester_filter }}</span>
+templates\generated_room_schedule.html:315: data-semester="{{ block.semester }}"
+templates\generated_room_schedule.html:473: <th>Semester</th>
+templates\generated_room_schedule.html:489: data-semester="{{ entry.semester or 'N/A' }}"
+templates\generated_room_schedule.html:501: <td>{{ entry.semester or 'TBA' }}</td>
+templates\generated_room_schedule.html:604: $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
+templates\generated_schedule.html:26: href="/schedule/{{ section.section_name or section.section }}/export?semester={{ semester_filter }}&major={{ major_filter }}&theme={{ current_theme or 'Blue' }}{% if is_preview %}&mode=preview{% endif %}"
+templates\generated_schedule.html:30: <a href="/schedule/{{ section.section_name or section.section }}/export_pdf?semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}"
+templates\generated_schedule.html:38: <a href="{{ url_for('delete_section_schedule', section_name=section.section or section.section_name, semester=section.semester, major=section.major) }}"
+templates\generated_schedule.html:61: <a href="/schedule/{{ section.section_name or section.section }}?semester={{ semester_filter }}&major={{ major_filter }}"
+templates\generated_schedule.html:76: <a href="/schedule/{{ section.section_name or section.section }}?mode=preview&semester={{ semester_filter }}&major={{ major_filter }}"
+templates\generated_schedule.html:97: {% if section.semester %}
+templates\generated_schedule.html:98: <span class="badge-custom badge-success">{{ section.semester }}</span>
+templates\generated_schedule.html:208: data-semester="{{ block.semester or section.semester or '' }}"
+templates\generated_schedule.html:497: $('#modalMeta').text('Section ' + ($t.data('section') || 'N/A') + ' | ' + ($t.data('semester') || 'N/A') + ($t.data('major') && $t.data('major') !== 'N/A' ? ' (' + $t.data('major') + ')' : '') + ' | ' + ($t.data('year') || 'N/A'));
+templates\preview_schedule.html:119: Section {{ item.section.section_name }} - {{ item.section.semester or 'Semester not set' }}
+templates\preview_schedule.html:126: <a href="/schedule/{{ item.section.section }}?mode=preview&semester={{ (item.section.semester or '') | urlencode }}&major={{ (item.section.major or '') | urlencode }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Weekly Grid Preview">
+templates\professor_schedule.html:9: <p class="page-subtitle">Read-only view of teaching schedules grouped by professor for the active semester</p>
+templates\professor_schedule.html:11: {% if active_semester %}
+templates\professor_schedule.html:13: <i class="bx bx-calendar me-1"></i> Active Semester: S.Y. {{ active_semester.school_year }} — {{ active_semester.term }}
+templates\professor_schedule.html:91: <div class="section-card card-custom p-3 transition" data-href="/professor_schedule/{{ professor.professor_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}" tabindex="0" role="button" aria-label="View schedule for Professor {{ professor.professor_name }}" style="cursor: pointer;">
+templates\room_schedule.html:9: <p class="page-subtitle">Read-only view of room utilization and bookings for the active semester</p>
+templates\room_schedule.html:11: {% if active_semester %}
+templates\room_schedule.html:13: <i class="bx bx-calendar me-1"></i> Active Semester: S.Y. {{ active_semester.school_year }} — {{ active_semester.term }}
+templates\room_schedule.html:84: <div class="section-card card-custom p-3 transition" data-href="/room_schedule/{{ room.room_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}" tabindex="0" role="button" aria-label="View schedule for Room {{ room.room_name }}" style="cursor: pointer;">
+templates\schedules.html:76: <!-- Semester Filter -->
+templates\schedules.html:77: <label class="form-label small fw-bold text-muted mb-1" for="semesterFilter">Semester</label>
+templates\schedules.html:78: <select id="semesterFilter" name="semester" class="form-select form-select-sm">
+templates\schedules.html:79: <option value="">All Semesters</option>
+templates\schedules.html:80: {% for sem in semester_options %}
+templates\schedules.html:81: <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
+templates\schedules.html:105: {% if year_filter or semester_filter or major_filter or (is_admin and program_filter) %}
+templates\schedules.html:154: <span class="badge-custom badge-success ms-1">{{ item.section.semester or 'No Semester' }}</span>
+templates\schedules.html:159: <a href="/schedule/{{ item.section.section }}/export?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-success btn-sm stop-prop" title="Export Section Timetable to Excel">
+templates\schedules.html:162: <a href="/schedule/{{ item.section.section }}/export_pdf?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-danger btn-sm stop-prop" title="Export Section Timetable to PDF">
+templates\schedules.html:165: <a href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Section Timetable Schedule">
+templates\schedules.html:172: data-semester="{{ item.section.semester or '' }}"
+templates\schedules.html:177: <a href="{{ url_for('delete_section_schedule', section_name=item.section.section, semester=item.section.semester, major=item.section.major) }}" class="btn btn-danger btn-sm stop-prop" data-action="delete" data-method="POST" data-confirm="Are you sure you want to delete the entire schedule for Section {{ item.section.section }}?" data-title="Delete Section Schedule" title="Delete Section Schedule">
+templates\schedules.html:223: <a href="/delete_schedule/{{ entry.schedule_id }}?section_name={{ item.section.section }}&semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-danger btn-sm stop-prop" data-action="delete" data-method="GET" data-confirm="Delete this schedule entry?" data-title="Delete Schedule Entry" title="Delete Entry">
+templates\schedules.html:262: There is currently no active schedule for this program. You can generate a new schedule for either semester or restore an archived schedule version.
+templates\schedules.html:333: <label class="form-label" for="edit-semester-input">Semester</label>
+templates\schedules.html:334: <input type="text" class="form-control" id="edit-semester-input">
+templates\schedules.html:366: var editSemesterInput = document.getElementById('edit-semester-input');
+templates\schedules.html:470: editSemesterInput.value = button.getAttribute('data-semester') || '';
+templates\schedules.html:481: semester: editSemesterInput.value,
+templates\schedule_archive.html:29: <label class="form-label fw-semibold small text-muted" for="semesterFilter">Semester</label>
+templates\schedule_archive.html:30: <select id="semesterFilter" name="semester" class="form-select">
+templates\schedule_archive.html:31: <option value="">All Semesters</option>
+templates\schedule_archive.html:32: {% for sem in semester_options %}
+templates\schedule_archive.html:33: <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
+templates\schedule_archive.html:86: <th style="width: 16%;">Semester & Program</th>
+templates\schedule_archive.html:112: <span class="badge bg-primary px-2 py-1 mb-1">{{ batch.semester }}</span>
+templates\schedule_archive.html:138: data-semester="{{ batch.semester }}"
+templates\schedule_archive.html:148: data-confirm="Are you sure you want to permanently delete the archived schedule records for {{ batch.semester }} ({{ batch.archived_at_fmt }})? This action cannot be undone."
+templates\schedule_archive.html:171: We couldn't find any archived schedules matching the selected semester, program, or date range. Try clearing your filters or selecting a broader date range.
+templates\schedule_archive.html:212: <span class="text-muted">Target Semester:</span>
+templates\schedule_archive.html:213: <strong id="restoreModalSem" class="text-dark">1st Semester</strong>
+templates\schedule_archive.html:273: var semester = this.dataset.semester;
+templates\schedule_archive.html:279: restoreModalSem.textContent = semester;
+templates\schedule_archive_detail.html:16: <h1 class="page-title mb-1">{{ batch_info.semester }} ({{ batch_info.program or 'All Programs' }})</h1>
+templates\schedule_archive_detail.html:47: <div class="text-muted small">Semester & Batch ID</div>
+templates\schedule_archive_detail.html:48: <div class="fw-semibold text-dark">{{ batch_info.semester }}</div>
+templates\schedule_archive_detail.html:161: <p class="mb-0 small">The currently active schedule for {{ batch_info.semester }} will be safely moved to the archive before restoring this version.</p>
+templates\schedule_archive_detail.html:167: <span class="text-muted">Semester:</span>
+templates\schedule_archive_detail.html:168: <strong class="text-dark">{{ batch_info.semester }}</strong>
+tests\test_change_requirements.py:298: # Checklist Item 6: Archive rule (same semester blocked, different allowed, archive button, restore)
+tests\test_change_requirements.py:300: def test_checklist_archive_rule_same_semester_blocked(monkeypatch):
+tests\test_change_requirements.py:301: """Active schedule for the SAME semester blocks generation with clear error."""
+tests\test_change_requirements.py:305: {'schedule_id': 500, 'program_id': 1, 'semester': '1st Semester', 'archive': False, 'batch_id': 'active-1'}
+tests\test_change_requirements.py:312: assert res['active_schedule']['same_semester'] is True
+tests\test_change_requirements.py:316: def test_checklist_archive_rule_different_semester_allowed(monkeypatch):
+tests\test_change_requirements.py:317: """Active schedule for a DIFFERENT semester is allowed and returns active_schedule info to be atomically soft-archived."""
+tests\test_change_requirements.py:321: {'schedule_id': 500, 'program_id': 1, 'semester': '1st Semester', 'archive': False, 'batch_id': 'active-1'}
+tests\test_change_requirements.py:328: assert res['active_schedule']['same_semester'] is False
+tests\test_change_requirements.py:389: migration_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'migrations', '20261001_remove_semester_add_specialization_rework_archive.sql')
+tests\test_change_requirements.py:728: resp = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '30'}, follow_redirects=True)
+tests\test_change_requirements.py:789: resp = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '90'}, follow_redirects=True)
+tests\test_change_requirements.py:847: resp2 = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '60'}, follow_redirects=True)
+tests\test_change_requirements.py:867: resp3 = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '60'}, follow_redirects=True)
+tests\test_change_requirements.py:920: resp_reg = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '90'}, follow_redirects=True)
+tests\test_change_requirements.py:939: resp_lohb = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '90'}, follow_redirects=True)
+tests\test_excel_export.py:47: buf = excel_export.generate_timetable_excel('room', room, entries, filter_metadata={'semester': '1st Semester'})
+tests\test_excel_export.py:85: buf = excel_export.generate_timetable_excel('section', section, entries, filter_metadata={'semester': '2nd Semester', 'year': '2', 'major': 'Network'})
+tests\test_excel_export.py:121: buf = excel_export.generate_timetable_excel('professor', professor, entries, filter_metadata={'semester': '1st Semester'})
+tests\test_excel_export.py:231: resp = client.get('/room_schedule/10/export?semester=1st+Semester')
+tests\test_excel_export.py:287: resp = client.get('/schedule/1A/export?semester=1st+Semester')
+tests\test_generate_schedule_preview.py:54: {'course_id': 1, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:55: {'course_id': 2, 'course_name': 'IT201 - Data Structures', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:56: {'course_id': 3, 'course_name': 'IT301 - Web Systems', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:57: {'course_id': 4, 'course_name': 'IT401 - Capstone Project 1', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'specialization': 'Database Systems'},
+tests\test_generate_schedule_preview.py:124: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:126: # Post only semester (no year_level required)
+tests\test_generate_schedule_preview.py:128: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:167: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:171: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:214: def test_generate_schedule_second_semester_with_major_sections(monkeypatch):
+tests\test_generate_schedule_preview.py:227: {'course_id': 10, 'course_name': 'IT102 - OOP', 'year_level': 1, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+tests\test_generate_schedule_preview.py:228: {'course_id': 20, 'course_name': 'IT202 - Algorithms', 'year_level': 2, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+tests\test_generate_schedule_preview.py:229: {'course_id': 30, 'course_name': 'IT302 - Advanced DB', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Database Systems', 'specialization': 'Database Systems'},
+tests\test_generate_schedule_preview.py:230: {'course_id': 31, 'course_name': 'IT303 - Web Frameworks', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Systems', 'specialization': 'Web Systems'},
+tests\test_generate_schedule_preview.py:231: {'course_id': 32, 'course_name': 'IT304 - Network Admin', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking', 'specialization': 'Networking'},
+tests\test_generate_schedule_preview.py:249: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:252: 'semester': '2nd Semester',
+tests\test_generate_schedule_preview.py:281: # 4th year is not generated for 2nd semester
+tests\test_generate_schedule_preview.py:285: def test_generate_schedule_first_semester_with_4th_year_major_sections(monkeypatch):
+tests\test_generate_schedule_preview.py:298: {'course_id': 10, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+tests\test_generate_schedule_preview.py:299: {'course_id': 20, 'course_name': 'IT201 - Data Structures', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+tests\test_generate_schedule_preview.py:300: {'course_id': 30, 'course_name': 'IT301 - Systems Analysis', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+tests\test_generate_schedule_preview.py:301: {'course_id': 40, 'course_name': 'IT401 - Advanced DB Project', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Database Systems', 'specialization': 'Database Systems'},
+tests\test_generate_schedule_preview.py:302: {'course_id': 41, 'course_name': 'IT402 - Enterprise Web Apps', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Systems', 'specialization': 'Web Systems'},
+tests\test_generate_schedule_preview.py:303: {'course_id': 42, 'course_name': 'IT403 - Enterprise Networking', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking', 'specialization': 'Networking'},
+tests\test_generate_schedule_preview.py:322: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:325: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:459: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:500: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:570: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:573: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:590: def test_generate_schedule_ignores_other_semester_schedule_bookings(monkeypatch):
+tests\test_generate_schedule_preview.py:591: """Test that existing bookings from a different semester do not block room/prof allocation."""
+tests\test_generate_schedule_preview.py:609: 'prof_id': 1, 'semester': '2nd Semester', 'program': 'BSIT'
+tests\test_generate_schedule_preview.py:617: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:620: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:658: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:695: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:698: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:735: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:786: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:811: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:814: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:853: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1043: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1102: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1165: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1215: 'semester': '2nd Semester',
+tests\test_generate_schedule_preview.py:1224: assert updated_rows.get('semester') == '2nd Semester'
+tests\test_generate_schedule_preview.py:1305: 'section': '1A', 'semester': '1st Semester', 'major': 'General',
+tests\test_generate_schedule_preview.py:1351: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1370: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1436: 'section': '1A', 'semester': '1st Semester', 'major': 'General',
+tests\test_generate_schedule_preview.py:1465: {'course_id': 10, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:1492: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:1496: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1530: {'course_id': 20, 'course_name': 'IT102 - Computer Programming', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:1555: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:1558: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1585: {'course_id': 30, 'course_name': 'IT103 - Discrete Structures', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:1613: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:1617: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1648: {'course_id': 40, 'course_name': 'IT104 - Web Development', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:1670: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:1674: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1701: {'course_id': 50, 'course_name': 'IT105 - Systems Analysis', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+tests\test_generate_schedule_preview.py:1728: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:1732: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:1874: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:2030: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:2199: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:2268: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:2320: 'semester': '1st Semester',
+tests\test_generate_schedule_preview.py:2396: {'course_id': 74, 'course_name': 'IT-CAP01 (WST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'major': 'Web', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
+tests\test_generate_schedule_preview.py:2397: {'course_id': 50, 'course_name': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'major': 'General', 'lecture_hours': 2, 'lab_hours': 2, 'ilp_hours': 1, 'program_id': 1},
+tests\test_generate_schedule_preview.py:2445: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:2446: monkeypatch.setattr(app_module, 'calculate_semester_section_counts', lambda **kwargs: {
+tests\test_generate_schedule_preview.py:2459: resp = client.post('/generate_schedule', data={'semester': '2nd Semester'})
+tests\test_generate_schedule_preview.py:2482: {'course_id': 999, 'course_name': 'ZERO-01', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
+tests\test_generate_schedule_preview.py:2515: monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
+tests\test_generate_schedule_preview.py:2516: monkeypatch.setattr(app_module, 'calculate_semester_section_counts', lambda **kwargs: {
+tests\test_generate_schedule_preview.py:2528: resp = client.post('/generate_schedule', data={'semester': '1st Semester'})
+tests\test_generation_safeguards_and_hang_fix.py:55: res = client.post('/generate_schedule', data={'semester': '2nd Semester'}, headers={'Accept': 'application/json'})
+tests\test_generation_safeguards_and_hang_fix.py:62: res_form = client.post('/generate_schedule', data={'semester': '2nd Semester'})
+tests\test_pdf_export.py:51: buf = pdf_export.generate_timetable_pdf('room', room, entries, filter_metadata={'semester': '1st Semester'})
+tests\test_pdf_export.py:71: buf = pdf_export.generate_timetable_pdf('section', section, entries, filter_metadata={'semester': '2nd Semester', 'year': '2', 'major': 'Network'})
+tests\test_pdf_export.py:91: buf = pdf_export.generate_timetable_pdf('professor', professor, entries, filter_metadata={'semester': '1st Semester'})
+tests\test_pdf_export.py:196: """Test GET /professor_schedule/<professor_id>/export_pdf?year=&semester=&major= does not 404 and treats empty filters as no filter."""
+tests\test_pdf_export.py:256: resp = client.get('/professor_schedule/12/export_pdf?year=&semester=&major=')
+tests\test_pdf_export.py:379: """Test GET /schedule/<section_name>/export_pdf?year=&semester=&major= properly handles empty filters."""
+tests\test_pdf_export.py:440: resp = client.get('/schedule/2B/export_pdf?year=&semester=&major=')
+tests\test_pdf_export.py:524: buf_prof = pdf_export.generate_timetable_pdf('professor', prof, entries, filter_metadata={'semester': '1st Semester', 'school_year': '2026-2027'})
+tests\test_pdf_export.py:536: buf_sec = pdf_export.generate_timetable_pdf('section', sec, sec_entries, filter_metadata={'semester': '2nd Semester', 'school_year': '2026-2027'})
+tests\test_professor_load_identity_and_no_legacy.py:3: that no legacy professor table/columns (professors, prof_id, schedule.semester, schedule.major)
+tests\test_professor_load_identity_and_no_legacy.py:82: res = client.get('/professor_schedule?semester=2nd+Semester')
+tests\test_professor_schedule_fix.py:78: 'semester': '1st Semester',
+tests\test_professor_schedule_fix.py:91: 'semester': '1st Semester',
+tests\test_professor_schedule_fix.py:156: 'semester': '1st Semester',
+tests\test_professor_schedule_fix.py:169: 'semester': '1st Semester',
+tests\test_professor_schedule_fix.py:223: 'semester': '1st Semester',
+tests\test_professor_schedule_fix.py:298: 'semester': '1st Semester',
+tests\test_program_semester_dean_restructure.py:143: {'timeslot_id': 1, 'semester_id': 10, 'start_day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
+tests\test_program_semester_dean_restructure.py:198: forbidden_endpoints = ['/rooms', '/timeslot', '/academic_ranking', '/semesters', '/section_config', '/users']
+tests\test_room_badges.py:24: {'schedule_id': 1, 'room_id': 1, 'section': '1A', 'semester': '1st Semester', 'day': 'Monday', 'class_start': '08:00:00', 'class_end': '11:00:00', 'archive': False, 'program_id': 1},
+tests\test_room_badges.py:25: {'schedule_id': 2, 'room_id': 2, 'section': '1B', 'semester': '1st Semester', 'day': 'Tuesday', 'class_start': '08:00:00', 'class_end': '11:00:00', 'archive': False, 'program_id': 1},
+tests\test_room_badges.py:26: {'schedule_id': 3, 'room_id': 3, 'section': '1C', 'semester': '1st Semester', 'day': 'Wednesday', 'class_start': '08:00:00', 'class_end': '11:00:00', 'archive': False, 'program_id': 1},
+tests\test_room_badges.py:27: {'schedule_id': 4, 'room_id': 4, 'section': '1D', 'semester': '1st Semester', 'day': 'Thursday', 'class_start': '08:00:00', 'class_end': '11:00:00', 'archive': False, 'program_id': 1},
+tests\test_schedule_archive.py:68: 'semester': '1st Semester',
+tests\test_schedule_archive.py:87: 'semester': '1st Semester',
+tests\test_schedule_archive.py:119: 'semester': '1st Semester',
+tests\test_schedule_archive.py:129: 'semester': '1st Semester',
+tests\test_schedule_archive.py:138: 'semester': '1st Semester',
+tests\test_schedule_archive.py:261: def test_confirm_preview_second_semester_sets_active_semester_and_redirects(monkeypatch):
+tests\test_schedule_archive.py:281: 'semester': '2nd Semester',
+tests\test_schedule_archive.py:294: assert 'semester=2nd+Semester' in response.headers.get('Location', '') or 'semester=2nd%20Semester' in response.headers.get('Location', '')
+tests\test_schedule_archive.py:297: assert session.get('active_semester') == '2nd Semester'
+tests\test_schedule_archive.py:299: assert session['generated_sections'][0]['semester'] == '2nd Semester'
+tests\test_schedule_archive.py:314: 'semester': '1st Semester',
+tests\test_schedule_archive.py:325: 'semester': '2nd Semester',
+tests\test_schedule_archive.py:375: 'semester': '1st Semester',
+tests\test_schedule_archive.py:386: 'semester': '2nd Semester',
+tests\test_schedule_archive.py:450: {'schedule_id': 1, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
+tests\test_schedule_archive.py:451: {'schedule_id': 2, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
+tests\test_schedule_archive.py:452: {'schedule_id': 3, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
+tests\test_schedule_archive.py:453: {'schedule_id': 4, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
+tests\test_schedule_archive.py:454: {'schedule_id': 5, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
+tests\test_schedule_archive.py:481: """Empty filter query params like semester='' or program='' must be treated as no filter."""
+tests\test_schedule_archive.py:493: 'semester': '1st Semester',
+tests\test_schedule_archive.py:508: # Pass empty filters as well as 'All Semesters' / 'All Programs'
+tests\test_schedule_archive.py:509: response = client.get('/schedule_archive?semester=&program=&date_from=&date_to=')
+tests\test_schedule_archive.py:513: response2 = client.get('/schedule_archive?semester=All+Semesters&program=All+Programs')
+tests\test_schedule_archive.py:576: rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_name': 'BSIT'}} for i in range(1000)]
+tests\test_schedule_archive.py:578: rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_name': 'BSIT'}} for i in range(1000, 2000)]
+tests\test_schedule_archive.py:580: rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_name': 'BSIT'}} for i in range(2000, 2500)]
+tests\test_schedule_archive.py:622: *[{'schedule_id': 100 + i, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'archive_batch_id': batch_id_1, 'archived_at': ts_1, 'program': {'program_name': 'BSIT'}} for i in range(15)],
+tests\test_schedule_archive.py:624: *[{'schedule_id': 200 + i, 'semester': '1st Semester', 'section': '2A', 'archive': True, 'archive_batch_id': batch_id_2, 'archived_at': ts_2, 'program': {'program_name': 'BSIT'}} for i in range(25)],
+tests\test_schedule_archive.py:694: 'semester': '1st Semester',
+tests\test_schedule_prepared_by_pdf.py:38: 'semester': '1st Semester',
+tests\test_schedule_prepared_by_pdf.py:77: monkeypatch.setattr(app_module, '_get_active_semester', lambda pid: {'school_year': '2026-2027', 'term': '1st Semester'})
+tests\test_soft_delete_schedule.py:78: return Resp([{'schedule_id': 42, 'section': 'BSIT-1A', 'semester': '1st Semester', 'archive': False}])
+tests\test_soft_delete_schedule.py:81: {'schedule_id': 42, 'section': 'BSIT-1A', 'semester': '1st Semester', 'program': 'BSIT', 'major': None, 'archive': True}
+tests\test_soft_delete_schedule.py:84: {'schedule_id': 10, 'section': 'BSIT-1A', 'semester': '1st Semester', 'program': 'BSIT', 'major': None, 'archive': False}

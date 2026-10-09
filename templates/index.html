@@ -128,8 +128,8 @@
     <form id="schedule-form" action="/generate_schedule" method="post">
         <div class="row g-3">
             <div class="col-md-6">
-                <label class="form-label">Program</label>
-                <input type="text" class="form-control" value="{{ session['program'] or 'Global / All Programs' }}"
+                <label class="form-label" for="program-display">Program</label>
+                <input type="text" class="form-control" id="program-display" name="program_display" value="{{ session['program'] or 'Global / All Programs' }}"
                     readonly>
             </div>
 
@@ -640,7 +640,7 @@
                                     form.method = 'POST';
                                     form.className = 'd-inline m-0';
                                     form.onsubmit = function() {
-                                        return confirm('Archive the current active schedule now? This will allow you to generate a new schedule immediately.');
+                                        return confirm('This removes the schedule from active use. You can restore it later from the archive.');
                                     };
 
                                     var hidden = document.createElement('input');
@@ -771,7 +771,7 @@
                     showToast('Please select a Semester first.', 'warning');
                     return;
                 }
-                if (submitBtn && submitBtn.disabled) {
+                if (submitBtn && !submitBtn.__loaderState && submitBtn.disabled) {
                     e.preventDefault();
                     showToast('Cannot generate schedule due to mismatched section counts or active schedule conflict.', 'danger');
                     return;
@@ -783,6 +783,11 @@
                         subtitle: 'This may take a moment. Please don\u2019t close or refresh this page.'
                     });
                 }
+                setTimeout(function () {
+                    if (e.defaultPrevented && typeof window.AppLoader !== 'undefined') {
+                        window.AppLoader.hideGenOverlay();
+                    }
+                }, 50);
             });
         }
 

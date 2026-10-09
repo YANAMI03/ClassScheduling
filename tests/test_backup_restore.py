@@ -79,7 +79,7 @@ def test_backup_database_full_export(monkeypatch):
     """Test full backup export with metadata and proper table structure."""
     fake_tables = {
         'program_department': [{'program_name': 'BSIT', 'department_name': 'CICT'}],
-        'professor': [{'prof_id': 1, 'first_name': 'John', 'last_name': 'Doe'}],
+        'room': [{'room_id': 1, 'room_name': 'Room 101'}],
         'course': [{'course_id': 101, 'course_name': 'Data Structures', 'program': 'BSIT'}],
     }
     monkeypatch.setattr(app_module, 'supabase', FakeSupabaseClient(fake_tables))
@@ -101,13 +101,13 @@ def test_backup_database_full_export(monkeypatch):
     assert backup_data['_metadata']['is_partial'] is False
     assert 'program_department' in backup_data['data']
     assert backup_data['data']['program_department'] == [{'program_name': 'BSIT', 'department_name': 'CICT'}]
-    assert backup_data['data']['professor'] == [{'prof_id': 1, 'first_name': 'John', 'last_name': 'Doe'}]
+    assert backup_data['data']['room'] == [{'room_id': 1, 'room_name': 'Room 101'}]
 
 
 def test_backup_database_partial_export(monkeypatch):
     """Test partial backup export via query parameter."""
     fake_tables = {
-        'professor': [{'prof_id': 1, 'first_name': 'John', 'last_name': 'Doe'}],
+        'room': [{'room_id': 1, 'room_name': 'Room 101'}],
         'course': [{'course_id': 101, 'course_name': 'Data Structures', 'program': 'BSIT'}],
     }
     monkeypatch.setattr(app_module, 'supabase', FakeSupabaseClient(fake_tables))
@@ -118,15 +118,15 @@ def test_backup_database_partial_export(monkeypatch):
         sess['role'] = 'admin'
         sess['username'] = 'admin_user'
 
-    res = client.get('/backup?tables=course,professor')
+    res = client.get('/backup?tables=course,room')
     assert res.status_code == 200
 
     backup_data = json.loads(res.data.decode('utf-8'))
     assert backup_data['_metadata']['is_partial'] is True
-    assert set(backup_data['_metadata']['tables_included']) == {'course', 'professor'}
+    assert set(backup_data['_metadata']['tables_included']) == {'course', 'room'}
     assert 'course' in backup_data['data']
-    assert 'professor' in backup_data['data']
-    assert 'room' not in backup_data['data']
+    assert 'room' in backup_data['data']
+    assert 'timeslot' not in backup_data['data']
 
 
 def test_restore_database_validation(monkeypatch):
@@ -209,3 +209,54 @@ def test_restore_database_client_side_fallback(monkeypatch):
 
     assert res.status_code == 200
     assert b'Database restored successfully' in res.data
+
+
+def test_restore_database_legacy_format_mapping(monkeypatch):
+    """Test that legacy backup with professor table and prof_course derives professor_name."""
+    fake_client = FakeSupabaseClient()
+    monkeypatch.setattr(app_module, 'supabase', fake_client)
+
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-admin-123'
+        sess['role'] = 'admin'
+        sess['username'] = 'admin'
+
+    legacy_backup = {
+        "_metadata": {"version": "1.0"},
+        "data": {
+            "program": [{"id": 1, "program_name": "BSIT"}],
+            "professor": [{"prof_id": 5, "first_name": "Maria", "last_name": "Santos"}],
+            "prof_course": [{"id": 20, "prof_id": 5, "course_id": 101, "sections": 2}],
+            "schedule": [{"schedule_id": 50, "course_id": 101, "prof_course_id": 20, "day": "M"}]
+        }
+    }
+
+    res = client.post('/restore', data={
+        'backup_file': (io.BytesIO(json.dumps(legacy_backup).encode('utf-8')), 'legacy_backup.json'),
+        'clear_existing': 'false'
+    }, follow_redirects=True)
+
+    assert res.status_code == 200
+    assert b'Database restored successfully' in res.data
+
+
+def test_restore_database_empty_data_rejection(monkeypatch):
+    """Test that backup with empty data is rejected and no tables are wiped."""
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-admin-123'
+        sess['role'] = 'admin'
+        sess['username'] = 'admin'
+
+    empty_backup = {
+        "_metadata": {"version": "2.0"},
+        "data": {}
+    }
+
+    res = client.post('/restore', data={
+        'backup_file': (io.BytesIO(json.dumps(empty_backup).encode('utf-8')), 'empty_backup.json')
+    }, follow_redirects=True)
+
+    assert res.status_code == 200
+    assert b'No valid table data found' in res.data

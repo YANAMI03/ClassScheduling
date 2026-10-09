@@ -78,7 +78,7 @@ def test_add_course_inserts_semester(monkeypatch):
     assert response.headers['Location'].endswith('/courses')
     assert len(fake_supabase.table_obj.inserted) > 0
     assert fake_supabase.table_obj.inserted[0]['semester'] == '1st Semester'
-    assert fake_supabase.table_obj.inserted[0]['units'] == 3
+    assert fake_supabase.table_obj.inserted[0]['course_name'] == 'CC-100'
 
 
 def test_edit_course_updates_semester(monkeypatch):
@@ -100,7 +100,7 @@ def test_edit_course_updates_semester(monkeypatch):
     assert response.headers['Location'].endswith('/courses')
     assert len(fake_supabase.table_obj.updated) > 0
     assert fake_supabase.table_obj.updated[0]['semester'] == '2nd Semester'
-    assert fake_supabase.table_obj.updated[0]['units'] == 4
+    assert fake_supabase.table_obj.updated[0]['course_name'] == 'CC-100'
 
 
 def test_add_course_requires_semester(monkeypatch):

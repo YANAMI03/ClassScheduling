@@ -171,11 +171,9 @@ def test_change1_teaching_load_summary_markup(test_setup):
         assert pill is not None
         assert 'Awaiting Selection' in pill.text
 
-        # Weekly Hours row and Total Units row
+        # Weekly Hours row (Total Units widget removed)
         assert soup.find(id='lbl-total-hours') is not None
         assert soup.find(id='bar-total-hours') is not None
-        assert soup.find(id='lbl-total-units') is not None
-        assert soup.find(id='bar-total-units') is not None
 
         # 2-cell box for counts
         assert soup.find(id='lbl-selected-courses-count') is not None
@@ -198,14 +196,11 @@ def test_change2_scheduler_professor_scoping(test_setup):
             sess['program_id'] = 1
             sess['program'] = 'BSIT'
 
+        # /professors route is removed -> returns 404
         res = client.get('/professors')
-        assert res.status_code == 200
-        html = res.data.decode('utf-8')
-        assert 'Alice ITOnly' in html
-        assert 'Charlie BothProgs' in html
-        assert 'Bob DSOnly' not in html  # BSDS-only professor must NOT appear
+        assert res.status_code == 404
 
-        # Dropdown in professor_load
+        # Table in professor_load only includes scoped professors
         res_load = client.get('/professor_load')
         assert res_load.status_code == 200
         load_html = res_load.data.decode('utf-8')
@@ -223,11 +218,13 @@ def test_change2_scheduler_tampering_403(test_setup):
             sess['program_id'] = 1
             sess['program'] = 'BSIT'
 
-        # Prof 20 is BSDS-only. Tampering must return 403
-        assert client.get('/api/professor_load/20').status_code == 403
-        assert client.post('/add_professor_load', data={'prof_id': '20', 'course_ids': ['101']}).status_code == 403
-        assert client.post('/edit_professor/20', data={'academic_ranking_id': '1'}).status_code == 403
-        assert client.post('/delete_professor/20', headers={'X-Requested-With': 'XMLHttpRequest'}).status_code == 403
+        # Removed routes return 404 (never 403)
+        assert client.get('/api/professor_load/20').status_code == 404
+        assert client.post('/add_professor_load', data={'prof_id': '20', 'course_ids': ['101']}).status_code == 404
+        assert client.post('/edit_professor/20', data={'academic_ranking_id': '1'}).status_code == 404
+        assert client.post('/delete_professor/20', headers={'X-Requested-With': 'XMLHttpRequest'}).status_code == 404
+
+        # Prof 20 is BSDS-only. Tampering on scoped schedule routes returns 403
         assert client.get('/professor_schedule/20').status_code == 403
         assert client.get('/export/professor_schedule/20').status_code == 403
         assert client.get('/export/professor_schedule/20/pdf').status_code == 403
@@ -242,15 +239,13 @@ def test_change2_block_unlinking_with_existing_loads(test_setup):
             sess['user_id'] = 99
             sess['role'] = 'admin'
 
-        # Charlie (id=30) has teaching load in BSIT (prog 1) and BSDS (prog 2).
-        # Admin tries to unlink Charlie from BSIT by passing only program_ids=[2]
+        # /edit_professor was removed with professors entity -> returns 404
         res = client.post(
             '/edit_professor/30',
             data={'academic_ranking_id': '1', 'program_ids': ['2']},
             headers={'X-Requested-With': 'XMLHttpRequest'}
         )
-        assert res.status_code == 400
-        assert 'Cannot unlink professor from' in res.data.decode('utf-8')
+        assert res.status_code == 404
 
 
 def test_change2_importer_rejects_out_of_program_prof(test_setup):
@@ -308,7 +303,7 @@ def test_change3_courses_tabs_admin_vs_scheduler(test_setup):
         assert soup_admin.find(id='program-tab-1') is not None
         assert soup_admin.find(id='program-tab-2') is not None
 
-        # Scheduler in BSIT sees only their program tab
+        # Scheduler has zero access to courses (receives 403)
         with client.session_transaction() as sess:
             sess['user_id'] = 1
             sess['role'] = 'scheduler'
@@ -316,12 +311,7 @@ def test_change3_courses_tabs_admin_vs_scheduler(test_setup):
             sess['program'] = 'BSIT'
 
         res_sched = client.get('/courses')
-        assert res_sched.status_code == 200
-        soup_sched = BeautifulSoup(res_sched.data.decode('utf-8'), 'html.parser')
-        assert soup_sched.find(id='program-tab-all') is None
-        assert soup_sched.find(id='program-tab-2') is None
-        assert soup_sched.find(id='program-tab-scheduler') is not None
-        assert 'BSIT' in soup_sched.find(id='program-tab-scheduler').text
+        assert res_sched.status_code == 403
 
 
 def test_change3_scheduler_tampering_url_returns_403(test_setup):
@@ -333,43 +323,37 @@ def test_change3_scheduler_tampering_url_returns_403(test_setup):
             sess['program_id'] = 1
             sess['program'] = 'BSIT'
 
-        # Schedulers requesting other program or "all" must receive 403
+        # Schedulers requesting any courses URL must receive 403
         assert client.get('/courses?program=2').status_code == 403
         assert client.get('/courses?program=all').status_code == 403
         assert client.get('/courses?program=BSDS').status_code == 403
-
-        # Schedulers requesting own program gets 200
-        assert client.get('/courses?program=1').status_code == 200
+        assert client.get('/courses?program=1').status_code == 403
 
 
 def test_change3_add_course_program_selection(test_setup):
     app, _ = test_setup
     with app.test_client() as client:
-        # Scheduler: Add Course form has program locked
+        # Scheduler: /courses and /add_course are blocked completely with 403
         with client.session_transaction() as sess:
             sess['user_id'] = 1
             sess['role'] = 'scheduler'
             sess['program_id'] = 1
             sess['program'] = 'BSIT'
 
-        res = client.get('/courses')
-        soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
-        prog_hidden = soup.find('input', {'name': 'program_id', 'type': 'hidden'})
-        assert prog_hidden is not None
-        assert prog_hidden.get('value') == '1'
+        res_get = client.get('/courses')
+        assert res_get.status_code == 403
 
-        # Schedulers tampering with program_id on /add_course returns 403
-        res_tamper = client.post('/add_course', data={
+        res_post = client.post('/add_course', data={
             'course_name': 'HACK-101',
-            'units': '3',
-            'program_id': '2',
+            'program_id': '1',
             'year_level': '1',
             'semester': '1st Semester'
         })
-        assert res_tamper.status_code == 403
+        assert res_post.status_code == 403
 
 
 def test_edit_modal_contains_teaching_load_summary_gauge(test_setup):
+    """Verify edit modal and edit panel are completely removed from professor_load page."""
     app, _ = test_setup
     with app.test_client() as client:
         with client.session_transaction() as sess:
@@ -383,31 +367,9 @@ def test_edit_modal_contains_teaching_load_summary_gauge(test_setup):
         html = res.data.decode('utf-8')
         soup = BeautifulSoup(html, 'html.parser')
 
-        edit_panel = soup.find('div', {'id': 'edit-load-panel'})
-        assert edit_panel is not None
-        assert 'Teaching Load Summary' in edit_panel.get_text()
-
-        # Gauge components in Edit Modal
-        assert edit_panel.find(id='edit-load-status-badge') is not None
-        assert edit_panel.find(id='edit-bar-total-hours') is not None
-        assert edit_panel.find(id='edit-lbl-total-hours') is not None
-        assert edit_panel.find(id='edit-lbl-max-hours') is not None
-        assert edit_panel.find(id='edit-caption-other-hours') is not None
-
-        assert edit_panel.find(id='edit-bar-total-units') is not None
-        assert edit_panel.find(id='edit-lbl-total-units') is not None
-        assert edit_panel.find(id='edit-lbl-max-units') is not None
-        assert edit_panel.find(id='edit-lbl-min-units') is not None
-        assert edit_panel.find(id='edit-caption-other-units') is not None
-
-        assert edit_panel.find(id='edit-lbl-courses-count') is not None
-        assert edit_panel.find(id='edit-lbl-sections-count') is not None
-        assert edit_panel.find(id='edit-breakdown-list') is not None
-
-        # JS updates the edit gauge
-        assert 'updateEditLoadPanel()' in html
-        assert 'editCrossUnits' in html
-        assert 'editCrossHours' in html
+        # Edit modal and panel must NOT exist
+        assert soup.find('div', {'id': 'editModal'}) is None
+        assert soup.find('div', {'id': 'edit-load-panel'}) is None
 
 
 def test_no_loads_banner_uses_d_none_when_loads_exist(test_setup, monkeypatch):
