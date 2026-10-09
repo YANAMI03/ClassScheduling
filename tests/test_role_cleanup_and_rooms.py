@@ -245,7 +245,7 @@ def test_admin_courses_crud_and_protection(extended_client):
 def test_scheduler_access_to_courses(extended_client):
     client, _ = extended_client
     _login_as(client, 'scheduler')
-    assert client.get('/courses').status_code == 200
+    assert client.get('/courses').status_code == 403
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -255,13 +255,13 @@ def test_scheduler_access_to_courses(extended_client):
 def test_professors_routes_restored(extended_client):
     client, fake_db = extended_client
     _login_as(client, 'scheduler')
-    assert client.get('/professors').status_code == 200
+    assert client.get('/professors').status_code == 404
 
 
 def test_admin_access_to_professors(extended_client):
     client, _ = extended_client
     _login_as(client, 'admin')
-    assert client.get('/professors').status_code == 200
+    assert client.get('/professors').status_code == 404
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -345,9 +345,9 @@ def test_scheduler_professor_load_and_generate_schedule(extended_client):
     assert 'dean' not in html_load.lower()
     assert 'chair' not in html_load.lower()
 
-    # Load 1 is assigned in active schedule -> deletion blocked
+    # Manual delete endpoint was removed -> returns 404
     res_del_load_active = client.post('/delete_professor_load/1', headers={'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'})
-    assert res_del_load_active.status_code == 400
+    assert res_del_load_active.status_code == 404
 
     # Generate schedule page
     res_gen = client.get('/generate_schedule')
@@ -362,7 +362,7 @@ def test_admin_blocked_from_load_and_generate(extended_client):
     _login_as(client, 'admin')
 
     assert client.get('/professor_load').status_code == 403
-    assert client.post('/delete_professor_load/1').status_code == 403
+    assert client.post('/delete_professor_load/1').status_code == 404
     assert client.get('/generate_schedule').status_code == 403
     assert client.post('/confirm_preview').status_code == 403
     assert client.post('/discard_preview').status_code == 403

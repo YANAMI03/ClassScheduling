@@ -172,8 +172,6 @@
 
             var submitBtn = e.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
             if (!submitBtn || submitBtn.hasAttribute('data-loader-skip')) return;
-            if (submitBtn.getAttribute('data-action') === 'delete') return;
-
             if (submitBtn.__loaderState || form.__isSubmitting) {
                 e.preventDefault();
                 return;

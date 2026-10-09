@@ -1,0 +1,506 @@
+[
+  {
+    "index": 0,
+    "prof_id": 26,
+    "course_id": 10,
+    "professor_name": "Rodibelle F. Leona",
+    "professor_key": "rodibelle f. leona",
+    "sections": 6
+  },
+  {
+    "index": 1,
+    "prof_id": 5,
+    "course_id": 55,
+    "professor_name": "Jodell R. Bulaclac",
+    "professor_key": "jodell r. bulaclac",
+    "sections": 2
+  },
+  {
+    "index": 2,
+    "prof_id": 5,
+    "course_id": 30,
+    "professor_name": "Jodell R. Bulaclac",
+    "professor_key": "jodell r. bulaclac",
+    "sections": 1
+  },
+  {
+    "index": 3,
+    "prof_id": 41,
+    "course_id": 11,
+    "professor_name": "Michelle Ann Mae G. Franco",
+    "professor_key": "michelle ann mae g. franco",
+    "sections": 4
+  },
+  {
+    "index": 4,
+    "prof_id": 41,
+    "course_id": 50,
+    "professor_name": "Michelle Ann Mae G. Franco",
+    "professor_key": "michelle ann mae g. franco",
+    "sections": 1
+  },
+  {
+    "index": 5,
+    "prof_id": 40,
+    "course_id": 30,
+    "professor_name": "Ericson B. Dela Cruz",
+    "professor_key": "ericson b. dela cruz",
+    "sections": 7
+  },
+  {
+    "index": 6,
+    "prof_id": 19,
+    "course_id": 50,
+    "professor_name": "Christian Noli C. Tambio",
+    "professor_key": "christian noli c. tambio",
+    "sections": 4
+  },
+  {
+    "index": 7,
+    "prof_id": 19,
+    "course_id": 51,
+    "professor_name": "Christian Noli C. Tambio",
+    "professor_key": "christian noli c. tambio",
+    "sections": 1
+  },
+  {
+    "index": 8,
+    "prof_id": 27,
+    "course_id": 50,
+    "professor_name": "Reychelle G. Nabong",
+    "professor_key": "reychelle g. nabong",
+    "sections": 4
+  },
+  {
+    "index": 9,
+    "prof_id": 27,
+    "course_id": 74,
+    "professor_name": "Reychelle G. Nabong",
+    "professor_key": "reychelle g. nabong",
+    "sections": 1
+  },
+  {
+    "index": 10,
+    "prof_id": 33,
+    "course_id": 51,
+    "professor_name": "Prince Mert O. Nicolas",
+    "professor_key": "prince mert o. nicolas",
+    "sections": 1
+  },
+  {
+    "index": 11,
+    "prof_id": 34,
+    "course_id": 51,
+    "professor_name": "Ronald S. Santos",
+    "professor_key": "ronald s. santos",
+    "sections": 1
+  },
+  {
+    "index": 12,
+    "prof_id": 34,
+    "course_id": 52,
+    "professor_name": "Ronald S. Santos",
+    "professor_key": "ronald s. santos",
+    "sections": 4
+  },
+  {
+    "index": 13,
+    "prof_id": 14,
+    "course_id": 58,
+    "professor_name": "Nino G. Herrera",
+    "professor_key": "nino g. herrera",
+    "sections": 4
+  },
+  {
+    "index": 14,
+    "prof_id": 14,
+    "course_id": 51,
+    "professor_name": "Nino G. Herrera",
+    "professor_key": "nino g. herrera",
+    "sections": 1
+  },
+  {
+    "index": 15,
+    "prof_id": 17,
+    "course_id": 58,
+    "professor_name": "Racquel L. Pula",
+    "professor_key": "racquel l. pula",
+    "sections": 2
+  },
+  {
+    "index": 16,
+    "prof_id": 16,
+    "course_id": 60,
+    "professor_name": "Jefrain M. Padre",
+    "professor_key": "jefrain m. padre",
+    "sections": 4
+  },
+  {
+    "index": 17,
+    "prof_id": 11,
+    "course_id": 60,
+    "professor_name": "Rosalie B. Sison",
+    "professor_key": "rosalie b. sison",
+    "sections": 1
+  },
+  {
+    "index": 18,
+    "prof_id": 20,
+    "course_id": 52,
+    "professor_name": "Andrew Caezar A. Villegas",
+    "professor_key": "andrew caezar a. villegas",
+    "sections": 1
+  },
+  {
+    "index": 19,
+    "prof_id": 13,
+    "course_id": 11,
+    "professor_name": "Marcelino S. Cerin III",
+    "professor_key": "marcelino s. cerin iii",
+    "sections": 2
+  },
+  {
+    "index": 20,
+    "prof_id": 13,
+    "course_id": 59,
+    "professor_name": "Marcelino S. Cerin III",
+    "professor_key": "marcelino s. cerin iii",
+    "sections": 3
+  },
+  {
+    "index": 21,
+    "prof_id": 9,
+    "course_id": 50,
+    "professor_name": "Henry T. Roque",
+    "professor_key": "henry t. roque",
+    "sections": 3
+  },
+  {
+    "index": 22,
+    "prof_id": 9,
+    "course_id": 57,
+    "professor_name": "Henry T. Roque",
+    "professor_key": "henry t. roque",
+    "sections": 2
+  },
+  {
+    "index": 23,
+    "prof_id": 35,
+    "course_id": 59,
+    "professor_name": "Jev D. Corpuz",
+    "professor_key": "jev d. corpuz",
+    "sections": 3
+  },
+  {
+    "index": 24,
+    "prof_id": 35,
+    "course_id": 60,
+    "professor_name": "Jev D. Corpuz",
+    "professor_key": "jev d. corpuz",
+    "sections": 1
+  },
+  {
+    "index": 25,
+    "prof_id": 12,
+    "course_id": 29,
+    "professor_name": "Gloria M. Alcantara",
+    "professor_key": "gloria m. alcantara",
+    "sections": 4
+  },
+  {
+    "index": 26,
+    "prof_id": 12,
+    "course_id": 51,
+    "professor_name": "Gloria M. Alcantara",
+    "professor_key": "gloria m. alcantara",
+    "sections": 1
+  },
+  {
+    "index": 27,
+    "prof_id": 22,
+    "course_id": 10,
+    "professor_name": "Alexander S. Cochanco",
+    "professor_key": "alexander s. cochanco",
+    "sections": 4
+  },
+  {
+    "index": 28,
+    "prof_id": 22,
+    "course_id": 74,
+    "professor_name": "Alexander S. Cochanco",
+    "professor_key": "alexander s. cochanco",
+    "sections": 1
+  },
+  {
+    "index": 29,
+    "prof_id": 18,
+    "course_id": 11,
+    "professor_name": "Jomasel G. Savellano",
+    "professor_key": "jomasel g. savellano",
+    "sections": 2
+  },
+  {
+    "index": 30,
+    "prof_id": 15,
+    "course_id": 11,
+    "professor_name": "Randy R. Maliwat",
+    "professor_key": "randy r. maliwat",
+    "sections": 2
+  },
+  {
+    "index": 31,
+    "prof_id": 15,
+    "course_id": 51,
+    "professor_name": "Randy R. Maliwat",
+    "professor_key": "randy r. maliwat",
+    "sections": 1
+  },
+  {
+    "index": 32,
+    "prof_id": 23,
+    "course_id": 12,
+    "professor_name": "Rose Anne G. Cochanco",
+    "professor_key": "rose anne g. cochanco",
+    "sections": 4
+  },
+  {
+    "index": 33,
+    "prof_id": 23,
+    "course_id": 74,
+    "professor_name": "Rose Anne G. Cochanco",
+    "professor_key": "rose anne g. cochanco",
+    "sections": 1
+  },
+  {
+    "index": 34,
+    "prof_id": 29,
+    "course_id": 12,
+    "professor_name": "Joana Marie C. Tolentino",
+    "professor_key": "joana marie c. tolentino",
+    "sections": 4
+  },
+  {
+    "index": 35,
+    "prof_id": 29,
+    "course_id": 74,
+    "professor_name": "Joana Marie C. Tolentino",
+    "professor_key": "joana marie c. tolentino",
+    "sections": 1
+  },
+  {
+    "index": 36,
+    "prof_id": 25,
+    "course_id": 29,
+    "professor_name": "Angelito I. Cunanan Jr.",
+    "professor_key": "angelito i. cunanan jr.",
+    "sections": 1
+  },
+  {
+    "index": 37,
+    "prof_id": 25,
+    "course_id": 54,
+    "professor_name": "Angelito I. Cunanan Jr.",
+    "professor_key": "angelito i. cunanan jr.",
+    "sections": 4
+  },
+  {
+    "index": 38,
+    "prof_id": 36,
+    "course_id": 12,
+    "professor_name": "Ralph Angelo M. Julaton",
+    "professor_key": "ralph angelo m. julaton",
+    "sections": 2
+  },
+  {
+    "index": 39,
+    "prof_id": 36,
+    "course_id": 50,
+    "professor_name": "Ralph Angelo M. Julaton",
+    "professor_key": "ralph angelo m. julaton",
+    "sections": 1
+  },
+  {
+    "index": 40,
+    "prof_id": 36,
+    "course_id": 54,
+    "professor_name": "Ralph Angelo M. Julaton",
+    "professor_key": "ralph angelo m. julaton",
+    "sections": 1
+  },
+  {
+    "index": 41,
+    "prof_id": 3,
+    "course_id": 26,
+    "professor_name": "Leonylyn P. Bensi",
+    "professor_key": "leonylyn p. bensi",
+    "sections": 4
+  },
+  {
+    "index": 42,
+    "prof_id": 3,
+    "course_id": 73,
+    "professor_name": "Leonylyn P. Bensi",
+    "professor_key": "leonylyn p. bensi",
+    "sections": 1
+  },
+  {
+    "index": 43,
+    "prof_id": 10,
+    "course_id": 26,
+    "professor_name": "Ruth Ann G. Santos",
+    "professor_key": "ruth ann g. santos",
+    "sections": 2
+  },
+  {
+    "index": 44,
+    "prof_id": 7,
+    "course_id": 26,
+    "professor_name": "Apple Grace G. Oliveros",
+    "professor_key": "apple grace g. oliveros",
+    "sections": 1
+  },
+  {
+    "index": 45,
+    "prof_id": 43,
+    "course_id": 26,
+    "professor_name": "Mary Geraldine S. Matillano",
+    "professor_key": "mary geraldine s. matillano",
+    "sections": 5
+  },
+  {
+    "index": 46,
+    "prof_id": 44,
+    "course_id": 26,
+    "professor_name": "John Phillip M. Medina",
+    "professor_key": "john phillip m. medina",
+    "sections": 2
+  },
+  {
+    "index": 47,
+    "prof_id": 44,
+    "course_id": 53,
+    "professor_name": "John Phillip M. Medina",
+    "professor_key": "john phillip m. medina",
+    "sections": 5
+  },
+  {
+    "index": 48,
+    "prof_id": 28,
+    "course_id": 27,
+    "professor_name": "Cris Norman P. Olipas",
+    "professor_key": "cris norman p. olipas",
+    "sections": 4
+  },
+  {
+    "index": 49,
+    "prof_id": 28,
+    "course_id": 74,
+    "professor_name": "Cris Norman P. Olipas",
+    "professor_key": "cris norman p. olipas",
+    "sections": 1
+  },
+  {
+    "index": 50,
+    "prof_id": 8,
+    "course_id": 27,
+    "professor_name": "Vanessa C. Pascual",
+    "professor_key": "vanessa c. pascual",
+    "sections": 2
+  },
+  {
+    "index": 51,
+    "prof_id": 8,
+    "course_id": 30,
+    "professor_name": "Vanessa C. Pascual",
+    "professor_key": "vanessa c. pascual",
+    "sections": 4
+  },
+  {
+    "index": 52,
+    "prof_id": 38,
+    "course_id": 27,
+    "professor_name": "Mariah Nikka A. Bautista",
+    "professor_key": "mariah nikka a. bautista",
+    "sections": 2
+  },
+  {
+    "index": 53,
+    "prof_id": 38,
+    "course_id": 29,
+    "professor_name": "Mariah Nikka A. Bautista",
+    "professor_key": "mariah nikka a. bautista",
+    "sections": 5
+  },
+  {
+    "index": 54,
+    "prof_id": 42,
+    "course_id": 27,
+    "professor_name": "Justine Froi S. Galicia",
+    "professor_key": "justine froi s. galicia",
+    "sections": 6
+  },
+  {
+    "index": 55,
+    "prof_id": 21,
+    "course_id": 28,
+    "professor_name": "Melgine M. Bauat",
+    "professor_key": "melgine m. bauat",
+    "sections": 5
+  },
+  {
+    "index": 56,
+    "prof_id": 2,
+    "course_id": 28,
+    "professor_name": "Ronaldin V. Bauat",
+    "professor_key": "ronaldin v. bauat",
+    "sections": 5
+  },
+  {
+    "index": 57,
+    "prof_id": 4,
+    "course_id": 28,
+    "professor_name": "Michael E. Bensi",
+    "professor_key": "michael e. bensi",
+    "sections": 4
+  },
+  {
+    "index": 58,
+    "prof_id": 4,
+    "course_id": 56,
+    "professor_name": "Michael E. Bensi",
+    "professor_key": "michael e. bensi",
+    "sections": 1
+  },
+  {
+    "index": 59,
+    "prof_id": 6,
+    "course_id": 29,
+    "professor_name": "Ruth G. Luciano",
+    "professor_key": "ruth g. luciano",
+    "sections": 4
+  },
+  {
+    "index": 60,
+    "prof_id": 6,
+    "course_id": 73,
+    "professor_name": "Ruth G. Luciano",
+    "professor_key": "ruth g. luciano",
+    "sections": 1
+  },
+  {
+    "index": 61,
+    "prof_id": 32,
+    "course_id": 30,
+    "professor_name": "Joseph R. Del Carmen",
+    "professor_key": "joseph r. del carmen",
+    "sections": 2
+  },
+  {
+    "index": 62,
+    "prof_id": 1,
+    "course_id": 56,
+    "professor_name": "Emilsa T. Bantug",
+    "professor_key": "emilsa t. bantug",
+    "sections": 1
+  }
+]

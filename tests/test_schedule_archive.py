@@ -44,6 +44,9 @@ class FakeArchiveQuery:
         self._range = (start, end)
         return self
 
+    def limit(self, *args, **kwargs):
+        return self
+
     def is_(self, col, val):
         self._filters[f"{col}__is"] = val
         return self
@@ -239,7 +242,7 @@ def test_delete_schedule_archive_permissions(monkeypatch):
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
-    # Scheduler CAN delete
+    # Scheduler CANNOT permanently delete (Scheduler gets 403)
     with client.session_transaction() as session:
         session['user_id'] = 1
         session['program'] = 'BSIT'
@@ -247,15 +250,15 @@ def test_delete_schedule_archive_permissions(monkeypatch):
         session['role'] = 'Scheduler'
 
     res_sched = client.post('/delete_schedule_archive/batch-1', follow_redirects=False)
-    assert res_sched.status_code == 302
+    assert res_sched.status_code == 403
 
-    # Admin CANNOT delete (Admin is read-only on archive, writes are 403)
+    # Admin CAN permanently delete (Admin gets 302 redirect)
     with client.session_transaction() as session:
         session['user_id'] = 2
         session['role'] = 'Admin'
 
     res_admin = client.post('/delete_schedule_archive/batch-1', follow_redirects=False)
-    assert res_admin.status_code == 403
+    assert res_admin.status_code == 302
 
 
 def test_confirm_preview_second_semester_sets_active_semester_and_redirects(monkeypatch):

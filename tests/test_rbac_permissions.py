@@ -189,16 +189,15 @@ def test_admin_restricted_write_actions_return_403_json(test_client):
     endpoints = [
         ('POST', '/confirm_preview', {}),
         ('POST', '/discard_preview', {}),
-        ('POST', '/add_professor_load', {'prof_id': 1}),
         ('POST', '/professor_load/import/preview', {}),
-        ('POST', '/archive_schedule', {}),
-        ('POST', '/delete_schedule_archive/batch1', {}),
-        ('POST', '/restore_schedule_archive/batch1', {}),
         ('POST', '/delete_all_schedules', {'password': 'pass'}),
         ('POST', '/delete_section_schedule/BSIT-1A', {}),
         ('POST', '/edit_schedule/BSIT-1A', {'section': 'BSIT-1B'}),
         ('GET', '/delete_schedule/1', None),
     ]
+
+    # Removed manual write route returns 404
+    assert test_client.post('/add_professor_load', data={'prof_id': 1}).status_code == 404
 
     for method, path, data in endpoints:
         if method == 'POST':
@@ -243,8 +242,8 @@ def test_scheduler_allowed_pages(test_client):
 def test_scheduler_restricted_pages_return_403(test_client):
     _login_as(test_client, 'scheduler')
 
-    # Blocked: Rooms, Timeslots, Users, Activity Log
-    for path in ['/rooms', '/timeslot', '/users', '/activity_log']:
+    # Blocked: Courses, Rooms, Timeslots, Users, Activity Log
+    for path in ['/courses', '/rooms', '/timeslot', '/users', '/activity_log']:
         res = test_client.get(path)
         assert res.status_code == 403, f"Scheduler should receive 403 on {path}, got {res.status_code}"
         soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
@@ -254,9 +253,11 @@ def test_scheduler_restricted_pages_return_403(test_client):
 def test_scheduler_restricted_write_actions_return_403_json(test_client):
     _login_as(test_client, 'scheduler')
 
-    # Blocked writes: Rooms, Timeslots, Users, Backup & Restore, Edit Course
+    # Blocked writes: Courses, Rooms, Timeslots, Users, Backup & Restore
     endpoints = [
+        ('POST', '/add_course', {'course_name': 'test'}),
         ('POST', '/edit_course/1', {'course_name': 'test'}),
+        ('GET', '/delete_course/1', None),
         ('POST', '/add_room', {'room_name': 'test'}),
         ('POST', '/edit_room/1', {'room_name': 'test'}),
         ('GET', '/delete_room/1', None),
@@ -268,6 +269,7 @@ def test_scheduler_restricted_write_actions_return_403_json(test_client):
         ('POST', '/delete_user/some-id', {}),
         ('POST', '/restore', {}),
         ('GET', '/backup', None),
+        ('POST', '/delete_schedule_archive/batch1', {}),
     ]
 
     for method, path, data in endpoints:
@@ -281,10 +283,14 @@ def test_scheduler_restricted_write_actions_return_403_json(test_client):
         assert json_data.get('ok') is False
 
 
-def test_scheduler_allowed_api_courses(test_client):
+def test_scheduler_denied_api_courses_and_admin_allowed(test_client):
     _login_as(test_client, 'scheduler')
     res = test_client.get('/api/courses')
-    assert res.status_code == 200, f"Scheduler should have access to /api/courses, got {res.status_code}"
+    assert res.status_code == 403, f"Scheduler should NOT have access to /api/courses, got {res.status_code}"
+
+    _login_as(test_client, 'admin')
+    res_admin = test_client.get('/api/courses')
+    assert res_admin.status_code == 200, f"Admin should have access to /api/courses, got {res_admin.status_code}"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -337,14 +343,15 @@ def test_scheduler_sidebar_visibility(test_client):
     assert res.status_code == 200
     soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
 
-    # Scheduler should see Generate Schedule, Courses, Professors, Professor Load, Schedules Dropdown
-    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is not None
-    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professors') is not None
+    # Scheduler should see Generate Schedule, Professor Load, Schedules Dropdown
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is None
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professors') is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professor_load') is not None
     assert soup.find('a', href=lambda h: h and '/schedules' in h) is not None
     assert soup.find('a', href=lambda h: h and '/schedule_archive' in h) is not None
 
-    # Scheduler should NOT see Rooms, Timeslots, Users, Activity Log
+    # Scheduler should NOT see Courses, Rooms, Timeslots, Users, Activity Log
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/rooms') is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/timeslot') is None
     assert soup.find('a', href=lambda h: h and '/users' in h) is None
@@ -373,15 +380,11 @@ def test_viewer_sidebar_visibility(test_client):
 
 
 def test_restored_professor_routes_permissions(test_client):
-    """Confirm restored professors route has correct RBAC and academic ranking is removed."""
-    for role in ['admin', 'scheduler']:
+    """Confirm removed professors route returns 404 for all roles and academic ranking is removed."""
+    for role in ['admin', 'scheduler', 'viewer']:
         _login_as(test_client, role)
-        assert test_client.get('/professors').status_code == 200, f"Expected 200 on /professors for {role}"
+        assert test_client.get('/professors').status_code == 404, f"Expected 404 on /professors for {role}"
         assert test_client.get('/academic_ranking').status_code == 404, f"Expected 404 on /academic_ranking for {role}"
-
-    _login_as(test_client, 'viewer')
-    assert test_client.get('/professors').status_code == 403, "Viewer should be blocked from /professors"
-    assert test_client.get('/academic_ranking').status_code == 404, "/academic_ranking should be 404"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -402,16 +405,21 @@ def test_admin_schedules_page_hides_edit_and_archive_controls(test_client):
     assert soup.find(id='deleteAllModal') is None
 
 
-def test_admin_schedule_archive_page_hides_restore_and_delete_controls(test_client):
-    _login_as(test_client, 'admin')
-    res = test_client.get('/schedule_archive')
-    assert res.status_code == 200
-    soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
+def test_schedule_archive_page_controls_by_role(test_client):
+    # Scheduler: can restore, but CANNOT see delete modal or delete button
+    _login_as(test_client, 'scheduler')
+    res_sched = test_client.get('/schedule_archive')
+    assert res_sched.status_code == 200
+    soup_sched = BeautifulSoup(res_sched.data.decode('utf-8'), 'html.parser')
+    assert soup_sched.find(id='deleteArchiveModal') is None
+    assert soup_sched.find('button', class_='delete-batch-btn') is None
 
-    # Management controls must be absent for Admin
-    assert soup.find(id='restoreModal') is None
-    assert soup.find(id='deleteArchiveModal') is None
-    assert soup.find('button', attrs={'data-batch-id': True}) is None
+    # Admin: CAN see permanent delete modal
+    _login_as(test_client, 'admin')
+    res_admin = test_client.get('/schedule_archive')
+    assert res_admin.status_code == 200
+    soup_admin = BeautifulSoup(res_admin.data.decode('utf-8'), 'html.parser')
+    assert soup_admin.find(id='deleteArchiveModal') is not None
 
 
 def test_scheduler_schedules_page_shows_edit_and_archive_controls(test_client):

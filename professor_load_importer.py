@@ -78,7 +78,15 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return dp[len(s2)]
 
 
-def find_similar_existing_professors(name_str: str, professors_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def normalize_professor_key(val: Any) -> str:
+    """Canonical professor_key normalization matching SQL regex: lower, single space, stripped."""
+    if val is None:
+        return ""
+    s = str(val).replace('\xa0', ' ').strip()
+    return re.sub(r'\s+', ' ', s).lower()
+
+
+def find_similar_existing_professors(name_str: str, professors_list: List[Any]) -> List[Dict[str, Any]]:
     """
     Check if a new professor name is similar to any existing professor:
     - Levenshtein distance <= 2 on normalized full names, OR
@@ -93,15 +101,25 @@ def find_similar_existing_professors(name_str: str, professors_list: List[Dict[s
 
     similar_profs = []
     for p in professors_list:
-        db_first = p.get('first_name') or ''
-        db_last = p.get('last_name') or ''
-        norm_db_full = normalize_name(f"{db_first} {db_last}")
+        if isinstance(p, dict):
+            db_first = p.get('first_name') or ''
+            db_last = p.get('last_name') or ''
+            if not db_first and not db_last:
+                raw_n = p.get('professor_name') or p.get('name') or ''
+                if raw_n:
+                    db_first, db_last = split_full_name(raw_n)
+            norm_db_full = normalize_name(f"{db_first} {db_last}".strip())
+        else:
+            p_str = str(p or '')
+            db_first, db_last = split_full_name(p_str)
+            norm_db_full = normalize_name(p_str)
+
         if not norm_db_full or norm_db_full == norm_input:
             continue
 
         # 1. Levenshtein distance <= 2
         if levenshtein_distance(norm_input, norm_db_full) <= 2:
-            similar_profs.append(p)
+            similar_profs.append(p if isinstance(p, dict) else {'first_name': db_first, 'last_name': db_last, 'professor_name': str(p)})
             continue
 
         # 2. Same last name + first initial
@@ -110,7 +128,7 @@ def find_similar_existing_professors(name_str: str, professors_list: List[Dict[s
         db_initial = norm_db_first[0] if norm_db_first else ""
         if norm_in_last and norm_db_last and norm_in_last == norm_db_last:
             if in_initial and db_initial and in_initial == db_initial:
-                similar_profs.append(p)
+                similar_profs.append(p if isinstance(p, dict) else {'first_name': db_first, 'last_name': db_last, 'professor_name': str(p)})
                 continue
 
     return similar_profs
@@ -336,14 +354,22 @@ def match_professor(name_str: str, professors_list: List[Dict[str, Any]]) -> Tup
         return None, "Professor name is empty."
 
     norm_input = normalize_name(name_str)
+    canon_key = normalize_professor_key(name_str)
     input_tokens = get_name_tokens(name_str)
 
-    # 1. Exact normalized match: first_name + ' ' + last_name
+    # 1. Exact normalized match: first_name + ' ' + last_name OR professor_key
     for p in professors_list:
         db_first = normalize_name(p.get('first_name') or '')
         db_last = normalize_name(p.get('last_name') or '')
-        db_full = normalize_name(f"{db_first} {db_last}")
-        if norm_input == db_full:
+        if not db_first and not db_last:
+            raw_n = p.get('professor_name') or p.get('name') or ''
+            if raw_n:
+                db_first, db_last = split_full_name(raw_n)
+                db_first = normalize_name(db_first)
+                db_last = normalize_name(db_last)
+        db_full = normalize_name(f"{db_first} {db_last}".strip())
+        p_canon = normalize_professor_key(p.get('professor_key') or p.get('professor_name') or f"{db_first} {db_last}")
+        if norm_input == db_full or canon_key == p_canon:
             return p, None
 
     # 2. Match ignoring middle initials (single character tokens in either input or DB)
@@ -356,7 +382,13 @@ def match_professor(name_str: str, professors_list: List[Dict[str, Any]]) -> Tup
     for p in professors_list:
         db_first = normalize_name(p.get('first_name') or '')
         db_last = normalize_name(p.get('last_name') or '')
-        db_tokens = get_name_tokens(f"{db_first} {db_last}")
+        if not db_first and not db_last:
+            raw_n = p.get('professor_name') or p.get('name') or ''
+            if raw_n:
+                db_first, db_last = split_full_name(raw_n)
+                db_first = normalize_name(db_first)
+                db_last = normalize_name(db_last)
+        db_tokens = get_name_tokens(f"{db_first} {db_last}".strip())
         db_no_init = strip_initials(db_tokens)
 
         if input_no_init == db_no_init and len(input_no_init) >= 2:
@@ -373,7 +405,13 @@ def match_professor(name_str: str, professors_list: List[Dict[str, Any]]) -> Tup
     for p in professors_list:
         db_first = normalize_name(p.get('first_name') or '')
         db_last = normalize_name(p.get('last_name') or '')
-        db_tokens = get_name_tokens(f"{db_first} {db_last}")
+        if not db_first and not db_last:
+            raw_n = p.get('professor_name') or p.get('name') or ''
+            if raw_n:
+                db_first, db_last = split_full_name(raw_n)
+                db_first = normalize_name(db_first)
+                db_last = normalize_name(db_last)
+        db_tokens = get_name_tokens(f"{db_first} {db_last}".strip())
         if len(db_tokens) >= 2:
             if db_tokens[0] == first_token and db_tokens[-1] == last_token:
                 candidates.append(p)
@@ -418,20 +456,40 @@ def validate_import_data(
             if c_code:
                 all_courses_by_code[c_code] = c
 
-    # Normalize allowed_prof_ids set
-    scoped_pids_set = {int(x) for x in allowed_prof_ids} if allowed_prof_ids is not None else None
+    # Normalize allowed_prof_ids set (supports integer prof_ids and string professor_keys)
+    scoped_pids_set = None
+    if allowed_prof_ids is not None:
+        scoped_pids_set = set()
+        for x in allowed_prof_ids:
+            if x is None:
+                continue
+            s = str(x).strip()
+            if s.isdigit():
+                scoped_pids_set.add(int(s))
+            scoped_pids_set.add(normalize_professor_key(s))
     prof_pool_for_matching = all_professors_list if all_professors_list is not None else professors_list
 
-    # Map existing assignments: (prof_id, course_id) -> existing_load
-    existing_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
-    existing_loads_by_prof: Dict[int, List[Dict[str, Any]]] = {}
+    # Map existing assignments: (prof_id, course_id) AND (prof_key, course_id) -> existing_load
+    existing_map: Dict[Tuple[Any, int], Dict[str, Any]] = {}
+    existing_loads_by_prof: Dict[Any, List[Dict[str, Any]]] = {}
     for pl in existing_loads_list:
-        p_id = pl.get('prof_id')
         c_id = pl.get('course_id')
-        if p_id and c_id:
-            pair = (int(p_id), int(c_id))
+        if not c_id:
+            continue
+        c_id = int(c_id)
+        p_id = pl.get('prof_id')
+        if p_id:
+            pair = (int(p_id), c_id)
             existing_map[pair] = pl
             existing_loads_by_prof.setdefault(int(p_id), []).append(pl)
+        p_key = pl.get('professor_key') or pl.get('professor_name')
+        if not p_key and pl.get('professor'):
+            p_obj = pl['professor']
+            p_key = f"{p_obj.get('first_name', '')} {p_obj.get('last_name', '')}".strip()
+        if p_key:
+            norm_pk = normalize_professor_key(p_key)
+            existing_map[(norm_pk, c_id)] = pl
+            existing_loads_by_prof.setdefault(norm_pk, []).append(pl)
 
     validated_rows: List[Dict[str, Any]] = []
     seen_pairs_in_file: Dict[Tuple[Any, int], int] = {}
@@ -486,6 +544,7 @@ def validate_import_data(
         is_new_professor = False
         matched_prof = None
         prof_id = None
+        prof_canon_key = normalize_professor_key(raw_prof) if raw_prof else ""
 
         if not raw_prof or not str(raw_prof).strip():
             row_errors.append("Professor name is empty.")
@@ -495,7 +554,17 @@ def validate_import_data(
                 row_errors.append(prof_match_err)
             elif matched_prof:
                 matched_id = matched_prof.get('prof_id')
-                if scoped_pids_set is not None and matched_id is not None and int(matched_id) not in scoped_pids_set:
+                matched_key = matched_prof.get('professor_key') or (normalize_professor_key(matched_prof.get('professor_name') or ''))
+                is_out_of_scope = False
+                if scoped_pids_set is not None:
+                    has_id_match = (matched_id is not None and (matched_id in scoped_pids_set or (str(matched_id).isdigit() and int(matched_id) in scoped_pids_set)))
+                    has_key_match = bool(matched_key and matched_key in scoped_pids_set)
+                    if not has_id_match and not has_key_match:
+                        m_pid = matched_prof.get('program_id')
+                        if m_pid is not None and target_program_name:
+                            is_out_of_scope = True
+
+                if is_out_of_scope:
                     pname = target_program_name or "Program"
                     row_errors.append(f"Professor not in {pname}")
                 else:
@@ -514,7 +583,7 @@ def validate_import_data(
                 # Check for similar existing professors
                 similar = find_similar_existing_professors(raw_prof, professors_list)
                 if similar:
-                    sim_names = ", ".join(f"'{p.get('first_name', '')} {p.get('last_name', '')}'.strip()" for p in similar)
+                    sim_names = ", ".join(f"'{p.get('first_name', '')} {p.get('last_name', '')}'.strip()" if isinstance(p, dict) else str(p) for p in similar)
                     row_warnings.append(
                         f"Similar professor name already exists: {sim_names}. Please verify this is a new professor."
                     )
@@ -559,7 +628,7 @@ def validate_import_data(
 
         # 5. Duplicate Check in File
         course_id = matched_course.get('course_id') if matched_course else None
-        prof_key = prof_id if prof_id is not None else (f"new_{normalize_name(raw_prof)}" if raw_prof else None)
+        prof_key = prof_canon_key if prof_canon_key else (prof_id if prof_id is not None else None)
 
         is_duplicate_in_file = False
         if prof_key and course_id:
@@ -574,11 +643,14 @@ def validate_import_data(
         # Check if this assignment already exists in database (Updated vs Ready)
         is_existing_db = False
         existing_load_id = None
-        if prof_id and course_id:
-            pair = (int(prof_id), int(course_id))
-            if pair in existing_map:
+        if course_id:
+            c_int = int(course_id)
+            if prof_canon_key and (prof_canon_key, c_int) in existing_map:
                 is_existing_db = True
-                existing_load_id = existing_map[pair].get('id') or existing_map[pair].get('professor_load_id')
+                existing_load_id = existing_map[(prof_canon_key, c_int)].get('id') or existing_map[(prof_canon_key, c_int)].get('professor_load_id')
+            elif prof_id and (int(prof_id), c_int) in existing_map:
+                is_existing_db = True
+                existing_load_id = existing_map[(int(prof_id), c_int)].get('id') or existing_map[(int(prof_id), c_int)].get('professor_load_id')
 
         # Determine preliminary status
         if row_errors:
@@ -602,7 +674,8 @@ def validate_import_data(
         row_item = {
             'row_number': row_num,
             'professor_name': raw_prof,
-            'matched_professor_name': f"{matched_prof.get('first_name')} {matched_prof.get('last_name')}" if matched_prof else raw_prof,
+            'professor_key': prof_canon_key,
+            'matched_professor_name': f"{matched_prof.get('first_name')} {matched_prof.get('last_name')}" if (matched_prof and (matched_prof.get('first_name') or matched_prof.get('last_name'))) else ((matched_prof.get('professor_name') or matched_prof.get('name')) if matched_prof else raw_prof),
             'is_new_professor': is_new_professor,
             'new_professor_badge': 'New Professor' if is_new_professor else None,
             'prof_id': prof_id,
@@ -632,21 +705,26 @@ def validate_import_data(
 
     # Workload Summaries per Professor (No ranking limits enforced)
     prof_workload_summaries: List[Dict[str, Any]] = []
-    existing_prof_map = {int(p['prof_id']): p for p in professors_list if p.get('prof_id')}
+    existing_prof_map = {}
+    for p in professors_list:
+        if isinstance(p, dict):
+            if p.get('prof_id'):
+                existing_prof_map[int(p['prof_id'])] = p
+            p_k = normalize_professor_key(p.get('professor_key') or p.get('professor_name') or f"{p.get('first_name', '')} {p.get('last_name', '')}")
+            if p_k:
+                existing_prof_map[p_k] = p
 
     for prof_key, imported_list in prof_imported_assignments.items():
-        is_new = isinstance(prof_key, str) and prof_key.startswith('new_')
-        if is_new:
-            raw_n = imported_list[0]['professor_name']
-            p_id = None
-            prof_name = raw_n
-            dept = 'CICT'
-        else:
-            p_id = int(prof_key)
-            p_obj = existing_prof_map.get(p_id) or {}
-            p_full = f"{p_obj.get('first_name', '')} {p_obj.get('last_name', '')}".strip()
-            prof_name = p_full or imported_list[0]['professor_name']
-            dept = p_obj.get('department') or 'CICT'
+        is_new = isinstance(prof_key, str) and (prof_key.startswith('new_') or prof_key not in existing_prof_map)
+        raw_n = imported_list[0]['professor_name']
+        p_obj = existing_prof_map.get(prof_key, {})
+        if not p_obj and isinstance(prof_key, int):
+            p_obj = existing_prof_map.get(prof_key, {})
+
+        p_id = p_obj.get('prof_id') if isinstance(p_obj, dict) else (prof_key if isinstance(prof_key, int) else None)
+        p_full = f"{p_obj.get('first_name', '')} {p_obj.get('last_name', '')}".strip() if isinstance(p_obj, dict) else ''
+        prof_name = p_obj.get('professor_name') or p_full or raw_n
+        dept = p_obj.get('department') or 'CICT' if isinstance(p_obj, dict) else 'CICT'
 
         total_hours = 0.0
         total_units = 0.0
@@ -707,7 +785,7 @@ def validate_import_data(
             if item.get('prof_id') is not None:
                 valid_profs_affected.add(item['prof_id'])
             elif item.get('professor_name'):
-                valid_profs_affected.add(f"new_{normalize_name(item['professor_name'])}")
+                valid_profs_affected.add(normalize_professor_key(item['professor_name']))
 
             # Aggregate sections
             if c_code not in course_section_totals:
@@ -751,7 +829,6 @@ def validate_import_data(
         'course_section_totals': sorted_course_totals,
         'professor_workloads': sorted_prof_summaries,
     }
-
 
 
 def generate_import_template_xlsx() -> bytes:
@@ -903,116 +980,108 @@ def execute_bulk_import(
 ) -> Tuple[int, int, int, List[str]]:
     """
     Execute atomic bulk database updates/inserts for valid rows.
-    - If row is for an unknown professor: auto-creates professor record in 'professor'.
-    - If a (prof_id, course_id) assignment already exists: UPDATE sections.
-    - If new assignment: INSERT into 'professor_load'.
+    - If a (professor_key, course_id) or (prof_id, course_id) assignment already exists: UPDATE sections.
+    - If new assignment: INSERT into 'professor_load' with professor_name and professor_key.
     - Untouched assignments are preserved.
-    - On failure, deletes only newly created professors from this run.
-    Returns:
-      (updated_count, inserted_count, new_professors_count, error_messages)
+    - Returns (updated_count, inserted_count, new_professors_count, error_messages).
     """
     if not valid_rows:
         return 0, 0, 0, []
 
-    # 1. Identify and group new professors
-    new_profs_by_name: Dict[str, Dict[str, Any]] = {}
-    for item in valid_rows:
-        if item.get('is_new_professor') or not item.get('prof_id'):
-            raw_name = (item.get('professor_name') or '').strip()
-            norm_name = normalize_name(raw_name)
-            if norm_name and norm_name not in new_profs_by_name:
-                first_name, last_name = split_full_name(raw_name)
-                payload: Dict[str, Any] = {
-                    'first_name': first_name,
-                    'last_name': last_name,
-                }
-                if program_id is not None:
-                    payload['program_id'] = program_id
-                new_profs_by_name[norm_name] = payload
+    # Map existing loads by (professor_key, course_id) and (prof_id, course_id)
+    existing_map_by_key: Dict[Tuple[str, int], int] = {}
+    existing_map_by_id: Dict[Tuple[int, int], int] = {}
+    known_prof_keys: set = set()
 
-    created_prof_ids: List[int] = []
-    created_name_to_id: Dict[str, int] = {}
-
-    if new_profs_by_name:
-        new_prof_records = list(new_profs_by_name.values())
-        try:
-            ins_res = supabase_client.table('professor').insert(new_prof_records).execute()
-            created_rows = ins_res.data or []
-            for r in created_rows:
-                pid = r.get('prof_id') or r.get('id')
-                if pid:
-                    created_prof_ids.append(int(pid))
-                    k = normalize_name(f"{r.get('first_name', '')} {r.get('last_name', '')}")
-                    created_name_to_id[k] = int(pid)
-
-            if len(created_name_to_id) < len(new_profs_by_name):
-                # Query newly created professors from DB
-                q = supabase_client.table('professor').select('prof_id, first_name, last_name')
-                if program_id is not None:
-                    q = q.eq('program_id', program_id)
-                db_profs = q.execute().data or []
-                for p in db_profs:
-                    k = normalize_name(f"{p.get('first_name', '')} {p.get('last_name', '')}")
-                    if k in new_profs_by_name and k not in created_name_to_id:
-                        pid = p.get('prof_id') or p.get('id')
-                        if pid:
-                            created_name_to_id[k] = int(pid)
-                            if int(pid) not in created_prof_ids:
-                                created_prof_ids.append(int(pid))
-        except Exception as e:
-            return 0, 0, 0, [f"Failed to auto-create professors: {e}"]
-
-        if created_prof_ids and program_id is not None:
-            for c_pid in set(created_prof_ids):
-                try:
-                    supabase_client.table('professor_program').insert({'prof_id': c_pid, 'program_id': int(program_id)}).execute()
-                except Exception as e_link:
-                    logging.debug(f"Error linking new professor to professor_program: {e_link}")
-
-    # 2. Map prof_id to rows that were new professors
-    for item in valid_rows:
-        if not item.get('prof_id'):
-            norm_name = normalize_name(item.get('professor_name', ''))
-            if norm_name in created_name_to_id:
-                item['prof_id'] = created_name_to_id[norm_name]
-            else:
-                if created_prof_ids:
-                    try:
-                        supabase_client.table('professor').delete().in_('prof_id', created_prof_ids).execute()
-                    except Exception:
-                        pass
-                return 0, 0, 0, [f"Could not resolve ID for created professor: '{item.get('professor_name')}'"]
-
-    # 3. Upsert assignments in professor_load
-    existing_map: Dict[Tuple[int, int], int] = {}
     for pl in existing_loads_list:
-        p_id = pl.get('prof_id')
+        load_id = pl.get('id') if pl.get('id') is not None else pl.get('professor_load_id')
+        if not load_id:
+            continue
         c_id = pl.get('course_id')
-        load_id = pl.get('id') or pl.get('professor_load_id')
-        if p_id and c_id and load_id:
-            existing_map[(int(p_id), int(c_id))] = int(load_id)
+        if not c_id:
+            continue
+        try:
+            c_id = int(c_id)
+        except (ValueError, TypeError):
+            continue
 
-    updates_to_run: List[Tuple[int, int, int]] = []
+        p_name = (pl.get('professor_name') or '').strip()
+        if not p_name and pl.get('professor'):
+            p_obj = pl['professor']
+            p_name = f"{p_obj.get('first_name', '')} {p_obj.get('last_name', '')}".strip()
+
+        p_key = pl.get('professor_key')
+        if not p_key and p_name:
+            p_key = normalize_professor_key(p_name)
+
+        if p_key:
+            norm_pk = normalize_professor_key(p_key)
+            existing_map_by_key[(norm_pk, c_id)] = int(load_id)
+            known_prof_keys.add(norm_pk)
+
+        p_id = pl.get('prof_id')
+        if p_id:
+            try:
+                existing_map_by_id[(int(p_id), c_id)] = int(load_id)
+            except (ValueError, TypeError):
+                pass
+
+    updates_to_run: List[Dict[str, Any]] = []
     inserts_to_run: List[Dict[str, Any]] = []
+    new_profs_in_batch: set = set()
+
+    # Track assignments already queued within this batch to prevent duplicates
+    queued_updates: Dict[int, Dict[str, Any]] = {}
+    queued_inserts: Dict[Tuple[str, int], Dict[str, Any]] = {}
 
     for item in valid_rows:
-        prof_id = int(item['prof_id'])
+        prof_name = (item.get('professor_name') or '').strip()
+        prof_key = normalize_professor_key(prof_name)
         course_id = int(item['course_id'])
         sections = int(item['sections'])
         ilp_hours = int(item.get('ilp_hours') or 0)
-        pair = (prof_id, course_id)
+        prof_id = item.get('prof_id')
 
-        if pair in existing_map:
-            load_id = existing_map[pair]
-            updates_to_run.append((load_id, sections, ilp_hours))
+        if item.get('is_new_professor') or (prof_key not in known_prof_keys and not prof_id):
+            new_profs_in_batch.add(prof_key)
+
+        load_id = None
+        if (prof_key, course_id) in existing_map_by_key:
+            load_id = existing_map_by_key[(prof_key, course_id)]
+        elif prof_id and (int(prof_id), course_id) in existing_map_by_id:
+            load_id = existing_map_by_id[(int(prof_id), course_id)]
+
+        if load_id:
+            if load_id in queued_updates:
+                queued_updates[load_id]['sections'] = sections
+                queued_updates[load_id]['ilp_hours'] = ilp_hours
+                if prof_name:
+                    queued_updates[load_id]['professor_name'] = prof_name
+            else:
+                up_item = {
+                    'id': load_id,
+                    'sections': sections,
+                    'ilp_hours': ilp_hours,
+                    'professor_name': prof_name,
+                }
+                queued_updates[load_id] = up_item
+                updates_to_run.append(up_item)
         else:
-            ins = {
-                'prof_id': prof_id,
-                'course_id': course_id,
-                'sections': sections,
-                'ilp_hours': ilp_hours,
-            }
-            inserts_to_run.append(ins)
+            ins_key = (prof_key, course_id)
+            if ins_key in queued_inserts:
+                queued_inserts[ins_key]['sections'] = sections
+                queued_inserts[ins_key]['ilp_hours'] = ilp_hours
+            else:
+                ins: Dict[str, Any] = {
+                    'professor_name': prof_name,
+                    'course_id': course_id,
+                    'sections': sections,
+                    'ilp_hours': ilp_hours,
+                }
+                if program_id is not None:
+                    ins['program_id'] = int(program_id)
+                queued_inserts[ins_key] = ins
+                inserts_to_run.append(ins)
 
     updated_count = 0
     inserted_count = 0
@@ -1024,47 +1093,56 @@ def execute_bulk_import(
                 supabase_client.table('professor_load').insert(inserts_to_run).execute()
                 inserted_count = len(inserts_to_run)
             except Exception as e:
-                # Fallback if ilp_hours or sections column has issues in schema cache
-                if 'ilp_hours' in str(e) or 'sections' in str(e) or '42703' in str(e):
-                    fallback_inserts = [{'prof_id': d['prof_id'], 'course_id': d['course_id'], 'sections': d['sections']} for d in inserts_to_run]
+                err_str = str(e)
+                # Fallback if DB column ilp_hours or professor_key causes schema cache issue
+                if any(x in err_str for x in ('42703', 'PGRST204', 'ilp_hours', 'prof_id', 'professor_key')):
+                    fallback_inserts = []
+                    for d in inserts_to_run:
+                        f_row = dict(d)
+                        f_row.pop('ilp_hours', None)
+                        f_row.pop('professor_key', None)
+                        f_row.pop('prof_id', None)
+                        fallback_inserts.append(f_row)
                     try:
                         supabase_client.table('professor_load').insert(fallback_inserts).execute()
                         inserted_count = len(fallback_inserts)
                     except Exception as e2:
-                        if 'sections' in str(e2) or '42703' in str(e2):
-                            min_inserts = [{'prof_id': d['prof_id'], 'course_id': d['course_id']} for d in fallback_inserts]
-                            supabase_client.table('professor_load').insert(min_inserts).execute()
-                            inserted_count = len(min_inserts)
-                        else:
-                            raise
+                        raise e2
                 else:
                     raise
 
         if updates_to_run:
-            for load_id, sections, ilp_h in updates_to_run:
+            supports_ilp = True
+            for u in updates_to_run:
+                lid = u['id']
+                payload = {'sections': u['sections'], 'professor_name': u['professor_name']}
+                if supports_ilp and u.get('ilp_hours'):
+                    payload['ilp_hours'] = u['ilp_hours']
                 try:
-                    supabase_client.table('professor_load').update({'sections': sections, 'ilp_hours': ilp_h}).eq('id', load_id).execute()
+                    supabase_client.table('professor_load').update(payload).eq('id', lid).execute()
                     updated_count += 1
                 except Exception as e:
-                    if 'ilp_hours' in str(e) or 'sections' in str(e) or '42703' in str(e):
+                    err_str = str(e)
+                    if 'ilp_hours' in err_str:
+                        supports_ilp = False
+                    if any(x in err_str for x in ('42703', 'PGRST204', 'ilp_hours', 'professor_key')):
+                        clean_payload = {'sections': u['sections'], 'professor_name': u['professor_name']}
                         try:
-                            supabase_client.table('professor_load').update({'sections': sections}).eq('id', load_id).execute()
+                            supabase_client.table('professor_load').update(clean_payload).eq('id', lid).execute()
                             updated_count += 1
                         except Exception as e2:
-                            if 'sections' in str(e2) or '42703' in str(e2):
-                                pass
+                            if 'professor_name' in str(e2) or '42703' in str(e2):
+                                supabase_client.table('professor_load').update({'sections': u['sections']}).eq('id', lid).execute()
+                                updated_count += 1
                             else:
                                 raise
+                    elif 'professor_name' in err_str:
+                        supabase_client.table('professor_load').update({'sections': u['sections']}).eq('id', lid).execute()
+                        updated_count += 1
                     else:
                         raise
     except Exception as e:
-        # Rollback newly created professors on failure
-        if created_prof_ids:
-            try:
-                supabase_client.table('professor').delete().in_('prof_id', created_prof_ids).execute()
-            except Exception as rollback_err:
-                logging.exception(f"Rollback error deleting created professors: {rollback_err}")
         errors.append(f"Bulk insert failed: {e}")
         return 0, 0, 0, errors
 
-    return updated_count, inserted_count, len(new_profs_by_name), errors
+    return updated_count, inserted_count, len(new_profs_in_batch), errors

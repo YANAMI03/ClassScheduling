@@ -224,7 +224,7 @@ def test_scheduler_zero_crud_enforcement(mock_db):
 
 
 def test_scheduler_read_only_access(mock_db):
-    """Scheduler can access Courses (scoped to program) but Rooms is Admin-only (Scheduler 403)."""
+    """Scheduler has no access to Courses or Rooms (both Admin-only, Scheduler receives 403)."""
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
@@ -233,7 +233,7 @@ def test_scheduler_read_only_access(mock_db):
         session['program'] = 'BSIT'
         session['program_id'] = 1
 
-    assert client.get('/courses').status_code == 200
+    assert client.get('/courses').status_code == 403
     assert client.get('/rooms').status_code == 403
 
     # Admin CAN view courses and rooms

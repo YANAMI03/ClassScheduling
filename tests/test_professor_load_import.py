@@ -877,17 +877,10 @@ def test_auto_create_professors_on_import(test_client, monkeypatch):
     assert confirm_data['success'] is True
     assert confirm_data['new_professors_count'] == 1
 
-    # Verify professor was created in DB
-    prof_table = mock_db.table('professor').data
-    new_prof = next((p for p in prof_table if p.get('last_name') == 'Hopper'), None)
-    assert new_prof is not None
-    assert new_prof['first_name'] == 'Grace'
-    assert new_prof['program_id'] == 1
-
-    # Verify load was assigned to the newly created professor
+    # Verify load was assigned with professor_name attribute
     load_table = mock_db.table('professor_load').data
     assert len(load_table) == 1
-    assert load_table[0]['prof_id'] == new_prof['prof_id']
+    assert load_table[0]['professor_name'] == 'Grace Hopper'
     assert load_table[0]['course_id'] == 101
     assert load_table[0]['sections'] == 2
 

@@ -54,7 +54,7 @@ def _build_client(monkeypatch, session_data=None):
         session['user_id'] = 1
         session['program'] = 'BSIT'
         session['username'] = 'tester'
-        session['role'] = 'Scheduler'
+        session['role'] = 'Admin'
         if session_data:
             session.update(session_data)
 
@@ -85,4 +85,12 @@ def test_api_courses_year_level_only_remains_compatible(monkeypatch):
     assert response.status_code == 200
     assert fake_supabase.query.filters.get('year_level') == '1'
     assert 'semester' not in fake_supabase.query.filters
+
+
+def test_api_courses_scheduler_forbidden(monkeypatch):
+    client, _ = _build_client(monkeypatch, session_data={'role': 'Scheduler'})
+
+    response = client.get('/api/courses')
+
+    assert response.status_code == 403
 

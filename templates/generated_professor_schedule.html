@@ -9,10 +9,10 @@
         <p class="page-subtitle">Interactive weekly timetable grid, free periods, and assigned workload details</p>
     </div>
     <div class="d-flex align-items-center gap-2">
-        <a href="/professor_schedule/{{ professor.prof_id }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Professor Schedule to Excel">
+        <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Professor Schedule to Excel">
             <i class="bx bx-file me-1"></i> Export to Excel
         </a>
-        <a href="/professor_schedule/{{ professor.prof_id }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Professor Schedule to PDF (NEUST format)">
+        <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Professor Schedule to PDF (NEUST format)">
             <i class="bx bx-file-pdf me-1"></i> Export to PDF
         </a>
         <a href="/professor_schedule" class="btn btn-outline-secondary">
@@ -30,7 +30,7 @@
             <small class="text-muted">Viewing schedule draft from active generation preview. Changes made in preview update these hours in real-time.</small>
         </div>
     </div>
-    <a href="/professor_schedule/{{ professor.prof_id }}?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-outline-dark">
+    <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-outline-dark">
         <i class="bx bx-check-circle me-1"></i>View Confirmed Schedule
     </a>
 </div>
@@ -43,7 +43,7 @@
             <small class="text-muted">A newly generated schedule preview is active in this session.</small>
         </div>
     </div>
-    <a href="/professor_schedule/{{ professor.prof_id }}?mode=preview&year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-info text-white">
+    <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?mode=preview&year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}" class="btn btn-sm btn-info text-white">
         <i class="bx bx-show me-1"></i>View in Preview Mode
     </a>
 </div>

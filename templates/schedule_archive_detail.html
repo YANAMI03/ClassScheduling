@@ -4,7 +4,10 @@
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_manage_archive = user_role_lower in ['scheduler'] %}
+{% set is_admin = user_role_lower in ['super_admin', 'admin'] %}
+{% set is_scheduler = user_role_lower in ['scheduler', 'chair', 'dean'] %}
+{% set user_prog = session.get('program', '') %}
+{% set can_restore = is_admin or (is_scheduler and (not batch_info.program or batch_info.program == user_prog or user_prog == '')) %}
 <div class="page-header d-flex justify-content-between align-items-center mb-4">
     <div>
         <div class="d-flex align-items-center gap-2 mb-1">
@@ -19,7 +22,7 @@
             {% if batch_info.archive_reason %} &bull; <em>{{ batch_info.archive_reason }}</em>{% endif %}
         </p>
     </div>
-    {% if can_manage_archive %}
+    {% if can_restore %}
     <div>
         <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#restoreArchiveModal">
             <i class="bx bx-reset me-1"></i> Restore This Version
@@ -141,7 +144,7 @@
 </div>
 {% endif %}
 
-{% if can_manage_archive %}
+{% if can_restore %}
 <!-- Restore Confirmation Modal -->
 <div class="modal fade" id="restoreArchiveModal" tabindex="-1" aria-labelledby="restoreArchiveModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -154,11 +157,11 @@
             </div>
             <form method="POST" action="{{ url_for('restore_schedule_archive', batch_id=batch_info.batch_id) }}">
                 <div class="modal-body p-4">
-                    <div class="alert alert-warning d-flex align-items-start mb-3">
-                        <i class="bx bx-error-circle fs-4 me-2 flex-shrink-0 mt-1"></i>
+                    <div class="alert alert-info d-flex align-items-start mb-3">
+                        <i class="bx bx-info-circle fs-4 me-2 flex-shrink-0 mt-1"></i>
                         <div>
-                            <strong>Automatic Archive Protection:</strong>
-                            <p class="mb-0 small">The currently active schedule for {{ batch_info.semester }} will be safely moved to the archive before restoring this version.</p>
+                            <strong>One Active Schedule Policy:</strong>
+                            <p class="mb-0 small">Please ensure there is no active schedule currently in place for {{ batch_info.semester }}. If an active schedule exists, archive it first before restoring.</p>
                         </div>
                     </div>
                     <p class="text-secondary mb-2">Confirm restoring this archived schedule version?</p>

@@ -114,11 +114,9 @@ def test_part3_delete_inventory_and_shared_mechanism():
     inventory = {
         'templates/courses.html': '/delete_course/',
         'templates/room.html': '/delete_room/',
-        'templates/professors.html': '/delete_professor/',
         'templates/timeslot.html': '/delete_timeslot/',
         'templates/programs.html': '/delete_program/',
         'templates/users.html': '/delete_user/',
-        'templates/professor_load.html': 'delete_professor_load_all',
         'templates/schedule_archive.html': '/delete_schedule_archive/',
         'templates/schedules.html': 'delete_section_schedule',
         'templates/generated_schedule.html': 'delete_section_schedule',

@@ -129,10 +129,12 @@ graph TD
 | **Institutional Timeslots** | Full CRUD | Full CRUD | View Only | View Only | Global policy |
 | **Automated Schedule Generation** | Global | Global | Program-Scoped | None | Scoped by `session.program_id` |
 | **Staging Preview & Confirmation** | Global | Global | Program-Scoped | None | Concurrency-protected |
-| **Archive Restoration** | Global | Global | Program-Scoped | None | Conflict-protected |
+| **Archive Active Schedule** | Global | Global | Program-Scoped | None | Direct archive without deletion request |
+| **Archive Restoration** | Global | Global | Program-Scoped | None | Conflict-protected, blocked if active schedule exists |
+| **Permanent Delete Archive** | Global | Global | None | None | Admin-only direct action (RLS: archive=true) |
 | **Room Schedule View** | All Programs | All Programs | Masked (`Occupied - <Prog>`) | Masked | Program-aware masking |
 | **Professor Schedule View** | All Programs | All Programs | Masked (`Busy - <Prog>`) | View Own / Masked | Cross-program masking |
-| **Deletion Approval Queue** | Full Control | Full Control | Submit Only | None | Two-phase workflow |
+| **Deletion Approval Queue** | Full Control | Full Control | Submit Only | None | Non-schedule entities |
 | **Database Backup & Restore** | Yes | Yes | None | None | Admin-only route |
 
 ---

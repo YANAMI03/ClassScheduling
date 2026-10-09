@@ -1,0 +1,2319 @@
+{
+  "a_generator_data_loading": [
+    {
+      "file": "app.py",
+      "line": 9790,
+      "pattern": "\\bprof_id\\b",
+      "content": "all_profs_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id, program:program_id(id, program_name), time_designation, academic_ranking(has_cutoff)').execute()",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9800,
+      "pattern": "\\bprof_id\\b",
+      "content": "# remaining loads fall back to heavier section count and prof_id.",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9802,
+      "pattern": "\\bprof_id\\b",
+      "content": "_all_profs_by_id = {ap.get('prof_id'): ap for ap in (all_profs_res.data or []) if ap.get('prof_id')}",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9802,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "_all_profs_by_id = {ap.get('prof_id'): ap for ap in (all_profs_res.data or []) if ap.get('prof_id')}",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9806,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid = int(row.get('prof_id') or 0)",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9806,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid = int(row.get('prof_id') or 0)",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9830,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid = row.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9830,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid = row.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9865,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pid,",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9880,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': p.get('prof_id'),",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9880,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': p.get('prof_id'),",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9935,
+      "pattern": "\\bprof_id\\b",
+      "content": "# Build prof_cutoff_map: {prof_id: has_cutoff (bool)}",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9938,
+      "pattern": "\\bprof_id\\b",
+      "content": "_pid = _pr.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 9938,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "_pid = _pr.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10000,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_id = p_pc.get('prof_id') or existing.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10000,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_id = p_pc.get('prof_id') or existing.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10029,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid = prof_dict.get('prof_id') or prof_dict.get('professor_key')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10029,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid = prof_dict.get('prof_id') or prof_dict.get('professor_key')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10044,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_id = prof.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10044,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_id = prof.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10061,
+      "pattern": "\\bprof_id\\b",
+      "content": "pc_chk = supabase.table('professor_load').select('id').eq('prof_id', int(p_id)).eq('course_id', int(c_id)).execute()",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10090,
+      "pattern": "\\bprof_id\\b",
+      "content": "pk = assigned_prof.get('prof_id') or assigned_prof.get('professor_key')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10090,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pk = assigned_prof.get('prof_id') or assigned_prof.get('professor_key')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10176,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pk,",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10228,
+      "pattern": "\\bprof_id\\b",
+      "content": "pk = assigned_prof.get('prof_id') or assigned_prof.get('professor_key')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10228,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pk = assigned_prof.get('prof_id') or assigned_prof.get('professor_key')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10315,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pk,",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10340,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pk,",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10409,
+      "pattern": "\\bprofessors\\b",
+      "content": "# General course in specialized term: match professors to sections with their track affinity first",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10558,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid = pl_row.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10558,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid = pl_row.get('prof_id')",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10581,
+      "pattern": "\\bprof_id\\b",
+      "content": "if sec_cid == cid and (l_item.get('professor_load_id') == pcid or (l_item.get('prof_id') == pid and l_item.get('course_id') == cid))",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10581,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if sec_cid == cid and (l_item.get('professor_load_id') == pcid or (l_item.get('prof_id') == pid and l_item.get('course_id') == cid))",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10596,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pid,",
+      "func": "def generate_schedule():"
+    }
+  ],
+  "b_conflict_occupancy": [],
+  "c_per_prof_hours_40h": [],
+  "d_load_ordering_tiebreaks": [
+    {
+      "file": "app.py",
+      "line": 10389,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_track_affinity[(l['prof_id'], c_yl)] = str(c_spec).strip()",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10389,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "prof_track_affinity[(l['prof_id'], c_yl)] = str(c_spec).strip()",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10414,
+      "pattern": "\\bprof_id\\b",
+      "content": "aff = prof_track_affinity.get((l['prof_id'], yl))",
+      "func": "def generate_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 10414,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "aff = prof_track_affinity.get((l['prof_id'], yl))",
+      "func": "def generate_schedule():"
+    }
+  ],
+  "e_unscheduled_toasts": [
+    {
+      "file": "app.py",
+      "line": 10566,
+      "pattern": "Prof\\s*#",
+      "content": "prof_name = f\"{p_info.get('first_name', '')} {p_info.get('last_name', '')}\".strip() or f\"Prof #{pid}\"",
+      "func": "def generate_schedule():"
+    }
+  ],
+  "f_confirm_insert_payload": [
+    {
+      "file": "app.py",
+      "line": 10697,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load_id, course_id, prof_id, course(course_id, course_name), professor(prof_id, first_name, last_name)'",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10704,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_id_int = pc_row.get('prof_id')",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10704,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "prof_id_int = pc_row.get('prof_id')",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10817,
+      "pattern": "\\bprof_id\\b",
+      "content": "other_prof_id = other.get('prof_id')",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10817,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "other_prof_id = other.get('prof_id')",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10832,
+      "pattern": "\\bprof_id\\b",
+      "content": "target_entry['prof_id'] = prof_id_int",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10832,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "target_entry['prof_id'] = prof_id_int",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10851,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': prof_id_int,",
+      "func": "def edit_preview_entry():"
+    },
+    {
+      "file": "app.py",
+      "line": 10908,
+      "pattern": "\\bprof_id\\b",
+      "content": "_rpid = _r.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10908,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "_rpid = _r.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10977,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_id = entry.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10977,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "prof_id = entry.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10988,
+      "pattern": "\\bprof_id\\b",
+      "content": "if prof_id and course_id:",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10989,
+      "pattern": "\\bprof_id\\b",
+      "content": "resolved_load_id = _pl_by_prof_course.get((int(prof_id), int(course_id)))",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10993,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif prof_id and course_id:",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10994,
+      "pattern": "\\bprof_id\\b",
+      "content": "resolved_load_id = _pl_by_prof_course.get((int(prof_id), int(course_id)))",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 10999,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif prof_id and course_id:",
+      "func": "def confirm_preview():"
+    }
+  ],
+  "g_revalidation_restore_manual_conflicts": [
+    {
+      "file": "app.py",
+      "line": 4906,
+      "pattern": "\\bprof_id\\b",
+      "content": "def _check_professor_cutoff_conflict(prof_id, day, start_time, end_time, session_type=None,",
+      "func": "def _check_professor_cutoff_conflict(prof_id, day, start_time, end_time, session_type=None,"
+    },
+    {
+      "file": "app.py",
+      "line": 4919,
+      "pattern": "\\bprof_id\\b",
+      "content": "has_cutoff = prof_cutoff_map.get(prof_id, True)",
+      "func": "def _check_professor_cutoff_conflict(prof_id, day, start_time, end_time, session_type=None,"
+    },
+    {
+      "file": "app.py",
+      "line": 4931,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_res = supabase.table('professor').select('prof_id, academic_ranking(has_cutoff)').eq('prof_id', prof_id).execute()",
+      "func": "def _check_professor_cutoff_conflict(prof_id, day, start_time, end_time, session_type=None,"
+    },
+    {
+      "file": "app.py",
+      "line": 8684,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(id, prof_id, course_id, course(course_name), professor(first_name, last_name))'",
+      "func": "def edit_schedule_entry(schedule_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 8698,
+      "pattern": "\\bprof_id\\b",
+      "content": "existing_prof_id = existing_pc.get('prof_id')",
+      "func": "def edit_schedule_entry(schedule_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 8698,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "existing_prof_id = existing_pc.get('prof_id')",
+      "func": "def edit_schedule_entry(schedule_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 11768,
+      "pattern": "\\bprof_id\\b",
+      "content": "'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load(prof_id, professor_key), program_id'",
+      "func": "def restore_schedule_archive(batch_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 11782,
+      "pattern": "\\bprof_id\\b",
+      "content": "o_pid = o_pl.get('prof_id') or o.get('prof_id')",
+      "func": "def restore_schedule_archive(batch_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 11782,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "o_pid = o_pl.get('prof_id') or o.get('prof_id')",
+      "func": "def restore_schedule_archive(batch_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 11798,
+      "pattern": "\\bprof_id\\b",
+      "content": "b_pid = b_pl.get('prof_id') or b.get('prof_id')",
+      "func": "def restore_schedule_archive(batch_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 11798,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "b_pid = b_pl.get('prof_id') or b.get('prof_id')",
+      "func": "def restore_schedule_archive(batch_id):"
+    }
+  ],
+  "h_schedule_pages_room_utilization": [
+    {
+      "file": "app.py",
+      "line": 1891,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_id = row.get('professor_key') or p.get('prof_id') or row.get('prof_id') or row.get('professor_load_id')",
+      "func": "def _build_preview_context(preview_entries=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 1891,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "prof_id = row.get('professor_key') or p.get('prof_id') or row.get('prof_id') or row.get('professor_load_id')",
+      "func": "def _build_preview_context(preview_entries=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 1892,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_entry = {'id': prof_id, 'name': prof_name}",
+      "func": "def _build_preview_context(preview_entries=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 1899,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': prof_id,",
+      "func": "def _build_preview_context(preview_entries=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 2150,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid = pl.get('prof_id')",
+      "func": "def calculate_semester_section_counts(program_id=None, semester=None, department=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 2150,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid = pl.get('prof_id')",
+      "func": "def calculate_semester_section_counts(program_id=None, semester=None, department=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 2190,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pl.get('professor_key') or pl.get('prof_id') or pl.get('id'),",
+      "func": "def calculate_semester_section_counts(program_id=None, semester=None, department=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 2190,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': pl.get('professor_key') or pl.get('prof_id') or pl.get('id'),",
+      "func": "def calculate_semester_section_counts(program_id=None, semester=None, department=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 6307,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def view_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6307,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def view_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6314,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def view_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6314,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def view_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6369,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(id, prof_id, course_id, course(course_id, course_name)), '",
+      "func": "def view_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 7196,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '",
+      "func": "def view_room_schedule(room_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 7721,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '",
+      "func": "def schedules():"
+    },
+    {
+      "file": "app.py",
+      "line": 8148,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '",
+      "func": "def export_section_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 8301,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name)), '",
+      "func": "def export_section_schedule_pdf(section_name):"
+    }
+  ],
+  "i_pdf_exports_urls": [
+    {
+      "file": "app.py",
+      "line": 6495,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def export_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6495,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def export_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6502,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def export_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6502,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def export_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6550,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(id, prof_id, course_id, course(course_id, course_name)), '",
+      "func": "def export_professor_schedule(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6702,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def export_professor_schedule_pdf(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6702,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def export_professor_schedule_pdf(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6709,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def export_professor_schedule_pdf(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6709,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def export_professor_schedule_pdf(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6760,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(id, prof_id, course_id, course(course_id, course_name)), '",
+      "func": "def export_professor_schedule_pdf(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 7513,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '",
+      "func": "def export_room_schedule_pdf(room_id):"
+    }
+  ],
+  "j_archive_list_view": [
+    {
+      "file": "app.py",
+      "line": 11592,
+      "pattern": "\\bprof_id\\b",
+      "content": "'*, program:program_id(program_name), professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), room(room_name)'",
+      "func": "def view_schedule_archive_batch(batch_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 11619,
+      "pattern": "\\bprof_id\\b",
+      "content": "'*, program:program_id(program_name), professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), room(room_name)'",
+      "func": "def view_schedule_archive_batch(batch_id):"
+    }
+  ],
+  "k_backup_restore": [
+    {
+      "file": "app.py",
+      "line": 12063,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid = p.get('prof_id')",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    },
+    {
+      "file": "app.py",
+      "line": 12063,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid = p.get('prof_id')",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    },
+    {
+      "file": "app.py",
+      "line": 12084,
+      "pattern": "\\bprof_id\\b",
+      "content": "if not p_name and item.get('prof_id') in legacy_prof_map:",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    },
+    {
+      "file": "app.py",
+      "line": 12084,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if not p_name and item.get('prof_id') in legacy_prof_map:",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    },
+    {
+      "file": "app.py",
+      "line": 12085,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_name = legacy_prof_map[item['prof_id']]",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    },
+    {
+      "file": "app.py",
+      "line": 12085,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "p_name = legacy_prof_map[item['prof_id']]",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    },
+    {
+      "file": "app.py",
+      "line": 12089,
+      "pattern": "\\bprof_id\\b",
+      "content": "item.pop('prof_id', None)",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    },
+    {
+      "file": "app.py",
+      "line": 12098,
+      "pattern": "\\bprof_id\\b",
+      "content": "item.pop('prof_id', None)",
+      "func": "def _execute_client_side_restore(data_dict, clear_existing=True):"
+    }
+  ],
+  "l_activity_log": [],
+  "m_frontend_templates_js": [
+    {
+      "file": "templates\\generated_professor_schedule.html",
+      "line": 12,
+      "pattern": "\\bprof_id\\b",
+      "content": "<a href=\"/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}\" class=\"btn btn-success btn-sm\" title=\"Export Professor Schedule to Excel\">"
+    },
+    {
+      "file": "templates\\generated_professor_schedule.html",
+      "line": 15,
+      "pattern": "\\bprof_id\\b",
+      "content": "<a href=\"/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}\" class=\"btn btn-danger\" title=\"Export Professor Schedule to PDF (NEUST format)\">"
+    },
+    {
+      "file": "templates\\generated_professor_schedule.html",
+      "line": 33,
+      "pattern": "\\bprof_id\\b",
+      "content": "<a href=\"/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}\" class=\"btn btn-sm btn-outline-dark\">"
+    },
+    {
+      "file": "templates\\generated_professor_schedule.html",
+      "line": 46,
+      "pattern": "\\bprof_id\\b",
+      "content": "<a href=\"/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}?mode=preview&year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}\" class=\"btn btn-sm btn-info text-white\">"
+    },
+    {
+      "file": "templates\\generated_schedule.html",
+      "line": 381,
+      "pattern": "\\bprof_id\\b",
+      "content": "<option value=\"{{ pc.professor_load_id }}\" data-prof-id=\"{{ pc.prof_id }}\""
+    },
+    {
+      "file": "templates\\index.html",
+      "line": 347,
+      "pattern": "\\bprof_id\\b",
+      "content": "data-prof-id=\"{{ entry.prof_id or '' }}\" data-room=\"{{ entry.room_name or 'TBA' }}\""
+    },
+    {
+      "file": "templates\\index.html",
+      "line": 498,
+      "pattern": "\\bprof_id\\b",
+      "content": "<option value=\"{{ pc.professor_load_id }}\" data-prof-id=\"{{ pc.prof_id }}\""
+    },
+    {
+      "file": "templates\\index.html",
+      "line": 979,
+      "pattern": "\\bprof_id\\b",
+      "content": "$row.attr('data-prof-id', entry.prof_id || '').data('prof-id', entry.prof_id || '');"
+    },
+    {
+      "file": "templates\\preview_schedule.html",
+      "line": 152,
+      "pattern": "\\bprof_id\\b",
+      "content": "data-prof-id=\"{{ entry.prof_id or '' }}\""
+    },
+    {
+      "file": "templates\\preview_schedule.html",
+      "line": 299,
+      "pattern": "\\bprof_id\\b",
+      "content": "<option value=\"{{ pc.professor_load_id }}\" data-prof-id=\"{{ pc.prof_id }}\" data-course-id=\"{{ pc.course_id }}\">{{ pc.label }}</option>"
+    },
+    {
+      "file": "templates\\preview_schedule.html",
+      "line": 473,
+      "pattern": "\\bprof_id\\b",
+      "content": "$row.attr('data-prof-id', entry.prof_id || '').data('prof-id', entry.prof_id || '');"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 2,
+      "pattern": "\\bprofessors\\b",
+      "content": "{% block title %}Professors - Scheduler{% endblock %}"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 8,
+      "pattern": "\\bprofessors\\b",
+      "content": "<h1 class=\"page-title\">Professors</h1>"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 16,
+      "pattern": "\\bprofessors\\b",
+      "content": "<a class=\"nav-link active btn btn-primary btn-sm px-3 text-white\" href=\"/professors\"><i class=\"bx bx-user me-1\"></i>Professors</a>"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 87,
+      "pattern": "\\bprofessors\\b",
+      "content": "<span class=\"badge-custom badge-primary\">{{ professors|length }} professors</span>"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 105,
+      "pattern": "\\bprofessors\\b",
+      "content": "{% for professor in professors %}"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 130,
+      "pattern": "\\bprof_id\\b",
+      "content": "data-id=\"{{professor.prof_id}}\""
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 138,
+      "pattern": "\\bprof_id\\b",
+      "content": "<a href=\"/delete_professor/{{ professor.prof_id }}\" class=\"btn btn-danger btn-sm\" data-action=\"delete\" data-title=\"Delete Professor\" data-confirm=\"Are you sure you want to delete this professor?\">"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 149,
+      "pattern": "\\bprofessors\\b",
+      "content": "<div class=\"empty-state__text\">No professors added yet</div>"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 313,
+      "pattern": "\\bprof_id\\b",
+      "content": "'<button type=\"button\" class=\"btn btn-outline-secondary btn-sm edit-btn\" data-bs-toggle=\"modal\" data-bs-target=\"#editModal\" data-id=\"' + (p.prof_id || '') + '\" data-firstname=\"' + (p.first_name || '') + '\" data-lastname=\"' + (p.last_name || '') + '\" data-timedesignation=\"' + (p.time_designation || 5) + '\" data-specialization=\"' + (p.specialization || '') + '\"><i class=\"bx bx-edit\"></i> Edit</button> ' +"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 314,
+      "pattern": "\\bprof_id\\b",
+      "content": "'<a href=\"/delete_professor/' + (p.prof_id || '') + '\" class=\"btn btn-danger btn-sm\" data-action=\"delete\" data-title=\"Delete Professor\" data-confirm=\"Are you sure you want to delete this professor?\"><i class=\"bx bx-trash\"></i> Delete</a>' +"
+    },
+    {
+      "file": "templates\\professors.html",
+      "line": 319,
+      "pattern": "\\bprofessors\\b",
+      "content": "var n = parseInt(badge.textContent) || 0; n += 1; badge.textContent = n + ' professors';"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 150,
+      "pattern": "\\bprofessors\\b",
+      "content": "<h1 class=\"page-title\">Professors' Teaching Load & Course Assignments</h1>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 173,
+      "pattern": "\\bprofessors\\b",
+      "content": "<div class=\"fw-bold fs-5\">{{ professors|length }}</div>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 280,
+      "pattern": "\\bprofessors\\b",
+      "content": "<span class=\"badge-custom badge-primary\" id=\"prof-table-count-badge\">{{ professor_loads|groupby('professor_key')|list|length }} professors assigned</span>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 373,
+      "pattern": "\\bprof_id\\b",
+      "content": "data-prof-id=\"{{ prof_group.list[0].prof_id or prof_group.grouper }}\""
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 450,
+      "pattern": "\\bprofessors\\b",
+      "content": "<div class=\"fw-semibold text-dark mb-1\">No professors match your filters</div>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 490,
+      "pattern": "\\bprofessors\\b",
+      "content": "<small class=\"text-muted\">Batch assign course sections to professors via Excel or CSV</small>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 511,
+      "pattern": "\\bprofessors\\b",
+      "content": "<li><strong>Year Dividers:</strong> Merged cells (or Column A alone) such as <code>1st Year</code>, <code>2nd Year</code>, <code>3rd Year</code>, <code>4th Year</code> are recognized as section markers, never as professors.</li>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 614,
+      "pattern": "\\bprofessors\\b",
+      "content": "<div class=\"text-muted small\">Professors</div>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 694,
+      "pattern": "\\bprofessors\\b",
+      "content": "<th class=\"text-center\">Professors Assigned</th>"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 919,
+      "pattern": "\\bprofessors\\b",
+      "content": "$countBadge.text(visibleCount + ' of ' + totalCount + ' professors');"
+    },
+    {
+      "file": "templates\\professor_load.html",
+      "line": 921,
+      "pattern": "\\bprofessors\\b",
+      "content": "$countBadge.text(totalCount + ' professors assigned');"
+    },
+    {
+      "file": "templates\\professor_schedule.html",
+      "line": 24,
+      "pattern": "\\bprof_id\\b",
+      "content": "<select id=\"profFilter\" name=\"prof_id\" class=\"form-select form-select-sm\">"
+    },
+    {
+      "file": "templates\\professor_schedule.html",
+      "line": 25,
+      "pattern": "\\bprofessors\\b",
+      "content": "<option value=\"\">All Professors</option>"
+    },
+    {
+      "file": "templates\\professor_schedule.html",
+      "line": 27,
+      "pattern": "\\bprof_id\\b",
+      "content": "<option value=\"{{ p.prof_id }}\" {% if selected_prof_id == p.prof_id|string or selected_prof_id == p.prof_id or selected_prof_id == p.professor_key %}selected{% endif %}>"
+    },
+    {
+      "file": "templates\\professor_schedule.html",
+      "line": 88,
+      "pattern": "\\bprofessors\\b",
+      "content": "{% elif professors %}"
+    },
+    {
+      "file": "templates\\professor_schedule.html",
+      "line": 90,
+      "pattern": "\\bprofessors\\b",
+      "content": "{% for professor in professors %}"
+    },
+    {
+      "file": "templates\\professor_schedule.html",
+      "line": 91,
+      "pattern": "\\bprofessor_id\\b",
+      "content": "<div class=\"section-card card-custom p-3 transition\" data-href=\"/professor_schedule/{{ professor.professor_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}\" tabindex=\"0\" role=\"button\" aria-label=\"View schedule for Professor {{ professor.professor_name }}\" style=\"cursor: pointer;\">"
+    },
+    {
+      "file": "templates\\timeslot.html",
+      "line": 207,
+      "pattern": "\\bprofessors\\b",
+      "content": "<small class=\"text-muted\">Professors with cutoffs (non-LOHB) cannot be scheduled past this time. Must be after start time and on/before window end. Leave blank for no cutoff.</small>"
+    }
+  ],
+  "other": [
+    {
+      "file": "app.py",
+      "line": 68,
+      "pattern": "\\bprofessors\\b",
+      "content": "# Simple scheduler app: manage courses, professors, rooms, and generated schedules",
+      "func": "def inject_global_constants():"
+    },
+    {
+      "file": "app.py",
+      "line": 94,
+      "pattern": "\\bprof_id\\b",
+      "content": "\"\"\"Return map of (prof_id, course_id) and (professor_key, course_id) -> int order index",
+      "func": "def _get_baseline_professor_load_order():"
+    },
+    {
+      "file": "app.py",
+      "line": 112,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_name_map[p.get('prof_id')] = professor_load_importer.normalize_professor_key(full_p_name)",
+      "func": "def _get_baseline_professor_load_order():"
+    },
+    {
+      "file": "app.py",
+      "line": 112,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "prof_name_map[p.get('prof_id')] = professor_load_importer.normalize_professor_key(full_p_name)",
+      "func": "def _get_baseline_professor_load_order():"
+    },
+    {
+      "file": "app.py",
+      "line": 114,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid = r.get('prof_id')",
+      "func": "def _get_baseline_professor_load_order():"
+    },
+    {
+      "file": "app.py",
+      "line": 114,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid = r.get('prof_id')",
+      "func": "def _get_baseline_professor_load_order():"
+    },
+    {
+      "file": "app.py",
+      "line": 837,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_match = (p_key == norm_key) or (r.get('prof_id') is not None and ident_str.isdigit() and int(r['prof_id']) == int(ident_str))",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 837,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_match = (p_key == norm_key) or (r.get('prof_id') is not None and ident_str.isdigit() and int(r['prof_id']) == int(ident_str))",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 837,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "p_match = (p_key == norm_key) or (r.get('prof_id') is not None and ident_str.isdigit() and int(r['prof_id']) == int(ident_str))",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 849,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_res = supabase.table('professor').select('prof_id, first_name, last_name, program_id').execute().data or []",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 851,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_id = p.get('prof_id')",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 851,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_id = p.get('prof_id')",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 862,
+      "pattern": "\\bprof_id\\b",
+      "content": "s_res = supabase.table('schedule').select('program_id, professor_load(prof_id, professor_name)').execute().data or []",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 868,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_id = pl.get('prof_id')",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 868,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_id = pl.get('prof_id')",
+      "func": "def _get_professor_program_ids(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 898,
+      "pattern": "\\bprof_id\\b",
+      "content": "if l.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 898,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if l.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 899,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_identities.add(int(l['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 899,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "prof_identities.add(int(l['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 906,
+      "pattern": "\\bprofessors\\b",
+      "content": "logging.debug(f\"Error querying scoped professors from professor_load: {e}\")",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 910,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_rows = supabase.table('professor').select('prof_id, first_name, last_name, program_id').execute().data or []",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 913,
+      "pattern": "\\bprof_id\\b",
+      "content": "if p.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 913,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if p.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 914,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_identities.add(int(p['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 914,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "prof_identities.add(int(p['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 923,
+      "pattern": "\\bprofessor_program\\b",
+      "content": "# 3. From professor_program junction table (if present in mocks)",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 925,
+      "pattern": "\\bprof_id\\b",
+      "content": "pp_rows = supabase.table('professor_program').select('prof_id, program_id').execute().data or []",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 925,
+      "pattern": "\\bprofessor_program\\b",
+      "content": "pp_rows = supabase.table('professor_program').select('prof_id, program_id').execute().data or []",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 928,
+      "pattern": "\\bprof_id\\b",
+      "content": "if pp.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 928,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if pp.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 929,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_identities.add(int(pp['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 929,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "prof_identities.add(int(pp['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 935,
+      "pattern": "\\bprof_id\\b",
+      "content": "s_rows = supabase.table('schedule').select('program_id, professor_load(prof_id, professor_name)').execute().data or []",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 939,
+      "pattern": "\\bprof_id\\b",
+      "content": "if pl.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 939,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if pl.get('prof_id') is not None:",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 940,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_identities.add(int(pl['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 940,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "prof_identities.add(int(pl['prof_id']))",
+      "func": "def _get_scoped_professor_ids_for_program(program_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 954,
+      "pattern": "\\bprof_id\\b",
+      "content": "numeric prof_id, professor_key, or professor_name.",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 993,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_res = supabase.table('professor').select('prof_id, first_name, last_name, specialization, time_designation, program_id, program:program_id(id, program_name)').execute()",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 998,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_by_id = {p['prof_id']: p for p in prof_table_rows if p.get('prof_id') is not None}",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 998,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_by_id = {p['prof_id']: p for p in prof_table_rows if p.get('prof_id') is not None}",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 998,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "p_by_id = {p['prof_id']: p for p in prof_table_rows if p.get('prof_id') is not None}",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1022,
+      "pattern": "\\bprof_id\\b",
+      "content": "matched_prof_id = legacy_prof_record.get('prof_id')",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1022,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "matched_prof_id = legacy_prof_record.get('prof_id')",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1031,
+      "pattern": "\\bprof_id\\b",
+      "content": "r_pid = r.get('prof_id')",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1031,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "r_pid = r.get('prof_id')",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1059,
+      "pattern": "\\bprof_id\\b",
+      "content": "r_pid = r.get('prof_id')",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1059,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "r_pid = r.get('prof_id')",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1131,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': matched_prof_id or final_key,",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1132,
+      "pattern": "\\bprofessor_id\\b",
+      "content": "'professor_id': matched_prof_id or final_key,",
+      "func": "def _resolve_professor_info(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 1479,
+      "pattern": "\\bprofessors\\b",
+      "content": "\"\"\"Fallback professors are prohibited. Return None without querying or inserting records.\"\"\"",
+      "func": "def _ensure_fallback_professor_by_index(index=0, department=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 1484,
+      "pattern": "\\bprofessors\\b",
+      "content": "\"\"\"Fallback professors are prohibited. Return None without querying or inserting records.\"\"\"",
+      "func": "def _ensure_fallback_professor(department=None):"
+    },
+    {
+      "file": "app.py",
+      "line": 4220,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_key = row.get('professor_key') or (professor_load_importer.normalize_professor_key(p_name) if p_name else None) or (str(row.get('prof_id')) if row.get('prof_id') is not None else None)",
+      "func": "def professor_load():"
+    },
+    {
+      "file": "app.py",
+      "line": 4220,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_key = row.get('professor_key') or (professor_load_importer.normalize_professor_key(p_name) if p_name else None) or (str(row.get('prof_id')) if row.get('prof_id') is not None else None)",
+      "func": "def professor_load():"
+    },
+    {
+      "file": "app.py",
+      "line": 4273,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_id = row.get('prof_id') or p_rel.get('prof_id')",
+      "func": "def professor_load():"
+    },
+    {
+      "file": "app.py",
+      "line": 4273,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "prof_id = row.get('prof_id') or p_rel.get('prof_id')",
+      "func": "def professor_load():"
+    },
+    {
+      "file": "app.py",
+      "line": 4279,
+      "pattern": "\\bprof_id\\b",
+      "content": "or (prof_id is not None and (prof_id in scoped_pids or int(prof_id) in scoped_pids))",
+      "func": "def professor_load():"
+    },
+    {
+      "file": "app.py",
+      "line": 4326,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': prof_id,",
+      "func": "def professor_load():"
+    },
+    {
+      "file": "app.py",
+      "line": 4333,
+      "pattern": "\\bprof_id\\b",
+      "content": "'other_program_badge': prof_other_badges.get(p_key, '') or (prof_other_badges.get(str(prof_id), '') if prof_id is not None else ''),",
+      "func": "def professor_load():"
+    },
+    {
+      "file": "app.py",
+      "line": 4420,
+      "pattern": "\\bprofessors\\b",
+      "content": "# 3. Derive unique professors from professor_load (and legacy professor table if present)",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4425,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_key = pl.get('professor_key') or (professor_load_importer.normalize_professor_key(p_name) if p_name else None) or (str(pl.get('prof_id')) if pl.get('prof_id') else None)",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4425,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_key = pl.get('professor_key') or (professor_load_importer.normalize_professor_key(p_name) if p_name else None) or (str(pl.get('prof_id')) if pl.get('prof_id') else None)",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4435,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pl.get('prof_id'),",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4435,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': pl.get('prof_id'),",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4446,
+      "pattern": "\\bprof_id\\b",
+      "content": "legacy_p = supabase.table('professor').select('prof_id, first_name, last_name, specialization, program_id').execute().data or []",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4452,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': lp.get('prof_id'),",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4452,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': lp.get('prof_id'),",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4463,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors = list(prof_map.values())",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4468,
+      "pattern": "\\bprofessors\\b",
+      "content": "p for p in professors",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4469,
+      "pattern": "\\bprof_id\\b",
+      "content": "if (p.get('prof_id') in allowed_prof_ids) or (p.get('professor_key') in allowed_prof_ids) or (p.get('program_id') and str(p.get('program_id')) == str(user_prog_id))",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4469,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if (p.get('prof_id') in allowed_prof_ids) or (p.get('professor_key') in allowed_prof_ids) or (p.get('program_id') and str(p.get('program_id')) == str(user_prog_id))",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4472,
+      "pattern": "\\bprofessors\\b",
+      "content": "scoped_professors = professors",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4485,
+      "pattern": "\\bprofessors\\b",
+      "content": "return _ImportContext(scoped_professors, courses, existing_loads, all_courses, professors, allowed_prof_ids)",
+      "func": "def _fetch_professor_load_import_context():"
+    },
+    {
+      "file": "app.py",
+      "line": 4543,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors, courses, existing_loads, all_courses = import_ctx[:4]",
+      "func": "def professor_load_import_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 4544,
+      "pattern": "\\bprofessors\\b",
+      "content": "all_profs_list = getattr(import_ctx, 'all_professors', professors)",
+      "func": "def professor_load_import_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 4562,
+      "pattern": "\\bprofessors\\b",
+      "content": "data_rows, dividers, professors, courses, existing_loads,",
+      "func": "def professor_load_import_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 4619,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors, courses, existing_loads, all_courses = import_ctx[:4]",
+      "func": "def professor_load_import_confirm():"
+    },
+    {
+      "file": "app.py",
+      "line": 4620,
+      "pattern": "\\bprofessors\\b",
+      "content": "all_profs_list = getattr(import_ctx, 'all_professors', professors)",
+      "func": "def professor_load_import_confirm():"
+    },
+    {
+      "file": "app.py",
+      "line": 4638,
+      "pattern": "\\bprofessors\\b",
+      "content": "data_rows, dividers, professors, courses, existing_loads,",
+      "func": "def professor_load_import_confirm():"
+    },
+    {
+      "file": "app.py",
+      "line": 4663,
+      "pattern": "\\bprofessors\\b",
+      "content": "f'Imported {total_imported} course assignments ({inserted_cnt} new, {updated_cnt} updated, {new_profs_cnt} new professors created, {total_skipped} skipped) from {filename}'",
+      "func": "def professor_load_import_confirm():"
+    },
+    {
+      "file": "app.py",
+      "line": 4676,
+      "pattern": "\\bprofessors\\b",
+      "content": "'message': f'Successfully imported {total_imported} assignments ({inserted_cnt} new, {updated_cnt} updated, {new_profs_cnt} new professors created). {total_skipped} rows skipped.'",
+      "func": "def professor_load_import_confirm():"
+    },
+    {
+      "file": "app.py",
+      "line": 4703,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors, courses, existing_loads, all_courses = import_ctx[:4]",
+      "func": "def professor_load_import_error_report():"
+    },
+    {
+      "file": "app.py",
+      "line": 4704,
+      "pattern": "\\bprofessors\\b",
+      "content": "all_profs_list = getattr(import_ctx, 'all_professors', professors)",
+      "func": "def professor_load_import_error_report():"
+    },
+    {
+      "file": "app.py",
+      "line": 4722,
+      "pattern": "\\bprofessors\\b",
+      "content": "data_rows, dividers, professors, courses, existing_loads,",
+      "func": "def professor_load_import_error_report():"
+    },
+    {
+      "file": "app.py",
+      "line": 6033,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_filter = request.args.get('prof_id', '').strip()",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6045,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors = []",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6051,
+      "pattern": "\\bprofessors\\b",
+      "content": "# Fetch loads to find all professors",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6066,
+      "pattern": "\\bprof_id\\b",
+      "content": "legacy_raw = supabase.table('professor').select('prof_id, first_name, last_name, specialization, time_designation, program_id').execute().data or []",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6070,
+      "pattern": "\\bprof_id\\b",
+      "content": "legacy_map = {p['prof_id']: p for p in legacy_raw if p.get('prof_id') is not None}",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6070,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "legacy_map = {p['prof_id']: p for p in legacy_raw if p.get('prof_id') is not None}",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6070,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "legacy_map = {p['prof_id']: p for p in legacy_raw if p.get('prof_id') is not None}",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6078,
+      "pattern": "\\bprof_id\\b",
+      "content": "l_pid = l.get('prof_id')",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6078,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "l_pid = l.get('prof_id')",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6101,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': l_pid or l_key,",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6102,
+      "pattern": "\\bprofessor_id\\b",
+      "content": "'professor_id': l_key,",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6121,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': p.get('prof_id'),",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6121,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': p.get('prof_id'),",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6122,
+      "pattern": "\\bprofessor_id\\b",
+      "content": "'professor_id': p_key,",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6142,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif any(p.get('professor_key') == p_filter_key and (user_prog_id in p.get('program_ids', set()) or p.get('prof_id') in scoped_pids) for p in all_candidate_profs):",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6142,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "elif any(p.get('professor_key') == p_filter_key and (user_prog_id in p.get('program_ids', set()) or p.get('prof_id') in scoped_pids) for p in all_candidate_profs):",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6146,
+      "pattern": "\\bprof_id\\b",
+      "content": "all_prof_options = [p for p in all_candidate_profs if (p.get('prof_id') in scoped_pids or p.get('professor_key') in scoped_pids or user_prog_id in p.get('program_ids', set()))]",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6146,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "all_prof_options = [p for p in all_candidate_profs if (p.get('prof_id') in scoped_pids or p.get('professor_key') in scoped_pids or user_prog_id in p.get('program_ids', set()))]",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6161,
+      "pattern": "\\bprof_id\\b",
+      "content": "sched_cols = 'schedule_id, professor_load_id, section, semester, major, program_id, day, class_start, class_end, room(room_name), professor_load(prof_id, professor_name, professor_key)'",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6171,
+      "pattern": "\\bprof_id\\b",
+      "content": "sched_cols = 'schedule_id, professor_load_id, section, semester, major, program_id, day, class_start, class_end, room(room_name), professor_load(prof_id)'",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6214,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif pl.get('prof_id') is not None:",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6214,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "elif pl.get('prof_id') is not None:",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6215,
+      "pattern": "\\bprof_id\\b",
+      "content": "r_pid = pl.get('prof_id')",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6215,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "r_pid = pl.get('prof_id')",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6217,
+      "pattern": "\\bprof_id\\b",
+      "content": "if cp.get('prof_id') is not None and str(cp.get('prof_id')) == str(r_pid):",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6217,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if cp.get('prof_id') is not None and str(cp.get('prof_id')) == str(r_pid):",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6226,
+      "pattern": "\\bprof_id\\b",
+      "content": "pid_str = str(p.get('prof_id'))",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6226,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "pid_str = str(p.get('prof_id'))",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6238,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors.append({",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6239,
+      "pattern": "\\bprofessor_id\\b",
+      "content": "'professor_id': p.get('professor_key') or p.get('prof_id'),",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6239,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_id': p.get('professor_key') or p.get('prof_id'),",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6239,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'professor_id': p.get('professor_key') or p.get('prof_id'),",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6252,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors = []",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6270,
+      "pattern": "\\bprofessors\\b",
+      "content": "professors=professors,",
+      "func": "def professor_schedule():"
+    },
+    {
+      "file": "app.py",
+      "line": 6885,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def api_professor_availability(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6885,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def api_professor_availability(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6892,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def api_professor_availability(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6892,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def api_professor_availability(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6918,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(id, prof_id, course(course_name)), room(room_name)'",
+      "func": "def api_professor_availability(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6982,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def api_professor_workload(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6982,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_pid = p_entry.get('prof_id')",
+      "func": "def api_professor_workload(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6989,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def api_professor_workload(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 6989,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "elif p_pid and str(p_pid) == str(professor.get('prof_id')):",
+      "func": "def api_professor_workload(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 7002,
+      "pattern": "\\bprof_id\\b",
+      "content": "ret_prof_id = int(prof_identifier) if str(prof_identifier).isdigit() else (professor.get('prof_id') if isinstance(professor.get('prof_id'), int) else (professor.get('professor_key') or professor.get('prof_id')))",
+      "func": "def api_professor_workload(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 7002,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "ret_prof_id = int(prof_identifier) if str(prof_identifier).isdigit() else (professor.get('prof_id') if isinstance(professor.get('prof_id'), int) else (professor.get('professor_key') or professor.get('prof_id')))",
+      "func": "def api_professor_workload(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 7004,
+      "pattern": "\\bprofessor_id\\b",
+      "content": "'professor_id': ret_prof_id,",
+      "func": "def api_professor_workload(prof_identifier):"
+    },
+    {
+      "file": "app.py",
+      "line": 7360,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '",
+      "func": "def export_room_schedule(room_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 7919,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': p_entry.get('prof_id'),",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 7919,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': p_entry.get('prof_id'),",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 7944,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 7974,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pc.get('prof_id') or row.get('prof_id'),",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 7974,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': pc.get('prof_id') or row.get('prof_id'),",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 8028,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load_id:id, course_id, prof_id, '",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 8030,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor(prof_id, first_name, last_name, program_id, program:program_id(program_name))'",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 8036,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load_id:id, course_id, prof_id, '",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 8038,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor(prof_id, first_name, last_name, program_id, program:program_id(program_name))'",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 8052,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pc_item.get('prof_id'),",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 8052,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': pc_item.get('prof_id'),",
+      "func": "def view_schedule(section_name):"
+    },
+    {
+      "file": "app.py",
+      "line": 9221,
+      "pattern": "\\bprof_id\\b",
+      "content": "'professor_load(professor_load_id:id, prof_id, course_id, course(course_id, course_name), professor(prof_id, first_name, last_name)), '",
+      "func": "def manage_irregular_student_schedule(student_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 9248,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': pc.get('prof_id') or row.get('prof_id'),",
+      "func": "def manage_irregular_student_schedule(student_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 9248,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "'prof_id': pc.get('prof_id') or row.get('prof_id'),",
+      "func": "def manage_irregular_student_schedule(student_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 9267,
+      "pattern": "\\bprof_id\\b",
+      "content": "'schedule(day, class_start, class_end, session_type, professor_load_id, professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), course(course_name), room(room_name), professor(first_name, last_name))'",
+      "func": "def manage_irregular_student_schedule(student_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 9343,
+      "pattern": "\\bprof_id\\b",
+      "content": "'schedule(day, class_start, class_end, session_type, professor_load_id, professor_load(course_id, prof_id, course(course_name), professor(first_name, last_name)), course(course_name), room(room_name), professor(first_name, last_name))'",
+      "func": "def view_irregular_student_schedule(student_id):"
+    },
+    {
+      "file": "app.py",
+      "line": 11001,
+      "pattern": "\\bprof_id\\b",
+      "content": "resolved_load_id = _pl_by_prof_course.get((int(prof_id), int(course_id)))",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 11043,
+      "pattern": "\\bprof_id\\b",
+      "content": "'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load(prof_id, professor_key), program_id'",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 11067,
+      "pattern": "\\bprof_id\\b",
+      "content": "o_pid = o_pl.get('prof_id') or o.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 11067,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "o_pid = o_pl.get('prof_id') or o.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 11088,
+      "pattern": "\\bprof_id\\b",
+      "content": "r_prof_id = pl_match.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "app.py",
+      "line": 11088,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "r_prof_id = pl_match.get('prof_id')",
+      "func": "def confirm_preview():"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 348,
+      "pattern": "\\bprofessors\\b",
+      "content": "Match professor name by normalized full name against existing professors."
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 439,
+      "pattern": "\\bprofessors\\b",
+      "content": "Auto-creates new professors when names are not found in existing professors."
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 441,
+      "pattern": "\\bprofessors\\b",
+      "content": "Rejects professors from other programs with 'Professor not in <Program>'."
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 472,
+      "pattern": "\\bprof_id\\b",
+      "content": "# Map existing assignments: (prof_id, course_id) AND (prof_key, course_id) -> existing_load"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 480,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_id = pl.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 480,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_id = pl.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 546,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_id = None"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 556,
+      "pattern": "\\bprof_id\\b",
+      "content": "matched_id = matched_prof.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 556,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "matched_id = matched_prof.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 571,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_id = matched_id"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 583,
+      "pattern": "\\bprofessors\\b",
+      "content": "# Check for similar existing professors"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 631,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_key = prof_canon_key if prof_canon_key else (prof_id if prof_id is not None else None)"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 651,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif prof_id and (int(prof_id), c_int) in existing_map:"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 653,
+      "pattern": "\\bprof_id\\b",
+      "content": "existing_load_id = existing_map[(int(prof_id), c_int)].get('id') or existing_map[(int(prof_id), c_int)].get('professor_load_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 681,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': prof_id,"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 711,
+      "pattern": "\\bprof_id\\b",
+      "content": "if p.get('prof_id'):"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 711,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if p.get('prof_id'):"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 712,
+      "pattern": "\\bprof_id\\b",
+      "content": "existing_prof_map[int(p['prof_id'])] = p"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 712,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "existing_prof_map[int(p['prof_id'])] = p"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 724,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_id = p_obj.get('prof_id') if isinstance(p_obj, dict) else (prof_key if isinstance(prof_key, int) else None)"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 724,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_id = p_obj.get('prof_id') if isinstance(p_obj, dict) else (prof_key if isinstance(prof_key, int) else None)"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 733,
+      "pattern": "\\bprofessors\\b",
+      "content": "# For existing professors, add untouched existing assignments"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 762,
+      "pattern": "\\bprof_id\\b",
+      "content": "'prof_id': p_id,"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 785,
+      "pattern": "\\bprof_id\\b",
+      "content": "if item.get('prof_id') is not None:"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 785,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "if item.get('prof_id') is not None:"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 786,
+      "pattern": "\\bprof_id\\b",
+      "content": "valid_profs_affected.add(item['prof_id'])"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 786,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "valid_profs_affected.add(item['prof_id'])"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 983,
+      "pattern": "\\bprof_id\\b",
+      "content": "- If a (professor_key, course_id) or (prof_id, course_id) assignment already exists: UPDATE sections."
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 991,
+      "pattern": "\\bprof_id\\b",
+      "content": "# Map existing loads by (professor_key, course_id) and (prof_id, course_id)"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1022,
+      "pattern": "\\bprof_id\\b",
+      "content": "p_id = pl.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1022,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "p_id = pl.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1043,
+      "pattern": "\\bprof_id\\b",
+      "content": "prof_id = item.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1043,
+      "pattern": "\\.get\\(['\\\"]prof_id['\\\"]\\)",
+      "content": "prof_id = item.get('prof_id')"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1045,
+      "pattern": "\\bprof_id\\b",
+      "content": "if item.get('is_new_professor') or (prof_key not in known_prof_keys and not prof_id):"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1051,
+      "pattern": "\\bprof_id\\b",
+      "content": "elif prof_id and (int(prof_id), course_id) in existing_map_by_id:"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1052,
+      "pattern": "\\bprof_id\\b",
+      "content": "load_id = existing_map_by_id[(int(prof_id), course_id)]"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1098,
+      "pattern": "\\bprof_id\\b",
+      "content": "if any(x in err_str for x in ('42703', 'PGRST204', 'ilp_hours', 'prof_id', 'professor_key')):"
+    },
+    {
+      "file": "professor_load_importer.py",
+      "line": 1104,
+      "pattern": "\\bprof_id\\b",
+      "content": "f_row.pop('prof_id', None)"
+    },
+    {
+      "file": "restore_professor_load.py",
+      "line": 52,
+      "pattern": "\\bprof_id\\b",
+      "content": "insert_batch = [{'id': r['id'], 'prof_id': r['prof_id'], 'course_id': r['course_id'], 'sections': r.get('sections', 1)} for r in batch]"
+    },
+    {
+      "file": "restore_professor_load.py",
+      "line": 52,
+      "pattern": "\\[['\\\"]prof_id['\\\"]\\]",
+      "content": "insert_batch = [{'id': r['id'], 'prof_id': r['prof_id'], 'course_id': r['course_id'], 'sections': r.get('sections', 1)} for r in batch]"
+    },
+    {
+      "file": "scratch\\route_audit.py",
+      "line": 27,
+      "pattern": "\\bprofessors\\b",
+      "content": "'/professors', '/academic_ranking', '/courses', '/rooms', '/timeslots',"
+    }
+  ]
+}

@@ -58,148 +58,144 @@ class MockTable:
     def order(self, *args, **kwargs):
         return self
 
-    def execute(self):
-        # Filter self.data according to eq, neq, and in_
-        res = []
-        for item in self.data:
-            match = True
-            for col, val in self._filters.items():
-                if str(item.get(col)) != str(val):
-                    match = False
-                    break
-            for col, val in self._neq_filters.items():
-                if str(item.get(col)) == str(val):
-                    match = False
-                    break
-            for col, val_list in self._in_filters.items():
-                if item.get(col) not in val_list and int(item.get(col, -999)) not in val_list:
-                    match = False
-                    break
-            if match:
-                res.append(dict(item))
+    def like(self, col, val):
+        return self
 
-        if self._pending_update is not None:
-            for item in self.data:
-                match = True
-                for col, val in self._filters.items():
-                    if str(item.get(col)) != str(val):
-                        match = False
-                        break
-                for col, val in self._neq_filters.items():
-                    if str(item.get(col)) == str(val):
-                        match = False
-                        break
-                if match:
+    def ilike(self, col, val):
+        return self
+
+    def execute(self):
+        result = list(self.data)
+        if self._pending_update is not None and self._filters:
+            for item in result:
+                if all(str(item.get(k)) == str(v) for k, v in self._filters.items()):
                     item.update(self._pending_update)
             self._pending_update = None
-
-        self._filters = {}
-        self._neq_filters = {}
-        self._in_filters = {}
-
+        for col, val in self._filters.items():
+            result = [item for item in result if str(item.get(col)) == str(val)]
+        for col, val in self._neq_filters.items():
+            result = [item for item in result if str(item.get(col)) != str(val)]
+        for col, vals in self._in_filters.items():
+            result = [item for item in result if item.get(col) in vals]
         class Response:
-            pass
-
-        r = Response()
-        r.data = res
-        return r
+            def __init__(self, data):
+                self.data = data
+        return Response(result)
 
 
 class MockSupabase:
-    def __init__(self, professors=None, courses=None, professor_loads=None, schedules=None, professor_programs=None):
-        self.tables = {
-            'professor': MockTable('professor', professors or []),
-            'course': MockTable('course', courses or []),
-            'professor_load': MockTable('professor_load', professor_loads or []),
-            'schedule': MockTable('schedule', schedules or []),
-            'professor_program': MockTable('professor_program', professor_programs or []),
-        }
+    def __init__(self, tables):
+        self._tables = tables
 
     def table(self, name):
-        if name not in self.tables:
-            self.tables[name] = MockTable(name)
-        return self.tables[name]
+        if name not in self._tables:
+            self._tables[name] = MockTable(name)
+        return self._tables[name]
 
 
 def _build_mock_db():
-    profs = [
+    courses = [
+        {
+            'course_id': 101,
+            'course_name': 'IT101 - Programming 1',
+            'course_code': 'IT101',
+            'units': 3.0,
+            'lecture_hours': 2.0,
+            'lab_hours': 3.0,
+            'ilp_hours': 1.0,
+            'weekly_hours': 6.0,
+            'program': 'BSIT',
+            'year_level': 1,
+            'semester': '1st Semester',
+        },
+        {
+            'course_id': 102,
+            'course_name': 'IT102 - Discrete Math',
+            'course_code': 'IT102',
+            'units': 3.0,
+            'lecture_hours': 3.0,
+            'lab_hours': 0.0,
+            'ilp_hours': 0.0,
+            'weekly_hours': 3.0,
+            'program': 'BSIT',
+            'year_level': 1,
+            'semester': '1st Semester',
+        },
+        {
+            'course_id': 103,
+            'course_name': 'IT103 - Heavy Lab Course',
+            'course_code': 'IT103',
+            'units': 16.0,
+            'lecture_hours': 10.0,
+            'lab_hours': 15.0,
+            'ilp_hours': 0.0,
+            'weekly_hours': 25.0,
+            'program': 'BSIT',
+            'year_level': 2,
+            'semester': '1st Semester',
+        },
+    ]
+
+    professors = [
         {
             'prof_id': 1,
             'first_name': 'Alan',
             'last_name': 'Turing',
+            'program': 'BSIT',
             'department': 'CICT',
             'specialization': 'Computer Science',
-            'min_units': 6.0,
-            'max_units': 15.0,
-            'program_id': 1,
+            'max_hours': 40,
+            'max_units': 15,
+            'min_units': 6,
         },
         {
             'prof_id': 2,
-            'first_name': 'Ada',
-            'last_name': 'Lovelace',
+            'first_name': 'Grace',
+            'last_name': 'Hopper',
+            'program': 'BSIT',
             'department': 'CICT',
-            'specialization': 'Algorithms',
-            'min_units': 12.0,
-            'max_units': 24.0,
-            'program_id': 1,
-        }
-    ]
-
-    courses = [
-        {
-            'course_id': 101,
-            'course_name': 'Intro to Programming',
-            'program': 'BSIT',
-            'program_id': 1,
-            'year_level': 1,
-            'lecture_hours': 2.0,
-            'lab_hours': 3.0,
-            'ilp_hours': 1.0,
-            'units': 3.0,
+            'specialization': 'Software Engineering',
+            'max_hours': 40,
+            'max_units': 24,
+            'min_units': 12,
         },
-        {
-            'course_id': 102,
-            'course_name': 'Data Structures',
-            'program': 'BSIT',
-            'program_id': 1,
-            'year_level': 2,
-            'lecture_hours': 3.0,
-            'lab_hours': 0.0,
-            'ilp_hours': 0.0,
-            'units': 3.0,
-        },
-        {
-            'course_id': 103,
-            'course_name': 'Capstone Project',
-            'program': 'BSIT',
-            'program_id': 1,
-            'year_level': 4,
-            'lecture_hours': 5.0,
-            'lab_hours': 5.0,
-            'ilp_hours': 0.0,
-            'units': 20.0,
-        }
     ]
 
-    professor_programs = [
-        {'prof_id': 1, 'program_id': 1},
-        {'prof_id': 2, 'program_id': 1},
-    ]
-
-    return MockSupabase(profs, courses, professor_programs=professor_programs)
+    tables = {
+        'course': MockTable('course', courses),
+        'professor': MockTable('professor', professors),
+        'professor_load': MockTable('professor_load', []),
+        'schedule': MockTable('schedule', []),
+        'users': MockTable('users', [{
+            'id': 'scheduler-1',
+            'role': 'scheduler',
+            'department': 'CICT',
+            'program': 'BSIT',
+            'program_id': 1,
+        }]),
+        'program': MockTable('program', [{
+            'id': 1,
+            'program_name': 'BSIT',
+            'department': 'CICT',
+        }]),
+        'semester': MockTable('semester', []),
+    }
+    return MockSupabase(tables)
 
 
 @pytest.fixture
 def test_setup(monkeypatch):
+    app_module.app.config['TESTING'] = True
+    app_module.app.config['WTF_CSRF_ENABLED'] = False
     client = app_module.app.test_client()
 
     with client.session_transaction() as session:
-        session['user_id'] = 1
-        session['program'] = 'BSIT'
-        session['program_id'] = 1
+        session['user_id'] = 'scheduler-1'
         session['username'] = 'scheduler_user'
         session['role'] = 'scheduler'
         session['department'] = 'CICT'
+        session['program'] = 'BSIT'
+        session['program_id'] = 1
 
     db = _build_mock_db()
     monkeypatch.setattr(app_module, 'supabase', db)
@@ -207,349 +203,157 @@ def test_setup(monkeypatch):
     return client, db
 
 
-def test_add_professor_load_with_multiple_sections(test_setup):
-    """Test assigning courses to a professor with section counts."""
+def test_add_professor_load_route_removed(test_setup):
+    """Manual add_professor_load was removed per architecture spec; must return 404."""
     client, db = test_setup
-
-    # Course 101: lec=2, lab=3, ilp=1 (sum=6 hrs, 3 units). Sections=2 -> 12 hrs, 6 units.
-    # Course 102: lec=3, lab=0, ilp=0 (sum=3 hrs, 3 units). Sections=1 -> 3 hrs, 3 units.
-    # Total = 15 hrs, 9 units. Prof 1 max_units=15, min_units=6.
-    # This is safe and within limits.
     response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['101', '102'],
         'sections_101': '2',
         'sections_102': '1',
-    }, follow_redirects=True)
-
-    assert response.status_code == 200
-    # Check that rows were inserted into professor_load with section counts
-    inserted = db.table('professor_load').inserted
-    assert len(inserted) == 2
-    inserted_by_cid = {row['course_id']: row for row in inserted}
-    assert inserted_by_cid[101]['sections'] == 2
-    assert inserted_by_cid[102]['sections'] == 1
+    })
+    assert response.status_code == 404
+    assert len(db.table('professor_load').inserted) == 0
 
 
 def test_add_professor_load_allows_high_hours_without_max_hours_cap(test_setup):
-    """Test that assignment is NOT blocked by weekly hours since max_hours constraint was removed."""
+    """Manual add route is removed -> returns 404."""
     client, db = test_setup
-
-    # Course 101: 6 hrs/sec. With 2 sections = 12 hrs, 6 units. Prof 1 max_units = 15.
     response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['101'],
         'sections_101': '2',
-    }, follow_redirects=True)
-
-    assert response.status_code == 200
-    assert len(db.table('professor_load').inserted) > 0
+    })
+    assert response.status_code == 404
 
 
 def test_add_professor_load_allows_any_course_units(test_setup):
-    """Course units are reported but are not checked against a professor limit."""
+    """Manual add route is removed -> returns 404."""
     client, db = test_setup
-
-    # Course 103 has more units than the old per-professor limit.
     response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['103'],
         'sections_103': '1',
-    }, follow_redirects=True)
-
-    assert response.status_code == 200
-    assert len(db.table('professor_load').inserted) == 1
+    })
+    assert response.status_code == 404
 
 
 def test_add_professor_load_does_not_warn_about_min_units(test_setup):
-    """There is no per-professor minimum-unit target."""
+    """Manual add route is removed -> returns 404."""
     client, db = test_setup
-
-    # Course 102: 3 units, 1 section.
     response = client.post('/add_professor_load', data={
         'prof_id': '1',
         'course_ids': ['102'],
         'sections_102': '1',
-    }, follow_redirects=True)
-
-    assert response.status_code == 200
-    assert b'below minimum target' not in response.data
-    assert len(db.table('professor_load').inserted) == 1
+    })
+    assert response.status_code == 404
 
 
 def test_update_prof_with_courses_does_not_enforce_unit_limits(test_setup):
-    """Updating assignments does not enforce removed professor unit limits."""
+    """Manual update route is removed -> returns 404."""
     client, db = test_setup
-
-    # Updating prof 1 with course 103 succeeds regardless of its units.
     response = client.post('/update_prof_with_courses/1', data={
         'first_name': 'Alan',
         'last_name': 'Turing',
-        'department': 'CICT',
-        'specialization': 'Computer Science',
-        'min_units': '6',
-        'max_units': '15',
         'course_ids': ['103'],
         'edit_sections_103': '1',
-    }, follow_redirects=True)
-
-    assert response.status_code == 200
-    assert b'Updated assignments successfully' in response.data
+    })
+    assert response.status_code == 404
 
 
 def test_example_cc101_multiple_sections(test_setup):
-    """
-    Test user exact example:
-    Course: CC-101
-    Lecture/Lab/ILP Hours: 5 hours/week (e.g. lec=2, lab=2, ilp=1)
-    Units: 3 units
-    Assigned Sections: 3
-    Expected:
-    Total Hours = 5 * 3 = 15 hours/week
-    Total Units = 3 * 3 = 9 units
-    Prof 2: max_hours=40, max_units=24, min_units=12 (9 units will trigger below min target note).
-    """
+    """Manual add route is removed -> returns 404."""
     client, db = test_setup
-
-    cc101 = {
-        'course_id': 201,
-        'course_name': 'CC-101',
-        'program': 'BSIT',
-        'year_level': 1,
-        'lecture_hours': 2.0,
-        'lab_hours': 2.0,
-        'ilp_hours': 1.0,
-        'units': 3.0,
-    }
-    db.table('course').data.append(cc101)
-
     response = client.post('/add_professor_load', data={
         'prof_id': '2',
         'course_ids': ['201'],
         'sections_201': '3',
-    }, follow_redirects=True)
-
-    assert response.status_code == 200
-    inserted = db.table('professor_load').inserted
-    assert len(inserted) == 1
-    assert inserted[0]['prof_id'] == 2
-    assert inserted[0]['course_id'] == 201
-    assert inserted[0]['sections'] == 3
-    # Flash message should confirm 15.0 hrs and 9.0 units
-    assert b'15.0 hrs, 9.0 units' in response.data
+    })
+    assert response.status_code == 404
 
 
 def test_professor_load_page_renders_load_components(test_setup):
-    """Test that professor_load.html renders the Teaching Load Summary Panel, Number of Sections, and live breakdown."""
+    """Test that professor_load.html renders table, tracker, and has stripped manual add forms."""
     client, db = test_setup
 
     response = client.get('/professor_load')
     assert response.status_code == 200
     html = response.data.decode('utf-8')
 
-    # Check key UI features
-    assert 'Teaching Load Summary' in html
-    assert 'Weekly Hours' in html
-    assert 'Total Units' in html
-    assert 'load-status-badge' in html
-    assert 'Number of Sections:' in html
-    assert 'selected-courses-breakdown-card' in html
-    assert 'selected-courses-breakdown-list' in html
-    assert 'btn-assign-courses' in html
-    assert 'btn-step' in html
-    assert 'btn-sec-plus' in html
-    assert 'btn-sec-minus' in html
-    # Buttons should be clickable, not disabled
-    assert 'btn-sec-plus" data-cid="101" disabled' not in html
+    # Retained components
     assert 'Current Assignments & Load Status' in html
+    assert 'load-status-badge' in html
+    assert 'Weekly Teaching Hours' in html
+    assert 'teaching-load-tracker-card' in html
+    assert 'selected-courses-breakdown-card' in html
+    assert 'importLoadModal' in html
 
-    # Real-time interactive components
-    assert 'breakdown-sec-minus' in html
-    assert 'breakdown-sec-plus' in html
-    assert 'breakdown-sec-input' in html
-    assert 'btn-remove-breakdown' in html
-    assert 'handleAddSectionChange' in html
-    assert 'handleAddRemove' in html
-    assert 'Pending Professor' not in html
-    assert 'Limit Exceeded' not in html
+    # Removed manual write controls
+    assert 'assignCourseForm' not in html
+    assert 'btn-assign-courses' not in html
+    assert 'editModal' not in html
 
 
 def test_api_professor_load_returns_assignments(test_setup):
+    """API endpoint for manual load form preloading was removed -> returns 404."""
     client, db = test_setup
-    db.table('professor_load').data.append({
-        'prof_id': 1,
-        'course_id': 101,
-        'sections': 2,
-    })
-
     response = client.get('/api/professor_load/1')
-
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data['prof_id'] == 1
-    assert data['assignments'] == [{'course_id': 101, 'sections': 2}]
-    # API now also returns cross-program load totals for the workload gauge
-    assert 'other_units' in data
-    assert 'other_hours' in data
+    assert response.status_code == 404
 
 
 def test_professor_load_template_contains_existing_assignments(test_setup):
-    """Verify that existing professor assignments are embedded in the template for instant preloading."""
+    """Verify manual form bindings and editModal preloading scripts were removed."""
     client, db = test_setup
-    db.table('professor_load').data.append({
-        'prof_id': 1,
-        'course_id': 101,
-        'sections': 3,
-    })
-
     response = client.get('/professor_load')
     assert response.status_code == 200
     html = response.data.decode('utf-8')
-    assert 'existingProfAssignments' in html
-    assert '"1": [{"course_id": 101, "sections": 3}]' in html or '"1": [{"course_id": 101' in html
-    assert 'applyProfessorAssignments(preloaded)' in html
-    assert 'specialization' in html
-    assert '&#34;&#34;' not in html
+    assert 'existingProfAssignments' not in html
+    assert 'editModal' not in html
+    assert 'Current Assignments & Load Status' in html
 
 
 def test_edit_professor_load_success(test_setup):
+    """Manual edit route was removed -> returns 404."""
     client, db = test_setup
-    db.table('professor_load').data.append({
-        'id': 10,
-        'prof_id': 1,
-        'course_id': 101,
-        'sections': 1,
-        'ilp_hours': 0,
-    })
-
     response = client.post('/edit_professor_load/10', data={
         'prof_id': '2',
         'course_id': '102',
         'sections': '3',
-        'ilp_hours': '1',
     }, headers={'X-Requested-With': 'XMLHttpRequest'})
-
-    assert response.status_code == 200
-    res_json = response.get_json()
-    assert res_json['success'] is True
-    updated_row = next(r for r in db.table('professor_load').data if r['id'] == 10)
-    assert updated_row['prof_id'] == 2
-    assert updated_row['course_id'] == 102
-    assert updated_row['sections'] == 3
-    assert updated_row['ilp_hours'] == 1
+    assert response.status_code == 404
 
 
 def test_edit_professor_load_validation_errors(test_setup):
+    """Manual edit route was removed -> returns 404."""
     client, db = test_setup
-    db.table('professor_load').data.append({
-        'id': 10,
-        'prof_id': 1,
-        'course_id': 101,
-        'sections': 1,
-        'ilp_hours': 0,
-    })
-
-    # Test sections <= 0
-    res_sec = client.post('/edit_professor_load/10', data={
-        'prof_id': '1',
-        'course_id': '101',
+    res = client.post('/edit_professor_load/10', data={
         'sections': '0',
-        'ilp_hours': '0',
     }, headers={'X-Requested-With': 'XMLHttpRequest'})
-    assert res_sec.status_code == 400
-    assert 'Sections must be greater than 0' in res_sec.get_json()['message']
-
-    # Test invalid ilp_hours (not in (0, 1))
-    res_ilp = client.post('/edit_professor_load/10', data={
-        'prof_id': '1',
-        'course_id': '101',
-        'sections': '2',
-        'ilp_hours': '2',
-    }, headers={'X-Requested-With': 'XMLHttpRequest'})
-    assert res_ilp.status_code == 400
-    assert 'ILP hours must be 0 or 1' in res_ilp.get_json()['message']
+    assert res.status_code == 404
 
 
 def test_edit_professor_load_duplicate_prevented(test_setup):
+    """Manual edit route was removed -> returns 404."""
     client, db = test_setup
-    db.table('professor_load').data.extend([
-        {'id': 10, 'prof_id': 1, 'course_id': 101, 'sections': 1, 'ilp_hours': 0},
-        {'id': 11, 'prof_id': 1, 'course_id': 102, 'sections': 2, 'ilp_hours': 0},
-    ])
-
     res = client.post('/edit_professor_load/10', data={
-        'prof_id': '1',
         'course_id': '102',
-        'sections': '2',
-        'ilp_hours': '0',
     }, headers={'X-Requested-With': 'XMLHttpRequest'})
-    assert res.status_code == 400
-    assert 'already assigned' in res.get_json()['message']
+    assert res.status_code == 404
 
 
 def test_edit_professor_load_cross_program_tampering_403(test_setup):
+    """Manual edit route was removed -> returns 404 (never 403)."""
     client, db = test_setup
-    db.table('course').data.append({
-        'course_id': 999,
-        'course_name': 'Financial Management',
-        'program': 'BSBA',
-        'program_id': 2,
-    })
-    db.table('professor_load').data.append({
-        'id': 10,
-        'prof_id': 1,
-        'course_id': 101,
-        'sections': 1,
-        'ilp_hours': 0,
-    })
-
-    with client.session_transaction() as sess:
-        sess['program_id'] = 1
-        sess['program'] = 'BSIT'
-
     res = client.post('/edit_professor_load/10', data={
-        'prof_id': '1',
         'course_id': '999',
-        'sections': '1',
-        'ilp_hours': '0',
     }, headers={'X-Requested-With': 'XMLHttpRequest'})
-    assert res.status_code == 403
-    assert 'Course belongs to another program' in res.get_json()['message']
+    assert res.status_code == 404
 
 
 def test_edit_professor_load_blocked_by_active_schedule(test_setup):
+    """Manual edit route was removed -> returns 404."""
     client, db = test_setup
-    db.table('professor_load').data.append({
-        'id': 10,
-        'prof_id': 1,
-        'course_id': 101,
-        'sections': 1,
-        'ilp_hours': 0,
-    })
-    db.table('schedule').data.append({
-        'schedule_id': 501,
-        'professor_load_id': 10,
-        'archive': False,
-    })
-
-    # Changing course or professor must be blocked
     res = client.post('/edit_professor_load/10', data={
-        'prof_id': '2',
         'course_id': '101',
-        'sections': '2',
-        'ilp_hours': '0',
     }, headers={'X-Requested-With': 'XMLHttpRequest'})
-    assert res.status_code == 400
-    assert 'active schedule' in res.get_json()['message']
-
-    # Changing only sections is allowed
-    res_sections = client.post('/edit_professor_load/10', data={
-        'prof_id': '1',
-        'course_id': '101',
-        'sections': '2',
-        'ilp_hours': '0',
-    }, headers={'X-Requested-With': 'XMLHttpRequest'})
-    assert res_sections.status_code == 200
-    assert res_sections.get_json()['success'] is True
-
-
+    assert res.status_code == 404

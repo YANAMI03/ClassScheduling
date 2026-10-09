@@ -250,3 +250,14 @@ merge into main
   - `SUPABASE_ANON_KEY` is a public/publishable key. Row Level Security (RLS) policies in Supabase ensure users only access data they are authorized to see.
   - `SUPABASE_SECRET_KEY` (service role) must **never** be exposed in client code, public repos, or Docker images. It is only optionally used server-side for admin user provisioning.
 - If a secret is accidentally committed, immediately revoke and rotate it in the Supabase Dashboard.
+
+---
+
+## Role Permissions Matrix (Schedule Archive)
+
+| Action | Super Admin / Academic Admin | Program Scheduler | Description & Scoping |
+| :--- | :---: | :---: | :--- |
+| **Archive Active Schedule** | Allowed (All programs) | **Allowed (Own program only)** | Direct archive without deletion request or admin approval. Sets `archive = TRUE`, `archived_at = now()`, and fresh `archive_batch_id`. Schedulers attempting other programs receive HTTP 403. |
+| **Restore Archived Schedule** | Allowed (All programs) | **Allowed (Own program only)** | Conflict-guarded against other programs' room and professor schedules. Blocked if an active schedule already exists for the program & semester. Reactivates batch atomically (`archive = FALSE`, clears timestamp and batch ID). |
+| **Permanent Delete Archive** | **Allowed (Direct action)** | **Blocked (HTTP 403 / No UI)** | Permanent deletion of archived batches is strictly restricted to Academic Admins and Super Admins. Schedulers cannot view or call deletion. Database RLS enforces `DELETE` only for admin roles on rows where `archive = TRUE`. |
+
