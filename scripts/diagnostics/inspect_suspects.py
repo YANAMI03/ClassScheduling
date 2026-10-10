@@ -32,13 +32,13 @@ for r in lab_rooms:
     print(f"  Lab: id={r.get('room_id')}, name={r.get('room_name')}, type={r.get('room_type')}, program_id={r.get('program_id')}")
 
 try:
-    timeslots = app.supabase.table('timeslot').select('*').execute().data or []
+    working_hours = app.supabase.table('working_hours').select('*').execute().data or []
 except Exception as e:
-    timeslots = []
+    working_hours = []
     print(f"Error querying timeslot: {e}")
-print(f"Timeslots in DB: {len(timeslots)}")
-if not timeslots:
-    print("Generator uses hardcoded fallback timeslots for Mon-Fri 07:00-19:00 with cutoffs at 16:00/17:00")
+print(f"Timeslots in DB: {len(working_hours)}")
+if not working_hours:
+    print("Generator uses hardcoded fallback working_hours for Mon-Fri 07:00-19:00 with cutoffs at 16:00/17:00")
 
 print("\n=== SUSPECT D: DISTINCT PROFESSORS & SECTIONS CHECK ===")
 loads = app.supabase.table('professor_load').select('id, course_id, sections, professor_name').execute().data or []

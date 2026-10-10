@@ -63,11 +63,11 @@ for d, st, et in slots_3h:
     
     # Check 3F conflict
     s3f_entries = [e for e in preview if e['section'] == '3F-Networking' and e['day'] == d and max(st_sec, app._to_seconds(app._parse_time(e['start']))) < min(et_sec, app._to_seconds(app._parse_time(e['end'])))]
-    print(f"  3F-Networking has class? {bool(s3f_entries)} -> {[e['course_name'] + ' (' + str(e['start']) + '-' + str(e['end']) + ')' for e in s3f_entries]}")
+    print(f"  3F-Networking has class? {bool(s3f_entries)} -> {[e['course_code'] + ' (' + str(e['start']) + '-' + str(e['end']) + ')' for e in s3f_entries]}")
     
     # Check Prof Santos conflict
     santos_entries = [e for e in preview if e.get('prof_id') == 34 and e['day'] == d and max(st_sec, app._to_seconds(app._parse_time(e['start']))) < min(et_sec, app._to_seconds(app._parse_time(e['end'])))]
-    print(f"  Prof Santos has class? {bool(santos_entries)} -> {[e['course_name'] + ' in ' + e['section'] + ' (' + str(e['start']) + '-' + str(e['end']) + ')' for e in santos_entries]}")
+    print(f"  Prof Santos has class? {bool(santos_entries)} -> {[e['course_code'] + ' in ' + e['section'] + ' (' + str(e['start']) + '-' + str(e['end']) + ')' for e in santos_entries]}")
 
     # Check free lecture rooms
     free_lecs = []

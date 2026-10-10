@@ -81,7 +81,7 @@ def test_professor_schedule_renders_professors(monkeypatch):
             'day': 'Monday',
             'class_start': '08:00:00',
             'class_end': '10:00:00',
-            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_name': 'IT101'}},
+            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_code': 'IT101'}},
             'room': {'room_name': 'Lab 1'},
         },
         {
@@ -94,7 +94,7 @@ def test_professor_schedule_renders_professors(monkeypatch):
             'day': 'Tuesday',
             'class_start': '10:00:00',
             'class_end': '13:00:00',
-            'professor_load': {'prof_id': 2, 'course_id': 11, 'course': {'course_name': 'IT102'}},
+            'professor_load': {'prof_id': 2, 'course_id': 11, 'course': {'course_code': 'IT102'}},
             'room': {'room_name': 'Lab 2'},
         }
     ]
@@ -159,7 +159,7 @@ def test_professor_schedule_filters(monkeypatch):
             'day': 'Monday',
             'class_start': '08:00:00',
             'class_end': '10:00:00',
-            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_name': 'IT101'}},
+            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_code': 'IT101'}},
             'room': {'room_name': 'Lab 1'},
         },
         {
@@ -172,7 +172,7 @@ def test_professor_schedule_filters(monkeypatch):
             'day': 'Tuesday',
             'class_start': '10:00:00',
             'class_end': '13:00:00',
-            'professor_load': {'prof_id': 2, 'course_id': 11, 'course': {'course_name': 'IT102'}},
+            'professor_load': {'prof_id': 2, 'course_id': 11, 'course': {'course_code': 'IT102'}},
             'room': {'room_name': 'Lab 2'},
         }
     ]
@@ -226,7 +226,7 @@ def test_professor_schedule_empty_state_when_no_match(monkeypatch):
             'day': 'Monday',
             'class_start': '08:00:00',
             'class_end': '10:00:00',
-            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_name': 'IT101'}},
+            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_code': 'IT101'}},
             'room': {'room_name': 'Lab 1'},
         }
     ]
@@ -301,7 +301,7 @@ def test_professor_schedule_pagination_loop(monkeypatch):
             'day': 'Monday',
             'class_start': '08:00:00',
             'class_end': '09:00:00',
-            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_name': 'IT101'}},
+            'professor_load': {'prof_id': 1, 'course_id': 10, 'course': {'course_code': 'IT101'}},
             'room': {'room_name': 'Lab 1'},
         })
 

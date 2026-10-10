@@ -222,7 +222,7 @@ def _cell_text(entry, mode='room'):
     mode 'section'   -> course / instructor / room
     mode 'professor' -> course / section / room
     """
-    cn   = _safe(entry.get('course_name')) or 'TBA'
+    cn   = _safe(entry.get('course_code')) or 'TBA'
     prof = _initials_surname(_safe(entry.get('professor')))
     sec  = _safe(entry.get('section'))
     room = _safe(entry.get('room_name') or entry.get('room'))

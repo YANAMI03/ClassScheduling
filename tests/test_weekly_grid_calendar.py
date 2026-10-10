@@ -11,7 +11,7 @@ def test_section_availability_dynamic_vertical_spanning():
             'day': 'Monday',
             'start_time': '08:00:00',
             'end_time': '09:00:00',
-            'course_name': 'CC-102',
+            'course_code': 'CC-102',
             'session_type': 'Lecture',
             'professor': 'Bernadette Aquino',
             'section': '1A',
@@ -21,17 +21,17 @@ def test_section_availability_dynamic_vertical_spanning():
             'day': 'Tuesday',
             'start_time': '08:00:00',
             'end_time': '10:00:00',
-            'course_name': 'IT-WS05',
+            'course_code': 'IT-WS05',
             'session_type': 'Lecture',
             'professor': 'Diana Navarro',
             'section': '1A',
         },
     ]
-    timeslots = [
+    working_hours = [
         {'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}
     ]
 
-    avail = app_module._calculate_section_availability(entries, timeslots=timeslots, section='1A')
+    avail = app_module._calculate_section_availability(entries, working_hours=working_hours, section='1A')
 
     # Operating days should include Monday through Saturday
     assert 'Monday' in avail['operating_days']
@@ -42,7 +42,7 @@ def test_section_availability_dynamic_vertical_spanning():
     mon_blocks = [b for b in avail['day_calendar_blocks']['Monday'] if b['type'] == 'occupied']
     assert len(mon_blocks) == 1
     mon_1hr = mon_blocks[0]
-    assert mon_1hr['course_name'] == 'CC-102'
+    assert mon_1hr['course_code'] == 'CC-102'
     assert mon_1hr['duration_minutes'] == 60.0
     assert mon_1hr['duration_hours'] == 1.0
 
@@ -50,7 +50,7 @@ def test_section_availability_dynamic_vertical_spanning():
     tue_blocks = [b for b in avail['day_calendar_blocks']['Tuesday'] if b['type'] == 'occupied']
     assert len(tue_blocks) == 1
     tue_2hr = tue_blocks[0]
-    assert tue_2hr['course_name'] == 'IT-WS05'
+    assert tue_2hr['course_code'] == 'IT-WS05'
     assert tue_2hr['duration_minutes'] == 120.0
     assert tue_2hr['duration_hours'] == 2.0
 
@@ -66,24 +66,24 @@ def test_section_schedule_data_mapping():
             'day': 'Monday',
             'start_time': '08:00:00',
             'end_time': '10:00:00',
-            'course_name': 'CC-102',
+            'course_code': 'CC-102',
             'session_type': 'Lecture',
             'professor': 'Bernadette Aquino',
             'section': '1A',
             'room_name': 'Room 101',
         }
     ]
-    timeslots = [
+    working_hours = [
         {'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}
     ]
 
-    avail = app_module._calculate_section_availability(entries, timeslots=timeslots, section='1A')
+    avail = app_module._calculate_section_availability(entries, working_hours=working_hours, section='1A')
     mon_blocks = [b for b in avail['day_calendar_blocks']['Monday'] if b['type'] == 'occupied']
     assert len(mon_blocks) == 1
     card = mon_blocks[0]
 
     # Required data mapping for Section Schedule:
-    assert card['course_name'] == 'CC-102'          # Subject Code
+    assert card['course_code'] == 'CC-102'          # Subject Code
     assert card['session_type'] == 'Lecture'        # Class Type
     assert card['time_range'] == '08:00 AM - 10:00 AM'  # Time Range
     assert card['professor'] == 'Bernadette Aquino' # Professor Name
@@ -96,24 +96,24 @@ def test_professor_schedule_data_mapping():
             'day': 'Wednesday',
             'start_time': '13:00:00',
             'end_time': '15:00:00',
-            'course_name': 'IT-PF02',
+            'course_code': 'IT-PF02',
             'session_type': 'Lecture',
             'section': '2F',
             'room_name': 'CL 1',
             'professor': 'Nicole Domingo',
         }
     ]
-    timeslots = [
+    working_hours = [
         {'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}
     ]
 
-    avail = app_module._calculate_professor_availability(entries, timeslots=timeslots, professor='Nicole Domingo')
+    avail = app_module._calculate_professor_availability(entries, working_hours=working_hours, professor='Nicole Domingo')
     wed_blocks = [b for b in avail['day_calendar_blocks']['Wednesday'] if b['type'] == 'occupied']
     assert len(wed_blocks) == 1
     card = wed_blocks[0]
 
     # Required data mapping for Professor Schedule:
-    assert card['course_name'] == 'IT-PF02'         # Subject Code
+    assert card['course_code'] == 'IT-PF02'         # Subject Code
     assert card['session_type'] == 'Lecture'        # Class Type
     assert card['time_range'] == '01:00 PM - 03:00 PM'  # Time Range
     assert card['section'] == '2F'                  # Section Name
@@ -134,17 +134,17 @@ def test_available_slots_and_lunch_break_generation():
             'day': 'Monday',
             'start_time': '08:00:00',
             'end_time': '10:00:00',
-            'course_name': 'CC-102',
+            'course_code': 'CC-102',
             'session_type': 'Lecture',
             'professor': 'Bernadette Aquino',
             'section': '1A',
         }
     ]
-    timeslots = [
+    working_hours = [
         {'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}
     ]
 
-    avail = app_module._calculate_section_availability(entries, timeslots=timeslots, section='1A')
+    avail = app_module._calculate_section_availability(entries, working_hours=working_hours, section='1A')
     mon_blocks = avail['day_calendar_blocks']['Monday']
 
     # Occupied block
@@ -183,7 +183,7 @@ def test_header_status_indicators():
             'day': 'Monday',
             'start_time': '08:00:00',
             'end_time': '10:00:00',
-            'course_name': 'CC-102',
+            'course_code': 'CC-102',
             'session_type': 'Lecture',
             'section': '1A',
         },
@@ -192,7 +192,7 @@ def test_header_status_indicators():
             'day': 'Friday',
             'start_time': '08:00:00',
             'end_time': '12:00:00',
-            'course_name': 'IT-CAP01',
+            'course_code': 'IT-CAP01',
             'session_type': 'Lecture',
             'section': '1A',
         },
@@ -200,16 +200,16 @@ def test_header_status_indicators():
             'day': 'Friday',
             'start_time': '13:00:00',
             'end_time': '20:00:00',
-            'course_name': 'IT-CAP02',
+            'course_code': 'IT-CAP02',
             'session_type': 'Lecture',
             'section': '1A',
         },
     ]
-    timeslots = [
+    working_hours = [
         {'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}
     ]
 
-    avail = app_module._calculate_section_availability(entries, timeslots=timeslots, section='1A')
+    avail = app_module._calculate_section_availability(entries, working_hours=working_hours, section='1A')
     day_map = avail['day_status_map']
 
     # Monday has 2 hours class -> Partially Used
@@ -230,10 +230,10 @@ def test_header_status_indicators():
 
 def test_time_markers_hourly_intervals():
     """Verify time axis markers display single hourly intervals from start to end."""
-    timeslots = [
+    working_hours = [
         {'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}
     ]
-    avail = app_module._calculate_schedule_availability([], timeslots=timeslots)
+    avail = app_module._calculate_schedule_availability([], working_hours=working_hours)
     markers = avail['time_markers']
     assert len(markers) == 13  # 08:00 AM to 08:00 PM inclusive = 13 hourly markers
     labels = [m['label'] for m in markers]
@@ -269,7 +269,7 @@ def test_api_availability_endpoints(monkeypatch):
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CS', 'max_hours': 30}]})()
             elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': []})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': []})()
@@ -330,13 +330,13 @@ def test_section_schedule_page_renders_weekly_grid(monkeypatch):
                         'section': '1A',
                         'professor_load': {
                             'professor_load_id': 1,
-                            'course': {'course_name': 'CC-102'},
+                            'course': {'course_code': 'CC-102'},
                             'professor': {'first_name': 'Bernadette', 'last_name': 'Aquino'},
                         },
                         'room': {'room_name': 'Room 101'},
                     }
                 ]})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
             elif self.table_name == 'room':
                 return type('Resp', (), {'data': [{'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture'}]})()
@@ -396,7 +396,7 @@ def test_professor_schedule_page_renders_weekly_grid(monkeypatch):
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Nicole', 'last_name': 'Domingo', 'department': 'IT', 'max_hours': 30}]})()
             elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': [
-                    {'professor_load_id': 10, 'course_id': 5, 'course': {'course_name': 'IT-PF02'}}
+                    {'professor_load_id': 10, 'course_id': 5, 'course': {'course_code': 'IT-PF02'}}
                 ]})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': [
@@ -413,12 +413,12 @@ def test_professor_schedule_page_renders_weekly_grid(monkeypatch):
                         'session_type': 'Lecture',
                         'professor_load': {
                             'professor_load_id': 10,
-                            'course': {'course_name': 'IT-PF02'}
+                            'course': {'course_code': 'IT-PF02'}
                         },
                         'room': {'room_name': 'CL 1'}
                     }
                 ]})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
             return type('Resp', (), {'data': []})()
 
@@ -482,13 +482,13 @@ def test_section_schedule_cleanup_and_consolidated_view(monkeypatch):
                         'section': '1A',
                         'professor_load': {
                             'professor_load_id': 1,
-                            'course': {'course_name': 'CC-102'},
+                            'course': {'course_code': 'CC-102'},
                             'professor': {'first_name': 'Bernadette', 'last_name': 'Aquino'},
                         },
                         'room': {'room_name': 'Room 101'},
                     }
                 ]})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
             elif self.table_name == 'room':
                 return type('Resp', (), {'data': [{'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture'}]})()
@@ -556,7 +556,7 @@ def test_professor_schedule_cleanup_and_consolidated_view(monkeypatch):
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Nicole', 'last_name': 'Domingo', 'department': 'IT', 'max_hours': 30}]})()
             elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': [
-                    {'professor_load_id': 10, 'course_id': 5, 'course': {'course_name': 'IT-PF02'}}
+                    {'professor_load_id': 10, 'course_id': 5, 'course': {'course_code': 'IT-PF02'}}
                 ]})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': [
@@ -573,12 +573,12 @@ def test_professor_schedule_cleanup_and_consolidated_view(monkeypatch):
                         'session_type': 'Lecture',
                         'professor_load': {
                             'professor_load_id': 10,
-                            'course': {'course_name': 'IT-PF02'}
+                            'course': {'course_code': 'IT-PF02'}
                         },
                         'room': {'room_name': 'CL 1'}
                     }
                 ]})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
             return type('Resp', (), {'data': []})()
 

@@ -64,6 +64,11 @@ class MockQuery:
             for row in self._data:
                 match = True
                 for k, v in self._filters.items():
+                    if isinstance(v, (list, tuple, set)):
+                        if row.get(k) not in v:
+                            match = False
+                            break
+                        continue
                     if str(row.get(k)) != str(v):
                         match = False
                         break
@@ -123,13 +128,13 @@ class MockQuery:
 
 
 class MockSupabase:
-    def __init__(self, courses=None, loads=None, schedules=None, professors=None, rooms=None, timeslots=None, academic_rankings=None):
+    def __init__(self, courses=None, loads=None, schedules=None, professors=None, rooms=None, working_hours=None, academic_rankings=None):
         self.courses = courses or []
         self.loads = loads or []
         self.schedules = schedules or []
         self.professors = professors or []
         self.rooms = rooms or []
-        self.timeslots = timeslots or []
+        self.working_hours = working_hours or []
         self.academic_rankings = academic_rankings or []
 
     def table(self, table_name):
@@ -143,8 +148,8 @@ class MockSupabase:
             return MockQuery(self.professors)
         elif table_name == 'room':
             return MockQuery(self.rooms)
-        elif table_name == 'timeslot':
-            return MockQuery(self.timeslots)
+        elif table_name == 'working_hours':
+            return MockQuery(self.working_hours)
         elif table_name == 'academic_ranking':
             return MockQuery(self.academic_rankings)
         return MockQuery([])
@@ -156,8 +161,8 @@ class MockSupabase:
 def test_checklist_multiple_professors_on_one_course(monkeypatch):
     """Prof A 2 sections + Prof B 1 section = 3 sections total. Total sections derived correctly."""
     courses = [
-        {'course_id': 10, 'course_name': 'CS101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
-        {'course_id': 11, 'course_name': 'CS102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 10, 'course_code': 'CS101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 11, 'course_code': 'CS102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
     ]
     # Course 10 has Prof 1 (2 sections) + Prof 2 (1 section) = 3 sections
     # Course 11 has Prof 3 (3 sections) = 3 sections
@@ -185,8 +190,8 @@ def test_checklist_multiple_professors_on_one_course(monkeypatch):
 def test_checklist_course_with_no_load_blocks_generation(monkeypatch):
     """A course with no professor_load rows counts as 0 sections, shows clear error, and blocks generation."""
     courses = [
-        {'course_id': 10, 'course_name': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
-        {'course_id': 12, 'course_name': 'CC-102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 10, 'course_code': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 12, 'course_code': 'CC-102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
     ]
     loads = [
         {'id': 1, 'prof_id': 1, 'course_id': 10, 'sections': 2},
@@ -206,8 +211,8 @@ def test_checklist_course_with_no_load_blocks_generation(monkeypatch):
 def test_checklist_mismatched_section_counts_blocks(monkeypatch):
     """Courses in same year level + semester must match; mismatches block generation with list of counts."""
     courses = [
-        {'course_id': 20, 'course_name': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
-        {'course_id': 21, 'course_name': 'MATH-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 20, 'course_code': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 21, 'course_code': 'MATH-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
     ]
     loads = [
         {'id': 1, 'prof_id': 1, 'course_id': 20, 'sections': 3},
@@ -229,9 +234,9 @@ def test_checklist_mismatched_section_counts_blocks(monkeypatch):
 def test_checklist_each_specialization_in_specialized_term(monkeypatch):
     """Specialized courses in 3rd year 2nd sem group and name sections per specialization."""
     courses = [
-        {'course_id': 31, 'course_name': 'DB-301', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 32, 'course_name': 'WEB-301', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 33, 'course_name': 'NET-301', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 31, 'course_code': 'DB-301', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 32, 'course_code': 'WEB-301', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 33, 'course_code': 'NET-301', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
     ]
     loads = [
         {'id': 1, 'prof_id': 1, 'course_id': 31, 'sections': 2},
@@ -261,10 +266,10 @@ def test_checklist_general_courses_sum_matches_and_mismatch_blocks(monkeypatch):
     """General courses total_sections must equal sum across all specialization groups."""
     # Specializations: Database (2) + Web (1) + Networking (2) = 5
     courses = [
-        {'course_id': 41, 'course_name': 'DB-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 42, 'course_name': 'WEB-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 43, 'course_name': 'NET-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'Networking', 'program_id': 1},
-        {'course_id': 44, 'course_name': 'GEN-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'General', 'program_id': 1},
+        {'course_id': 41, 'course_code': 'DB-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 42, 'course_code': 'WEB-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 43, 'course_code': 'NET-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 44, 'course_code': 'GEN-401', 'year_level': 4, 'semester': '1st Semester', 'specialization': 'General', 'program_id': 1},
     ]
 
     # Subtest A: Mismatch blocks (GEN-401 has 4 sections instead of 5)
@@ -299,7 +304,7 @@ def test_checklist_general_courses_sum_matches_and_mismatch_blocks(monkeypatch):
 # --------------------------------------------------------------------------
 def test_checklist_archive_rule_same_semester_blocked(monkeypatch):
     """Active schedule for the SAME semester blocks generation with clear error."""
-    courses = [{'course_id': 1, 'course_name': 'C1', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1}]
+    courses = [{'course_id': 1, 'course_code': 'C1', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1}]
     loads = [{'id': 1, 'prof_id': 1, 'course_id': 1, 'sections': 1}]
     schedules = [
         {'schedule_id': 500, 'program_id': 1, 'semester': '1st Semester', 'archive': False, 'batch_id': 'active-1'}
@@ -315,7 +320,7 @@ def test_checklist_archive_rule_same_semester_blocked(monkeypatch):
 
 def test_checklist_archive_rule_different_semester_allowed(monkeypatch):
     """Active schedule for a DIFFERENT semester is allowed and returns active_schedule info to be atomically soft-archived."""
-    courses = [{'course_id': 1, 'course_name': 'C1', 'year_level': 1, 'semester': '2nd Semester', 'program_id': 1}]
+    courses = [{'course_id': 1, 'course_code': 'C1', 'year_level': 1, 'semester': '2nd Semester', 'program_id': 1}]
     loads = [{'id': 1, 'prof_id': 1, 'course_id': 1, 'sections': 1}]
     schedules = [
         {'schedule_id': 500, 'program_id': 1, 'semester': '1st Semester', 'archive': False, 'batch_id': 'active-1'}
@@ -339,8 +344,8 @@ def test_checklist_archive_schedule_button(monkeypatch):
         session['role'] = 'Scheduler'
 
     schedules = [
-        {'schedule_id': 10, 'program_id': 1, 'program': 'BSIT', 'archive': False, 'batch_id': 'batch-a'},
-        {'schedule_id': 11, 'program_id': 1, 'program': 'BSIT', 'archive': False, 'batch_id': 'batch-a'},
+        {'schedule_id': 10, 'program_id': 1, 'program': 'BSIT', 'semester': '1st Semester', 'archive': False, 'batch_id': 'batch-a'},
+        {'schedule_id': 11, 'program_id': 1, 'program': 'BSIT', 'semester': '1st Semester', 'archive': False, 'batch_id': 'batch-a'},
     ]
     db = MockSupabase(schedules=schedules)
     monkeypatch.setattr(app_module, 'supabase', db)
@@ -406,22 +411,22 @@ def test_checklist_migration_sql_structure():
 
 
 # --------------------------------------------------------------------------
-# Timeslot Management: Add or Remove Operating Days
+# Working Hours Management: Add or Remove Operating Days
 # --------------------------------------------------------------------------
-def test_add_timeslot_day(monkeypatch):
+def test_add_working_hours_day(monkeypatch):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
         session['username'] = 'admin'
         session['role'] = 'Admin'
 
-    db = MockSupabase(timeslots=[
+    db = MockSupabase(working_hours=[
         {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
     ])
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
-    resp = client.post('/add_timeslot', data={
+    resp = client.post('/add_working_hours', data={
         'day': 'Thursday',
         'start_time': '08:00',
         'end_time': '20:00',
@@ -429,23 +434,23 @@ def test_add_timeslot_day(monkeypatch):
     }, follow_redirects=False)
 
     assert resp.status_code == 302
-    assert any(ts.get('day') == 'Thursday' for ts in db.timeslots)
+    assert any(ts.get('day') == 'Thursday' for ts in db.working_hours)
 
 
-def test_add_timeslot_duplicate_rejected(monkeypatch):
+def test_add_working_hours_duplicate_rejected(monkeypatch):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
         session['username'] = 'admin'
         session['role'] = 'Admin'
 
-    db = MockSupabase(timeslots=[
+    db = MockSupabase(working_hours=[
         {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
     ])
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
-    resp = client.post('/add_timeslot', data={
+    resp = client.post('/add_working_hours', data={
         'day': 'Monday',
         'start_time': '08:00',
         'end_time': '20:00',
@@ -453,27 +458,27 @@ def test_add_timeslot_duplicate_rejected(monkeypatch):
     }, follow_redirects=False)
 
     assert resp.status_code == 302
-    assert len(db.timeslots) == 1
+    assert len(db.working_hours) == 1
 
 
-def test_delete_timeslot_day(monkeypatch):
+def test_delete_working_hours_day(monkeypatch):
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
         session['username'] = 'admin'
         session['role'] = 'Admin'
 
-    db = MockSupabase(timeslots=[
+    db = MockSupabase(working_hours=[
         {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00'},
         {'timeslot_id': 6, 'day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00'},
     ])
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
-    resp = client.get('/delete_timeslot/6', follow_redirects=False)
+    resp = client.get('/delete_working_hours/6', follow_redirects=False)
     assert resp.status_code == 302
-    assert not any(ts.get('day') == 'Saturday' for ts in db.timeslots)
-    assert any(ts.get('day') == 'Monday' for ts in db.timeslots)
+    assert not any(ts.get('day') == 'Saturday' for ts in db.working_hours)
+    assert any(ts.get('day') == 'Monday' for ts in db.working_hours)
 
 
 # --------------------------------------------------------------------------
@@ -490,7 +495,7 @@ def test_professor_load_sanitizes_corrupted_999_sections(monkeypatch):
         session['program_id'] = 1
 
     profs = [{'prof_id': 1, 'first_name': 'Emilsa', 'last_name': 'Bantug', 'program_id': 1}]
-    courses = [{'course_id': 10, 'course_name': 'IT-WS05', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 2, 'ilp_hours': 0, 'units': 3}]
+    courses = [{'course_id': 10, 'course_code': 'IT-WS05', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 2, 'ilp_hours': 0, 'units': 3}]
     loads = [{'id': 50, 'prof_id': 1, 'course_id': 10, 'sections': 999}]
 
     db = MockSupabase(professors=profs, courses=courses, loads=loads)
@@ -520,7 +525,7 @@ def test_confirm_preview_never_creates_unauthorized_loads(monkeypatch):
             {
                 'professor_load_id': None,
                 'course_id': 10,
-                'course_name': 'IT-WS05',
+                'course_code': 'IT-WS05',
                 'section': '3A',
                 'prof_id': 1,
                 'room_id': 1,
@@ -621,7 +626,7 @@ def test_checklist_ilp_hours_validation_course_routes(monkeypatch):
 
     # Subtest A: Reject ilp_hours = 2
     resp_reject = client.post('/add_course', data={
-        'course_name': 'TEST-ILP',
+        'course_code': 'TEST-ILP',
         'program': 'BSIT',
         'year_level': '1',
         'semester': '1st Semester',
@@ -636,7 +641,7 @@ def test_checklist_ilp_hours_validation_course_routes(monkeypatch):
 
     # Subtest B: Accept ilp_hours = 1
     resp_accept = client.post('/add_course', data={
-        'course_name': 'TEST-ILP-OK',
+        'course_code': 'TEST-ILP-OK',
         'program': 'BSIT',
         'year_level': '1',
         'semester': '1st Semester',
@@ -665,11 +670,11 @@ def test_checklist_professor_cutoff_conflict_check(monkeypatch):
         {'prof_id': 1, 'first_name': 'John', 'last_name': 'Doe', 'academic_ranking_id': 1, 'academic_ranking': rankings[0]},
         {'prof_id': 2, 'first_name': 'Jane', 'last_name': 'Smith', 'academic_ranking_id': 2, 'academic_ranking': rankings[1]},
     ]
-    timeslots = [
+    working_hours = [
         {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'professor_cutoff': '16:00:00'},
         {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'professor_cutoff': '17:00:00'},
     ]
-    db = MockSupabase(professors=profs, timeslots=timeslots, academic_rankings=rankings)
+    db = MockSupabase(professors=profs, working_hours=working_hours, academic_rankings=rankings)
     monkeypatch.setattr(app_module, 'supabase', db)
 
     # 1. Regular faculty ending after cutoff on Monday (17:00 > 16:00) -> Conflict
@@ -704,7 +709,7 @@ def test_checklist_schedule_generation_places_ilp_in_lecture_room(monkeypatch):
         session['program_id'] = 1
 
     courses = [
-        {'course_id': 100, 'course_name': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3},
+        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3},
     ]
     profs = [
         {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'academic_ranking_id': 1, 'time_designation': 5, 'academic_ranking': {'name': 'Instructor', 'has_cutoff': True, 'max_hours': 40}},
@@ -715,12 +720,12 @@ def test_checklist_schedule_generation_places_ilp_in_lecture_room(monkeypatch):
     rooms = [
         {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1},
     ]
-    timeslots = [
+    working_hours = [
         {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '16:00:00'},
         {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
     ]
 
-    db = MockSupabase(courses=courses, professors=profs, loads=loads, rooms=rooms, timeslots=timeslots)
+    db = MockSupabase(courses=courses, professors=profs, loads=loads, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, '_get_user_program_id', lambda: 1)
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
@@ -761,7 +766,7 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
         session['program_id'] = 1
 
     courses = [
-        {'course_id': 100, 'course_name': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3},
+        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3},
     ]
     # Professor Alan Turing assigned 3 sections
     profs = [
@@ -773,7 +778,7 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
     rooms = [
         {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1},
     ]
-    timeslots = [
+    working_hours = [
         {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '16:00:00'},
         {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
         {'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
@@ -781,7 +786,7 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
         {'day': 'Friday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
     ]
 
-    db = MockSupabase(courses=courses, professors=profs, loads=loads, rooms=rooms, timeslots=timeslots)
+    db = MockSupabase(courses=courses, professors=profs, loads=loads, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, '_get_user_program_id', lambda: 1)
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
@@ -832,7 +837,7 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
 
     # 4. Subtest: ILPs use the lecture room when available, even when professors differ
     free_courses = [
-        {'course_id': 100, 'course_name': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 1, 'units': 1},
+        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 1, 'units': 1},
     ]
     profs2 = [
         {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'academic_ranking_id': 1, 'time_designation': 5, 'academic_ranking': {'name': 'Instructor', 'has_cutoff': True, 'max_hours': 40}},
@@ -842,7 +847,7 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
         {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 1},
         {'id': 102, 'prof_id': 20, 'course_id': 100, 'sections': 1},
     ]
-    db2 = MockSupabase(courses=free_courses, professors=profs2, loads=loads2, rooms=rooms, timeslots=timeslots)
+    db2 = MockSupabase(courses=free_courses, professors=profs2, loads=loads2, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db2)
 
     resp2 = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '60'}, follow_redirects=True)
@@ -862,7 +867,7 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
     loads3 = [
         {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 2},
     ]
-    db3 = MockSupabase(courses=free_courses, professors=profs, loads=loads3, rooms=rooms, timeslots=timeslots)
+    db3 = MockSupabase(courses=free_courses, professors=profs, loads=loads3, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db3)
 
     resp3 = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '60'}, follow_redirects=True)
@@ -895,14 +900,14 @@ def test_checklist_schedule_generation_enforces_cutoffs(monkeypatch):
 
     # Single day Monday: 14:00 to 19:00 (5 hours), cutoff at 16:00
     # Any 3-hour lecture (e.g. 14:00-17:00, 15:00-18:00, 16:00-19:00) ends at 17:00 or later, exceeding the 16:00 cutoff!
-    timeslots = [
+    working_hours = [
         {'day': 'Monday', 'start_time': '14:00:00', 'end_time': '19:00:00', 'professor_cutoff': '16:00:00'},
     ]
     rooms = [
         {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1},
     ]
     courses = [
-        {'course_id': 201, 'course_name': 'IT-CUTOFF', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
+        {'course_id': 201, 'course_code': 'IT-CUTOFF', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
     ]
 
     # Subtest A: Regular faculty with has_cutoff = True
@@ -912,7 +917,7 @@ def test_checklist_schedule_generation_enforces_cutoffs(monkeypatch):
     loads_regular = [
         {'id': 202, 'prof_id': 20, 'course_id': 201, 'sections': 1},
     ]
-    db_regular = MockSupabase(courses=courses, professors=profs_regular, loads=loads_regular, rooms=rooms, timeslots=timeslots)
+    db_regular = MockSupabase(courses=courses, professors=profs_regular, loads=loads_regular, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db_regular)
     monkeypatch.setattr(app_module, '_get_user_program_id', lambda: 1)
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
@@ -934,7 +939,7 @@ def test_checklist_schedule_generation_enforces_cutoffs(monkeypatch):
     loads_lohb = [
         {'id': 203, 'prof_id': 30, 'course_id': 201, 'sections': 1},
     ]
-    db_lohb = MockSupabase(courses=courses, professors=profs_lohb, loads=loads_lohb, rooms=rooms, timeslots=timeslots)
+    db_lohb = MockSupabase(courses=courses, professors=profs_lohb, loads=loads_lohb, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db_lohb)
 
     resp_lohb = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '90'}, follow_redirects=True)
@@ -945,5 +950,3 @@ def test_checklist_schedule_generation_enforces_cutoffs(monkeypatch):
     assert len(entries_lohb) == 1
     # Ada Lovelace is exempt from cutoff and is successfully assigned
     assert entries_lohb[0]['prof_id'] == 30
-
-

@@ -24,13 +24,13 @@ for b in res.get('breakdown', []):
         print(f"Section count: {b.get('section_count')}")
         print(f"Section names: {b.get('section_names')}")
         for c in b.get('courses', []):
-            print(f"    Course: {c['course_name']} -> sections: {c['sections']}")
+            print(f"    Course: {c['course_code']} -> sections: {c['sections']}")
     else:
         print(f"General required: {b.get('general_total_required')}")
         for grp in b.get('specialization_groups', []):
             print(f"  Spec: {grp['specialization']}, Count: {grp['section_count']}, Sections: {grp['section_names']}")
             for c in grp['courses']:
-                print(f"    Course: {c['course_name']} -> sections: {c['sections']}")
+                print(f"    Course: {c['course_code']} -> sections: {c['sections']}")
         print("  General Courses:")
         for gc in b.get('general_courses', []):
-            print(f"    Course: {gc['course_name']} -> sections: {gc['sections']}")
+            print(f"    Course: {gc['course_code']} -> sections: {gc['sections']}")

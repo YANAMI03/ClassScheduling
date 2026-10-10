@@ -27,7 +27,7 @@ for fpath in files_to_check:
                 rel_path = os.path.relpath(fpath, '.')
                 # Look for indicators of schedule context
                 if any(k in lower_line for k in [
-                    'schedule', 'preview', 'archive', 'confirm', 'timeslot', 'generate',
+                    'schedule', 'preview', 'archive', 'confirm', 'working_hours', 'generate',
                     'entry', 'entries', 'batch', 'active_tag', 'restore', 'slot'
                 ]) or 'schedule' in fpath.lower():
                     results.append((rel_path, idx, line.strip()))

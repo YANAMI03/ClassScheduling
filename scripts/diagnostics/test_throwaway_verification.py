@@ -32,7 +32,7 @@ def run_verification():
     try:
         # 2. Create Throwaway Course (1st Semester)
         c_res = supabase.table('course').insert({
-            'course_name': f"TC_{uuid.uuid4().hex[:4].upper()}",
+            'course_code': f"TC_{uuid.uuid4().hex[:4].upper()}",
             'lecture_hours': 3,
             'lab_hours': 0,
             'year_level': 1,
@@ -43,7 +43,7 @@ def run_verification():
         }).execute()
         test_course = c_res.data[0]
         test_course_id = test_course['course_id']
-        print(f"[SETUP] Created throwaway course: {test_course['course_name']} (ID: {test_course_id}, Semester: {test_course['semester']})")
+        print(f"[SETUP] Created throwaway course: {test_course['course_code']} (ID: {test_course_id}, Semester: {test_course['semester']})")
 
         # 3. Create Throwaway Professor Load
         pl_res = supabase.table('professor_load').insert({

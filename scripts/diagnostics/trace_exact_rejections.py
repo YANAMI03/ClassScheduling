@@ -37,7 +37,7 @@ def run_and_trace():
         query = app.supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester)
         if user_prog_id:
             query = query.eq('program_id', user_prog_id)
-        all_courses = query.order('year_level').order('course_name').execute().data or []
+        all_courses = query.order('year_level').order('course_code').execute().data or []
         for c in all_courses:
             p_rel = app._rel(c, 'program') or {}
             c['program_name'] = p_rel.get('program_name') or program or ''
@@ -55,7 +55,7 @@ def run_and_trace():
             seen_cids = set()
             deduped = []
             for c in courses_by_year[yl]:
-                cid = c.get('course_id') or c.get('course_name')
+                cid = c.get('course_id') or c.get('course_code')
                 if cid not in seen_cids:
                     seen_cids.add(cid)
                     deduped.append(c)
@@ -109,12 +109,12 @@ def run_and_trace():
         lecture_rooms = [r for r in all_rooms if app._is_lecture_room_type(r.get('room_type'))]
         lab_rooms = [r for r in all_rooms if app._is_lab_room_type(r.get('room_type'))]
 
-        timeslots = (app.supabase.table('timeslot').select('*').execute().data) or []
-        timeslots.sort(key=lambda t: str(t.get('start_time') or ''))
-        candidate_slots = app._build_candidate_slots(timeslots)
+        working_hours = (app.supabase.table('working_hours').select('*').execute().data) or []
+        working_hours.sort(key=lambda t: str(t.get('start_time') or ''))
+        candidate_slots = app._build_candidate_slots(working_hours)
 
         _day_cutoff_map = {}
-        for _ts in timeslots:
+        for _ts in working_hours:
             _d = (_ts.get('day') or '').strip()
             _cutoff = _ts.get('professor_cutoff')
             if _d and _cutoff and _d not in _day_cutoff_map:
@@ -203,9 +203,9 @@ def run_and_trace():
                         else: break
 
         # Audit logger function for candidate blocks at time of failure
-        def audit_candidate_grid(target_sec, target_course_name, session_type, duration, assigned_prof, cand_rooms):
+        def audit_candidate_grid(target_sec, target_course_code, session_type, duration, assigned_prof, cand_rooms):
             print("\n" + "="*80)
-            print(f"REJECTION AUDIT: {assigned_prof.get('first_name')} {assigned_prof.get('last_name')} | {target_course_name} | {target_sec} | {session_type} ({duration}h)")
+            print(f"REJECTION AUDIT: {assigned_prof.get('first_name')} {assigned_prof.get('last_name')} | {target_course_code} | {target_sec} | {session_type} ({duration}h)")
             print("="*80)
             pk = assigned_prof.get('prof_id')
             sec_key = (target_sec, next((s.get('major') for s in all_sections if s['section'] == target_sec), None))
@@ -344,7 +344,7 @@ def run_and_trace():
                         pname = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip()
                         preview_entries.append({
                             'professor_load_id': assigned_prof['professor_load_id'],
-                            'course_id': course_id, 'course_name': course.get('course_name'),
+                            'course_id': course_id, 'course_code': course.get('course_code'),
                             'prof_id': pk, 'professor_name': pname, 'section': section_name,
                             'room_id': rk, 'room_name': rname, 'day': day, 'start': block_start, 'end': block_end,
                             'session_type': session_type, 'semester': standard_semester, 'major': sec_major or course.get('major')
@@ -416,7 +416,7 @@ def run_and_trace():
                                 pname = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip()
                                 preview_entries.append({
                                     'professor_load_id': assigned_prof['professor_load_id'],
-                                    'course_id': course['course_id'], 'course_name': course.get('course_name'),
+                                    'course_id': course['course_id'], 'course_code': course.get('course_code'),
                                     'prof_id': pk, 'professor_name': pname, 'section': section_name,
                                     'room_id': lec_rk, 'room_name': assigned_lec.get('room_name'),
                                     'day': day, 'start': lec_start, 'end': lec_end, 'session_type': 'Lecture',
@@ -431,7 +431,7 @@ def run_and_trace():
 
                                 preview_entries.append({
                                     'professor_load_id': assigned_prof['professor_load_id'],
-                                    'course_id': course['course_id'], 'course_name': course.get('course_name'),
+                                    'course_id': course['course_id'], 'course_code': course.get('course_code'),
                                     'prof_id': pk, 'professor_name': pname, 'section': section_name,
                                     'room_id': lab_rk, 'room_name': assigned_lab.get('room_name'),
                                     'day': day, 'start': lab_start, 'end': lab_end, 'session_type': 'Laboratory',
@@ -457,15 +457,15 @@ def run_and_trace():
                             # Split
                             ok_lab = _inner_schedule_single('Laboratory', lab_dur, course, assigned_prof)
                             if not ok_lab:
-                                audit_candidate_grid(section_name, course.get('course_name'), 'Laboratory', lab_dur, assigned_prof, lab_rooms)
+                                audit_candidate_grid(section_name, course.get('course_code'), 'Laboratory', lab_dur, assigned_prof, lab_rooms)
                             ok_lec = _inner_schedule_single('Lecture', lec_dur, course, assigned_prof)
                             if not ok_lec:
-                                audit_candidate_grid(section_name, course.get('course_name'), 'Lecture', lec_dur, assigned_prof, lecture_rooms)
+                                audit_candidate_grid(section_name, course.get('course_code'), 'Lecture', lec_dur, assigned_prof, lecture_rooms)
                     else:
                         ok_single = _inner_schedule_single(session_item['session_type'], session_item['duration'], course, assigned_prof)
                         if not ok_single:
                             cand_rms = lab_rooms if session_item['session_type'] == 'Laboratory' else lecture_rooms
-                            audit_candidate_grid(section_name, course.get('course_name'), session_item['session_type'], session_item['duration'], assigned_prof, cand_rms)
+                            audit_candidate_grid(section_name, course.get('course_code'), session_item['session_type'], session_item['duration'], assigned_prof, cand_rms)
 
         print("\nAll sections processed! Total entries placed:", len(preview_entries))
 

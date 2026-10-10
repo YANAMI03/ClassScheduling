@@ -97,7 +97,7 @@ def _build_mock_db():
     courses = [
         {
             'course_id': 101,
-            'course_name': 'IT101 - Programming 1',
+            'course_code': 'IT101 - Programming 1',
             'course_code': 'IT101',
             'units': 3.0,
             'lecture_hours': 2.0,
@@ -110,7 +110,7 @@ def _build_mock_db():
         },
         {
             'course_id': 102,
-            'course_name': 'IT102 - Discrete Math',
+            'course_code': 'IT102 - Discrete Math',
             'course_code': 'IT102',
             'units': 3.0,
             'lecture_hours': 3.0,
@@ -123,7 +123,7 @@ def _build_mock_db():
         },
         {
             'course_id': 103,
-            'course_name': 'IT103 - Heavy Lab Course',
+            'course_code': 'IT103 - Heavy Lab Course',
             'course_code': 'IT103',
             'units': 16.0,
             'lecture_hours': 10.0,

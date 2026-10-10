@@ -30,7 +30,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
     query = app.supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester)
     if user_prog_id:
         query = query.eq('program_id', user_prog_id)
-    all_courses = query.order('year_level').order('course_name').execute().data or []
+    all_courses = query.order('year_level').order('course_code').execute().data or []
     for c in all_courses:
         p_rel = app._rel(c, 'program') or {}
         c['program_name'] = p_rel.get('program_name') or program or ''
@@ -48,7 +48,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
         seen_cids = set()
         deduped = []
         for c in courses_by_year[yl]:
-            cid = c.get('course_id') or c.get('course_name')
+            cid = c.get('course_id') or c.get('course_code')
             if cid not in seen_cids:
                 seen_cids.add(cid)
                 deduped.append(c)
@@ -146,12 +146,12 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
     lecture_rooms = [r for r in all_rooms if app._is_lecture_room_type(r.get('room_type'))]
     lab_rooms = [r for r in all_rooms if app._is_lab_room_type(r.get('room_type'))]
 
-    timeslots = (app.supabase.table('timeslot').select('*').execute().data) or []
-    timeslots.sort(key=lambda t: str(t.get('start_time') or ''))
-    candidate_slots = app._build_candidate_slots(timeslots)
+    working_hours = (app.supabase.table('working_hours').select('*').execute().data) or []
+    working_hours.sort(key=lambda t: str(t.get('start_time') or ''))
+    candidate_slots = app._build_candidate_slots(working_hours)
 
     _day_cutoff_map = {}
-    for _ts in timeslots:
+    for _ts in working_hours:
         _d = (_ts.get('day') or '').strip()
         _cutoff = _ts.get('professor_cutoff')
         if _d and _cutoff and _d not in _day_cutoff_map:
@@ -216,13 +216,13 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
 
         course_id = course['course_id']
         if not assigned_prof:
-            generation_warnings.append(f"No professor load for Section {section_name} - {course.get('course_name')}: session skipped")
+            generation_warnings.append(f"No professor load for Section {section_name} - {course.get('course_code')}: session skipped")
             return False
 
         pk = assigned_prof.get('prof_id')
         assigned_professor_load_id = assigned_prof.get('professor_load_id') or _resolve_load_id(assigned_prof, course_id)
         if not assigned_professor_load_id:
-            generation_warnings.append(f"No valid professor_load row for {section_name} - {course.get('course_name')}: session skipped")
+            generation_warnings.append(f"No valid professor_load row for {section_name} - {course.get('course_code')}: session skipped")
             return False
 
         cand_rooms = lecture_rooms if session_type in ('Lecture', 'ILP') else lab_rooms
@@ -303,7 +303,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
                         'course_id': course_id,
-                        'course_name': course.get('course_name'),
+                        'course_code': course.get('course_code'),
                         'prof_id': pk,
                         'professor_name': prof_full_name,
                         'section': section_name,
@@ -337,7 +337,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
                     return True
 
         generation_warnings.append(
-            f"{session_type} for {course.get('course_name')} (Section {section_name}) could not be scheduled in a matching room without conflict and remains unscheduled"
+            f"{session_type} for {course.get('course_code')} (Section {section_name}) could not be scheduled in a matching room without conflict and remains unscheduled"
         )
         return False
 
@@ -347,13 +347,13 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
         total_dur = lec_dur + lab_dur
         course_id = course['course_id']
         if not assigned_prof:
-            generation_warnings.append(f"No professor load for Section {section_name} - {course.get('course_name')}: paired block skipped")
+            generation_warnings.append(f"No professor load for Section {section_name} - {course.get('course_code')}: paired block skipped")
             return False
 
         pk = assigned_prof.get('prof_id')
         assigned_professor_load_id = assigned_prof.get('professor_load_id') or _resolve_load_id(assigned_prof, course_id)
         if not assigned_professor_load_id:
-            generation_warnings.append(f"No valid professor_load row for {section_name} - {course.get('course_name')}: paired block skipped")
+            generation_warnings.append(f"No valid professor_load row for {section_name} - {course.get('course_code')}: paired block skipped")
             return False
 
         passes = [
@@ -436,7 +436,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
                         'course_id': course_id,
-                        'course_name': course.get('course_name'),
+                        'course_code': course.get('course_code'),
                         'prof_id': pk,
                         'professor_name': prof_name,
                         'section': section_name,
@@ -460,7 +460,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
                         'course_id': course_id,
-                        'course_name': course.get('course_name'),
+                        'course_code': course.get('course_code'),
                         'prof_id': pk,
                         'professor_name': prof_name,
                         'section': section_name,
@@ -492,7 +492,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
                     total_sessions_scheduled += 2
                     return True
 
-            logging.info(f"[SCHEDULER] Splitting paired session for {section_name} - {course.get('course_name')} ({lec_dur}h Lecture, {lab_dur}h Lab) into independent slots.")
+            logging.info(f"[SCHEDULER] Splitting paired session for {section_name} - {course.get('course_code')} ({lec_dur}h Lecture, {lab_dur}h Lab) into independent slots.")
             ok_lab = _schedule_single_session('Laboratory', lab_dur, course, assigned_prof, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used)
             ok_lec = _schedule_single_session('Lecture', lec_dur, course, assigned_prof, section_name, yr, sec_major, sec_key, courses_per_day, late_days, days_tried, two_course_day_used)
             return ok_lec and ok_lab
@@ -519,7 +519,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
 
         loads = professors_by_course.get(cid, [])
         if not loads:
-            generation_warnings.append(f"No professor load for {course.get('course_name')}: no classes generated")
+            generation_warnings.append(f"No professor load for {course.get('course_code')}: no classes generated")
             continue
 
         is_general_course = (not cmajor or str(cmajor).strip().lower() in ('general', 'none', ''))
@@ -626,7 +626,7 @@ def simulate_generation(program_id=1, standard_semester='2nd Semester', program=
 
         p_info = app._rel(pl_row, 'professor') or _all_profs_by_id.get(pid) or {}
         prof_name = f"{p_info.get('first_name', '')} {p_info.get('last_name', '')}".strip() or f"Prof #{pid}"
-        c_name = c_info.get('course_name') or f"Course #{cid}"
+        c_name = c_info.get('course_code') or f"Course #{cid}"
 
         sec_count = int(pl_row.get('sections') or 0)
         lec_h = int(c_info.get('lecture_hours') or 0)

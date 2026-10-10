@@ -66,7 +66,7 @@ def test_1_equal_distribution_unit():
     room_bookings = {}
 
     assignment_step = 0
-    # Simulate scheduling 20 classes across different timeslots where all rooms are valid
+    # Simulate scheduling 20 classes across different working_hours where all rooms are valid
     for i in range(20):
         # Unique timeslot for each class so there are no hard conflicts among them
         day = f"Day_{i // 4}"
@@ -234,10 +234,10 @@ def test_6_multiple_sections_global_distribution(monkeypatch):
 
     # Mock curriculum with 2 lecture courses per year
     courses = [
-        {'course_id': 1, 'course_name': 'IT101', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
-        {'course_id': 2, 'course_name': 'IT102', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
-        {'course_id': 3, 'course_name': 'IT201', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
-        {'course_id': 4, 'course_name': 'IT202', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+        {'course_id': 1, 'course_code': 'IT101', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+        {'course_id': 2, 'course_code': 'IT102', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+        {'course_id': 3, 'course_code': 'IT201', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+        {'course_id': 4, 'course_code': 'IT202', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
     ]
 
     # 4 distinct lecture rooms
@@ -262,7 +262,7 @@ def test_6_multiple_sections_global_distribution(monkeypatch):
         {'course_id': 4, 'prof_id': 4, 'sections': 2, 'professor': profs[3]},
     ]
 
-    timeslots = [
+    working_hours = [
         {'timeslot_id': 1, 'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
     ]
 
@@ -271,7 +271,7 @@ def test_6_multiple_sections_global_distribution(monkeypatch):
         'room': rooms,
         'professor': profs,
         'professor_load': professor_load,
-        'timeslot': timeslots,
+        'working_hours': working_hours,
         'schedule': [],
     }
 
@@ -326,7 +326,7 @@ def test_7_existing_schedule_no_conflicts(monkeypatch):
         session['role'] = 'Scheduler'
 
     courses = [
-        {'course_id': 1, 'course_name': 'IT101', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+        {'course_id': 1, 'course_code': 'IT101', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
     ]
 
     rooms = [
@@ -342,7 +342,7 @@ def test_7_existing_schedule_no_conflicts(monkeypatch):
         {'course_id': 1, 'prof_id': 1, 'sections': 1, 'professor': profs[0]},
     ]
 
-    timeslots = [
+    working_hours = [
         {'timeslot_id': 1, 'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
     ]
 
@@ -366,7 +366,7 @@ def test_7_existing_schedule_no_conflicts(monkeypatch):
         'room': rooms,
         'professor': profs,
         'professor_load': professor_load,
-        'timeslot': timeslots,
+        'working_hours': working_hours,
         'schedule': existing_schedule,
     }
 

@@ -321,13 +321,13 @@
                     <option value="">All Courses</option>
                     {% set ns = namespace(seen=[]) %}
                     {% for c in courses %}
-                        {% if c.course_name and c.course_name not in ns.seen %}
-                            {% set _ = ns.seen.append(c.course_name) %}
+                        {% if c.course_code and c.course_code not in ns.seen %}
+                            {% set _ = ns.seen.append(c.course_code) %}
                         {% endif %}
                     {% endfor %}
                     {% for pl in professor_loads %}
-                        {% if pl.course_name and pl.course_name not in ns.seen %}
-                            {% set _ = ns.seen.append(pl.course_name) %}
+                        {% if pl.course_code and pl.course_code not in ns.seen %}
+                            {% set _ = ns.seen.append(pl.course_code) %}
                         {% endif %}
                     {% endfor %}
                     {% for c_name in ns.seen|sort %}
@@ -371,7 +371,7 @@
                 {% set prof_courses_data = [] %}
                 {% for c in prof_group.list %}
                     {% set _ = prof_courses_data.append({
-                        'code': c.course_name|trim,
+                        'code': c.course_code|trim,
                         'sections': c.sections|int,
                         'hours': c.weekly_hours,
                         'units': c.total_units,
@@ -386,7 +386,7 @@
                     data-prof-key="{{ prof_group.grouper }}"
                     data-prof-name="{{ p_name|trim|lower }}"
                     data-prof-display-name="{{ p_name|trim }}"
-                    data-courses="{% for c in prof_group.list %}{{ c.course_name|trim }}{% if not loop.last %}|{% endif %}{% endfor %}"
+                    data-courses="{% for c in prof_group.list %}{{ c.course_code|trim }}{% if not loop.last %}|{% endif %}{% endfor %}"
                     data-courses-json="{{ prof_courses_data|tojson|forceescape }}"
                     data-hours="{{ total_prof_hours }}"
                     data-units="{{ total_prof_units }}"
@@ -413,7 +413,7 @@
                         <div class="d-flex flex-wrap gap-1">
                             {% for c in prof_group.list %}
                             <div class="course-badge-pill" title="Lec: {{ c.lecture_hours }}h, Lab: {{ c.lab_hours }}h, ILP: {{ c.ilp_hours }}h">
-                                <span class="fw-semibold me-1">{{ c.course_name }}</span>
+                                <span class="fw-semibold me-1">{{ c.course_code }}</span>
                                 <span class="badge bg-primary text-white me-1">{{ c.sections }} sec</span>
                                 <small class="text-muted">({{ c.weekly_hours }}h)</small>
                             </div>
@@ -791,8 +791,8 @@ $(function(){
         // 2. Gather all courses from the master catalog (allCoursesList)
         if (typeof allCoursesList !== 'undefined' && Array.isArray(allCoursesList)) {
             allCoursesList.forEach(function(c) {
-                if (c && c.course_name) {
-                    var trimmed = String(c.course_name).trim();
+                if (c && c.course_code) {
+                    var trimmed = String(c.course_code).trim();
                     if (trimmed) {
                         courseSet.add(trimmed);
                     }

@@ -70,7 +70,7 @@ def test_validation_detects_bad_data_missing_prof_and_duplicate():
     """Verify pre-generation validation catches missing professor names and duplicate loads."""
     # Test duplicate load detection
     mock_courses = [
-        {'course_id': 101, 'course_name': 'IT101', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program_id': 1}
+        {'course_id': 101, 'course_code': 'IT101', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program_id': 1}
     ]
     mock_loads = [
         {'id': 1, 'course_id': 101, 'sections': 1, 'professor_name': 'Dr. Smith', 'professor_key': 'dr smith'},
@@ -109,7 +109,7 @@ def test_pagination_safeguard():
         assert len(data) == 100000 # 100 pages * 1000
 
 
-def test_baseline_load_order_and_canonical_timeslots_safeguards():
+def test_baseline_load_order_and_canonical_working_hours_safeguards():
     """Verify that _get_baseline_professor_load_order maps real professor keys,
     canonical timeslot fallback covers until 20:00:00 on Tue-Fri, and cutoff handling
     does not falsely block evening sessions when ranking table is absent."""

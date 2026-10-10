@@ -74,13 +74,13 @@ ROUTE_MAP = {
     'delete_room': {'admin'},
     'search_rooms': {'admin'},
 
-    # Timeslots (Admin full, Scheduler 403)
-    'timeslot': {'admin'},
-    'legacy_timeslot_html': {'admin'},
-    'add_timeslot': {'admin'},
-    'edit_timeslot': {'admin'},
-    'delete_timeslot': {'admin'},
-    'initialize_timeslots': {'admin'},
+    # Working hours (Admin full, Scheduler 403)
+    'working_hours': {'admin'},
+    'legacy_working_hours_html': {'admin'},
+    'add_working_hours': {'admin'},
+    'edit_working_hours': {'admin'},
+    'delete_working_hours': {'admin'},
+    'initialize_working_hours': {'admin'},
 
     # Schedules: Section Schedule (Admin READ-ONLY, Scheduler full, Viewer READ-ONLY)
     'schedules': {'admin', 'scheduler', 'viewer'},

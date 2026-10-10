@@ -22,7 +22,7 @@ for item in canon:
 
 app._CACHED_BASELINE_LOAD_ORDER = canonical_order_map
 
-# 2. Monkey-patch supabase.table('timeslot').select('*').execute() to return empty or return 20:00:00
+# 2. Monkey-patch supabase.table('working_hours').select('*').execute() to return empty or return 20:00:00
 # But in app.py line 10056, let's see what happens if we monkey-patch the timeslot query to return 20:00:00
 orig_table = app.supabase.table
 
@@ -33,7 +33,7 @@ class MockTable:
     def __getattr__(self, item):
         return getattr(self._target, item)
     def select(self, *args, **kwargs):
-        if self.table_name == 'timeslot':
+        if self.table_name == 'working_hours':
             class MockExec:
                 def execute(self):
                     class MockData:

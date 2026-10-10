@@ -34,7 +34,7 @@
    - [5.3 Course Catalog & Specialization Framework](#53-course-catalog--specialization-framework)
    - [5.4 Shared Faculty Pool & Cross-Program Workload Allocation](#54-shared-faculty-pool--cross-program-workload-allocation)
    - [5.5 Shared Facilities & Physical Room Inventory](#55-shared-facilities--physical-room-inventory)
-   - [5.6 Institutional Timeslots & Daily Cutoffs](#56-institutional-timeslots--daily-cutoffs)
+   - [5.6 Institutional Working Hours & Daily Cutoffs](#56-institutional-working-hours--daily-cutoffs)
    - [5.7 Automated Schedule Generation Engine](#57-automated-schedule-generation-engine)
    - [5.8 Multi-Dimensional Conflict Detection Engine](#58-multi-dimensional-conflict-detection-engine)
    - [5.9 Staging Preview, In-Place Editing & Transactional Confirmation](#59-staging-preview-in-place-editing--transactional-confirmation)
@@ -126,7 +126,7 @@ graph TD
 | **Faculty Records Pool** | Full CRUD | Full CRUD | Scoped Edit / Del Req | View Profile | Shared university pool |
 | **Faculty Load Allocation** | Full CRUD | Full CRUD | Program-Scoped | View Own | Scoped by `course.program_id` |
 | **Rooms & Facilities Pool** | Full CRUD | Full CRUD | Edit / Del Req | View Availability | Shared university pool |
-| **Institutional Timeslots** | Full CRUD | Full CRUD | View Only | View Only | Global policy |
+| **Institutional Working Hours** | Full CRUD | Full CRUD | View Only | View Only | Global policy |
 | **Automated Schedule Generation** | Global | Global | Program-Scoped | None | Scoped by `session.program_id` |
 | **Staging Preview & Confirmation** | Global | Global | Program-Scoped | None | Concurrency-protected |
 | **Archive Active Schedule** | Global | Global | Program-Scoped | None | Direct archive without deletion request |
@@ -249,7 +249,7 @@ erDiagram
 
     COURSE {
         int course_id PK
-        string course_name
+        string course_code
         int year_level
         string semester
         int lecture_hours
@@ -276,7 +276,7 @@ erDiagram
         int program_id FK
     }
 
-    TIMESLOT {
+    WORKING_HOURS {
         int timeslot_id PK
         string day
         time start_time
@@ -334,7 +334,7 @@ Institutional faculty members in the shared common pool.
 #### 4.2.4 `course`
 Curriculum course catalog scoped to programs.
 * `course_id` (INTEGER, PK, Auto-increment): Primary key.
-* `course_name` (VARCHAR(150), NOT NULL): Course code / subject title (e.g., `'IT-WS01 Web Systems'`).
+* `course_code` (VARCHAR(150), NOT NULL): Course code / subject title (e.g., `'IT-WS01 Web Systems'`).
 * `year_level` (INTEGER, NOT NULL, CHECK 1..4): Academic curriculum year.
 * `semester` (VARCHAR(50), NOT NULL, DEFAULT `'1st Semester'`, CHECK IN (`'1st Semester'`, `'2nd Semester'`)).
 * `lecture_hours` (INTEGER, NOT NULL, DEFAULT 0): Weekly lecture hours.
@@ -343,7 +343,7 @@ Curriculum course catalog scoped to programs.
 * `units` (NUMERIC(4,2), NOT NULL, DEFAULT 3.0): Academic credit units.
 * `specialization` (VARCHAR(50), NULLABLE): Elective track (`'Database Systems'`, `'Web Systems'`, `'Networking'`, `'General'`).
 * `program_id` (INTEGER, NOT NULL, FK -> `program.id`, ON DELETE CASCADE): Scopes course to academic program.
-* *Constraints:* Unique index on `(program_id, LOWER(course_name))` ensures course codes are unique within each program while allowing identical codes across different programs.
+* *Constraints:* Unique index on `(program_id, LOWER(course_code))` ensures course codes are unique within each program while allowing identical codes across different programs.
 
 #### 4.2.5 `professor_load`
 The authoritative binding of an instructor to a course and section quota.
@@ -361,7 +361,7 @@ Physical facilities in the shared common university pool.
 * `capacity` (INTEGER, DEFAULT 40): Seating capacity.
 * `program_id` (INTEGER, NULLABLE, FK -> `program.id`, ON DELETE SET NULL): Optional legacy reference; rooms operate as a shared pool across all programs.
 
-#### 4.2.7 `timeslot`
+#### 4.2.7 `working_hours`
 Institutional operating boundaries and daily cutoffs.
 * `timeslot_id` (INTEGER, PK, Auto-increment): Primary key.
 * `day` (VARCHAR(20), NOT NULL): `'Monday'`, `'Tuesday'`, `'Wednesday'`, `'Thursday'`, `'Friday'`.
@@ -484,7 +484,7 @@ sequenceDiagram
 * **Equal Room Distribution Algorithm:** Balances section assignments evenly across all eligible rooms to prevent over-clustering in a single facility.
 * **Graceful Degradation:** When physical capacity is exhausted, the session degrades gracefully to room designated as `'TBA'` with a visual warning badge.
 
-### 5.6 Institutional Timeslots & Daily Cutoffs
+### 5.6 Institutional Working Hours & Daily Cutoffs
 * Standard operating matrix: Monday through Friday, 07:00 to 20:00 (Saturday removed).
 * **Institutional Lunch Hour Immunity:** 12:00 to 13:00 is strictly locked. No classes may start, end, or overlap across this window.
 * **Day-Specific Cutoffs:** Monday 16:00, Tuesday–Friday 17:00, referenced against `academic_ranking.has_cutoff`.
@@ -568,7 +568,7 @@ To protect institutional data integrity, Schedulers cannot directly delete core 
 3. Admins review entity details and justification reason, then click **Approve** (executing deletion) or **Reject** (canceling request).
 
 ### 5.15 Disaster Recovery, Backup & Restoration Subsystem
-* **Full JSON Snapshot Backup (`/backup`):** Serializes all database tables (`program`, `academic_ranking`, `professor`, `course`, `room`, `timeslot`, `professor_load`, `schedule`, `delete_requests`, `users`) into a single structured, portable JSON snapshot.
+* **Full JSON Snapshot Backup (`/backup`):** Serializes all database tables (`program`, `academic_ranking`, `professor`, `course`, `room`, `working_hours`, `professor_load`, `schedule`, `delete_requests`, `users`) into a single structured, portable JSON snapshot.
 * **Transactional Restore (`/restore`):** Validates JSON schema structure and performs an atomic database restoration within a single transaction block.
 
 ---
@@ -578,7 +578,7 @@ To protect institutional data integrity, Schedulers cannot directly delete core 
 | Rule ID | Rule Name | Trigger & Condition | Enforcement Behavior |
 | :--- | :--- | :--- | :--- |
 | **BR-001** | **Multi-Program Isolation** | User is authenticated as Program Scheduler. | All course, loading, and generation operations are strictly locked to `session['program_id']`. Query parameter tampering triggers HTTP 403. |
-| **BR-002** | **Course Code Uniqueness** | Adding or editing a course in `/add_course`. | Enforces unique `(program_id, LOWER(course_name))`. Identical codes in *different* programs are explicitly permitted. |
+| **BR-002** | **Course Code Uniqueness** | Adding or editing a course in `/add_course`. | Enforces unique `(program_id, LOWER(course_code))`. Identical codes in *different* programs are explicitly permitted. |
 | **BR-003** | **Course Program Guard** | Editing course's program in `/edit_course`. | Blocked if professor loads or schedules already exist for that course. |
 | **BR-004** | **Shared Pool Access** | Fetching rooms and professors. | Rooms and professors are queried from the common pool without program filtering. |
 | **BR-005** | **Multi-Prof Section Aggregation** | Multiple instructors assigned to the same course in `professor_load`. | Total course sections = sum of all assigned `sections` in `professor_load`. |

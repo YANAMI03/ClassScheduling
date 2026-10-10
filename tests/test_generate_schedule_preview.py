@@ -51,17 +51,17 @@ class FakeQuery:
     def execute(self):
         if self.table_name == 'course':
             return FakeResponse([
-                {'course_id': 1, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
-                {'course_id': 2, 'course_name': 'IT201 - Data Structures', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT'},
-                {'course_id': 3, 'course_name': 'IT301 - Web Systems', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT'},
-                {'course_id': 4, 'course_name': 'IT401 - Capstone Project 1', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'specialization': 'Database Systems'},
+                {'course_id': 1, 'course_code': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+                {'course_id': 2, 'course_code': 'IT201 - Data Structures', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT'},
+                {'course_id': 3, 'course_code': 'IT301 - Web Systems', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT'},
+                {'course_id': 4, 'course_code': 'IT401 - Capstone Project 1', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'specialization': 'Database Systems'},
             ])
         elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
             data = [
-                {'professor_load_id': 101, 'course_id': 1, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}, 'course': {'course_name': 'IT101 - Intro to Computing', 'course_code': 'IT101'}, 'sections': 1},
-                {'professor_load_id': 102, 'course_id': 2, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}, 'course': {'course_name': 'IT201 - Data Structures', 'course_code': 'IT201'}, 'sections': 1},
-                {'professor_load_id': 103, 'course_id': 3, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}, 'course': {'course_name': 'IT301 - Web Systems', 'course_code': 'IT301'}, 'sections': 1},
-                {'professor_load_id': 104, 'course_id': 4, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}, 'course': {'course_name': 'IT401 - Capstone Project 1', 'course_code': 'IT401'}, 'sections': 1},
+                {'professor_load_id': 101, 'course_id': 1, 'prof_id': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 40}, 'course': {'course_code': 'IT101 - Intro to Computing'}, 'sections': 1},
+                {'professor_load_id': 102, 'course_id': 2, 'prof_id': 2, 'professor': {'first_name': 'Grace', 'last_name': 'Hopper', 'max_hours': 40}, 'course': {'course_code': 'IT201 - Data Structures'}, 'sections': 1},
+                {'professor_load_id': 103, 'course_id': 3, 'prof_id': 3, 'professor': {'first_name': 'Ada', 'last_name': 'Lovelace', 'max_hours': 40}, 'course': {'course_code': 'IT301 - Web Systems'}, 'sections': 1},
+                {'professor_load_id': 104, 'course_id': 4, 'prof_id': 4, 'professor': {'first_name': 'Linus', 'last_name': 'Torvalds', 'max_hours': 40}, 'course': {'course_code': 'IT401 - Capstone Project 1'}, 'sections': 1},
             ]
             if 'professor_load_id' in self.filters:
                 data = [d for d in data if str(d.get('professor_load_id')) == str(self.filters['professor_load_id'])]
@@ -87,7 +87,7 @@ class FakeQuery:
             if 'room_id' in self.filters:
                 data = [d for d in data if str(d.get('room_id')) == str(self.filters['room_id'])]
             return FakeResponse(data)
-        elif self.table_name == 'timeslot':
+        elif self.table_name == 'working_hours':
             return FakeResponse([
                 {'timeslot_id': 1, 'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
             ])
@@ -159,13 +159,13 @@ def test_generate_schedule_clears_previous_preview_before_regenerating(monkeypat
         session['program'] = 'BSIT'
         session['username'] = 'tester'
         session['role'] = 'Scheduler'
-        session['schedule_preview'] = [{'id': 1, 'section': 'OLD', 'course_name': 'Old Course'}]
+        session['schedule_preview'] = [{'id': 1, 'section': 'OLD', 'course_code': 'Old Course'}]
         session['generated_sections'] = [{'section': 'OLD'}]
 
     monkeypatch.setattr(app_module, 'supabase', FakeSupabase())
     monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
     monkeypatch.setattr(app_module, '_ensure_course_semester_column', lambda: None)
-    monkeypatch.setattr(app_module, '_build_candidate_slots', lambda timeslots: (_ for _ in ()).throw(RuntimeError('boom')))
+    monkeypatch.setattr(app_module, '_build_candidate_slots', lambda working_hours: (_ for _ in ()).throw(RuntimeError('boom')))
 
     response = client.post('/generate_schedule', data={
         'semester': '1st Semester',
@@ -224,11 +224,11 @@ def test_generate_schedule_second_semester_with_major_sections(monkeypatch):
         def execute(self):
             if self.table_name == 'course':
                 return FakeResponse([
-                    {'course_id': 10, 'course_name': 'IT102 - OOP', 'year_level': 1, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
-                    {'course_id': 20, 'course_name': 'IT202 - Algorithms', 'year_level': 2, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
-                    {'course_id': 30, 'course_name': 'IT302 - Advanced DB', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Database Systems', 'specialization': 'Database Systems'},
-                    {'course_id': 31, 'course_name': 'IT303 - Web Frameworks', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Systems', 'specialization': 'Web Systems'},
-                    {'course_id': 32, 'course_name': 'IT304 - Network Admin', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking', 'specialization': 'Networking'},
+                    {'course_id': 10, 'course_code': 'IT102 - OOP', 'year_level': 1, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 20, 'course_code': 'IT202 - Algorithms', 'year_level': 2, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 30, 'course_code': 'IT302 - Advanced DB', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Database Systems', 'specialization': 'Database Systems'},
+                    {'course_id': 31, 'course_code': 'IT303 - Web Frameworks', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Systems', 'specialization': 'Web Systems'},
+                    {'course_id': 32, 'course_code': 'IT304 - Network Admin', 'year_level': 3, 'semester': '2nd Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking', 'specialization': 'Networking'},
                 ])
             elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
@@ -295,12 +295,12 @@ def test_generate_schedule_first_semester_with_4th_year_major_sections(monkeypat
         def execute(self):
             if self.table_name == 'course':
                 return FakeResponse([
-                    {'course_id': 10, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
-                    {'course_id': 20, 'course_name': 'IT201 - Data Structures', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
-                    {'course_id': 30, 'course_name': 'IT301 - Systems Analysis', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
-                    {'course_id': 40, 'course_name': 'IT401 - Advanced DB Project', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Database Systems', 'specialization': 'Database Systems'},
-                    {'course_id': 41, 'course_name': 'IT402 - Enterprise Web Apps', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Systems', 'specialization': 'Web Systems'},
-                    {'course_id': 42, 'course_name': 'IT403 - Enterprise Networking', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking', 'specialization': 'Networking'},
+                    {'course_id': 10, 'course_code': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 20, 'course_code': 'IT201 - Data Structures', 'year_level': 2, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 30, 'course_code': 'IT301 - Systems Analysis', 'year_level': 3, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': None},
+                    {'course_id': 40, 'course_code': 'IT401 - Advanced DB Project', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Database Systems', 'specialization': 'Database Systems'},
+                    {'course_id': 41, 'course_code': 'IT402 - Enterprise Web Apps', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Web Systems', 'specialization': 'Web Systems'},
+                    {'course_id': 42, 'course_code': 'IT403 - Enterprise Networking', 'year_level': 4, 'semester': '1st Semester', 'lecture_hours': 2, 'lab_hours': 3, 'program': 'BSIT', 'major': 'Networking', 'specialization': 'Networking'},
                 ])
             elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
@@ -448,7 +448,7 @@ def test_confirm_preview_saves_and_clears_preview(monkeypatch):
         session['schedule_preview'] = [
             {
                 'course_id': 1,
-                'course_name': 'IT101',
+                'course_code': 'IT101',
                 'section': '1A',
                 'prof_id': 1,
                 'room_id': 2,
@@ -489,7 +489,7 @@ def test_confirm_preview_fallback_deletes_scope_and_inserts(monkeypatch):
         session['schedule_preview'] = [
             {
                 'course_id': 10,
-                'course_name': 'IT401',
+                'course_code': 'IT401',
                 'section': '4A-DB',
                 'prof_id': 2,
                 'room_id': 2,
@@ -526,23 +526,23 @@ def test_group_preview_sections_third_year_majors():
     sample_sections = [
         {
             'section': {'section': '1A', 'section_name': '1A', 'major': None},
-            'entries': [{'section': '1A', 'course_name': 'IT101', 'year_level': '1'}]
+            'entries': [{'section': '1A', 'course_code': 'IT101', 'year_level': '1'}]
         },
         {
             'section': {'section': '2A', 'section_name': '2A', 'major': None},
-            'entries': [{'section': '2A', 'course_name': 'IT201', 'year_level': '2'}]
+            'entries': [{'section': '2A', 'course_code': 'IT201', 'year_level': '2'}]
         },
         {
             'section': {'section': '3A-WEB', 'section_name': '3A-WEB', 'major': 'Web Development'},
-            'entries': [{'section': '3A-WEB', 'course_name': 'IT301-WEB', 'year_level': '3', 'major': 'Web Development'}]
+            'entries': [{'section': '3A-WEB', 'course_code': 'IT301-WEB', 'year_level': '3', 'major': 'Web Development'}]
         },
         {
             'section': {'section': '3A-DB', 'section_name': '3A-DB', 'major': 'Database Systems'},
-            'entries': [{'section': '3A-DB', 'course_name': 'IT302-DB', 'year_level': '3', 'major': 'Database Systems'}]
+            'entries': [{'section': '3A-DB', 'course_code': 'IT302-DB', 'year_level': '3', 'major': 'Database Systems'}]
         },
         {
             'section': {'section': '3A-NET', 'section_name': '3A-NET', 'major': 'Networking'},
-            'entries': [{'section': '3A-NET', 'course_name': 'IT303-NET', 'year_level': '3', 'major': 'Networking'}]
+            'entries': [{'section': '3A-NET', 'course_code': 'IT303-NET', 'year_level': '3', 'major': 'Networking'}]
         }
     ]
 
@@ -658,7 +658,7 @@ def test_professor_and_room_schedule_non_military_time(monkeypatch):
                                 'semester': '1st Semester',
                                 'major': None,
                                 'session_type': 'Lecture',
-                                'course': {'course_name': 'IT101'},
+                                'course': {'course_code': 'IT101'},
                                 'room': {'room_name': 'Room 201'},
                                 'professor': {'first_name': 'Alan', 'last_name': 'Turing'}
                             }
@@ -714,7 +714,7 @@ def test_generate_schedule_strict_room_type_enforcement(monkeypatch):
                 room = rooms_by_id.get(rid)
                 stype = entry.get('session_type')
                 assert app_module._room_matches_session(room, stype), (
-                    f"Room mismatch: {entry.get('course_name')} ({stype}) assigned to {room.get('room_name')} ({room.get('room_type')})"
+                    f"Room mismatch: {entry.get('course_code')} ({stype}) assigned to {room.get('room_name')} ({room.get('room_type')})"
                 )
 
 
@@ -724,7 +724,7 @@ def test_edit_preview_entry_blocks_cross_type_room_assignment(monkeypatch):
     preview_entry = {
         'id': 1,
         'course_id': 1,
-        'course_name': 'IT101',
+        'course_code': 'IT101',
         'section': '1A',
         'prof_id': 1,
         'room_id': 2,
@@ -775,7 +775,7 @@ def test_confirm_preview_blocks_on_room_type_mismatch(monkeypatch):
         session['schedule_preview'] = [
             {
                 'course_id': 1,
-                'course_name': 'IT101',
+                'course_code': 'IT101',
                 'section': '1A',
                 'prof_id': 1,
                 'room_id': 1, # Lab 101 assigned to Lecture
@@ -840,7 +840,7 @@ def test_edit_preview_entry_with_professor_load_id(monkeypatch):
                 'id': 1,
                 'professor_load_id': 101,
                 'course_id': 1,
-                'course_name': 'IT101 - Intro to Computing',
+                'course_code': 'IT101 - Intro to Computing',
                 'section': '1A',
                 'prof_id': 1,
                 'professor_name': 'Alan Turing',
@@ -874,14 +874,14 @@ def test_edit_preview_entry_with_professor_load_id(monkeypatch):
     assert json_data.get('success') is True
     assert json_data.get('entry') is not None
     assert json_data['entry']['professor_load_id'] == 102
-    assert json_data['entry']['course_name'] == 'IT201 - Data Structures'
+    assert json_data['entry']['course_code'] == 'IT201 - Data Structures'
     assert json_data['entry']['professor_name'] == 'Grace Hopper'
 
     with client.session_transaction() as session:
         preview = app_module._get_preview_for_user(session.get('user_id'), session.get('preview_id'))
         target = preview[0]
         assert target['professor_load_id'] == 102
-        assert target['course_name'] == 'IT201 - Data Structures'
+        assert target['course_code'] == 'IT201 - Data Structures'
         assert target['professor_name'] == 'Grace Hopper'
 
 
@@ -1032,7 +1032,7 @@ def test_confirm_preview_passes_professor_load_id_to_rpc(monkeypatch):
             {
                 'professor_load_id': 101,
                 'course_id': 1,
-                'course_name': 'IT101',
+                'course_code': 'IT101',
                 'section': '1A',
                 'prof_id': 1,
                 'room_id': 2,
@@ -1067,6 +1067,13 @@ def test_confirm_preview_passes_professor_load_id_to_rpc(monkeypatch):
     rows = captured_rpc.get('params', {}).get('p_rows', [])
     assert len(rows) == 1
     assert rows[0].get('professor_load_id') == 101
+    assert rows[0].get('prepared_by_user_id') == 1
+    assert 'prepared_by_name' not in rows[0]
+    assert 'prepared_by_title' not in rows[0]
+    assert captured_rpc['params'].get('p_prepared_by_user_id') == 1
+    assert 'p_prepared_by_name' not in captured_rpc['params']
+    assert 'p_prepared_by_title' not in captured_rpc['params']
+    assert 'program_id' not in rows[0]
     assert 'course_id' not in rows[0]
     assert 'prof_id' not in rows[0]
 
@@ -1106,7 +1113,7 @@ def test_edit_schedule_entry_with_professor_load_id(monkeypatch):
                                 'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
-                                'course': {'course_name': 'IT101 - Intro to Computing'},
+                                'course': {'course_code': 'IT101 - Intro to Computing'},
                                 'professor': {'first_name': 'Alan', 'last_name': 'Turing'}
                             }
                         }])
@@ -1169,7 +1176,7 @@ def test_view_schedule_renders_without_foreign_key_errors(monkeypatch):
                                 'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
-                                'course': {'course_id': 1, 'course_name': 'IT101 - Intro to Computing'},
+                                'course': {'course_id': 1, 'course_code': 'IT101 - Intro to Computing'},
                                 'professor': {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}
                             },
                             'room': {'room_name': 'Lab 101'}
@@ -1201,6 +1208,11 @@ def test_edit_schedule_section_updates_metadata(monkeypatch):
     class EditSectionSupabase(FakeSupabase):
         def table(self, table_name):
             class LocalQuery(FakeQuery):
+                def execute(self):
+                    if self.table_name == 'schedule_with_semester':
+                        return FakeResponse([{'schedule_id': 1}])
+                    return super().execute()
+
                 def update(self, payload):
                     updated_rows.update(payload)
                     return self
@@ -1304,7 +1316,7 @@ def test_view_professor_schedule_calculates_workload(monkeypatch):
                                 'day': 'Monday', 'class_start': '08:00:00', 'class_end': '11:00:00',
                                 'section': '1A', 'semester': '1st Semester', 'major': 'General',
                                 'session_type': 'Lecture', 'program': 'BSIT',
-                                'professor_load': {'professor_load_id': 101, 'prof_id': 1, 'course_id': 1, 'course': {'course_id': 1, 'course_name': 'IT101'}},
+                                'professor_load': {'professor_load_id': 101, 'prof_id': 1, 'course_id': 1, 'course': {'course_id': 1, 'course_code': 'IT101'}},
                                 'room': {'room_name': 'Room 101'}
                             }
                         ])
@@ -1339,7 +1351,7 @@ def test_view_professor_schedule_preview_mode(monkeypatch):
             'prof_id': 1,
             'professor_name': 'Alan Turing',
             'course_id': 1,
-            'course_name': 'IT101',
+            'course_code': 'IT101',
             'section': '1A',
             'room_id': 1,
             'room_name': 'Room 101',
@@ -1358,7 +1370,7 @@ def test_view_professor_schedule_preview_mode(monkeypatch):
             'prof_id': 1,
             'professor_name': 'Alan Turing',
             'course_id': 1,
-            'course_name': 'IT101',
+            'course_code': 'IT101',
             'section': '1B',
             'room_id': 2,
             'room_name': 'Room 201',
@@ -1462,7 +1474,7 @@ def test_generate_schedule_workload_balanced_across_faculty(monkeypatch):
         def execute(self):
             if self.table_name == 'course':
                 return FakeResponse([
-                    {'course_id': 10, 'course_name': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+                    {'course_id': 10, 'course_code': 'IT101 - Intro to Computing', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
             elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
@@ -1527,7 +1539,7 @@ def test_generate_schedule_rotates_course_sections(monkeypatch):
         def execute(self):
             if self.table_name == 'course':
                 return FakeResponse([
-                    {'course_id': 20, 'course_name': 'IT102 - Computer Programming', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+                    {'course_id': 20, 'course_code': 'IT102 - Computer Programming', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
             elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
@@ -1582,7 +1594,7 @@ def test_generate_schedule_respects_max_hours_cap(monkeypatch):
         def execute(self):
             if self.table_name == 'course':
                 return FakeResponse([
-                    {'course_id': 30, 'course_name': 'IT103 - Discrete Structures', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+                    {'course_id': 30, 'course_code': 'IT103 - Discrete Structures', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
             elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
@@ -1645,7 +1657,7 @@ def test_generate_schedule_spreads_faculty_days(monkeypatch):
         def execute(self):
             if self.table_name == 'course':
                 return FakeResponse([
-                    {'course_id': 40, 'course_name': 'IT104 - Web Development', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+                    {'course_id': 40, 'course_code': 'IT104 - Web Development', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
             elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
@@ -1698,7 +1710,7 @@ def test_generate_schedule_fallback_when_all_faculty_reach_cap(monkeypatch):
         def execute(self):
             if self.table_name == 'course':
                 return FakeResponse([
-                    {'course_id': 50, 'course_name': 'IT105 - Systems Analysis', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
+                    {'course_id': 50, 'course_code': 'IT105 - Systems Analysis', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT'},
                 ])
             elif self.table_name == 'professor_load' or self.table_name == 'professor_load':
                 return FakeResponse([
@@ -1748,15 +1760,15 @@ def test_calculate_room_availability_logic():
     """Verify room availability calculations excluding lunch break, free interval derivation, and day classifications."""
     entries = [
         # Monday: 08:00 to 11:00 (3h), 13:00 to 15:00 (2h) -> 5h occupied, 7h free (lunch 12-1 is excluded)
-        {'day': 'Monday', 'start_time': '08:00:00', 'end_time': '11:00:00', 'course_name': 'IT101', 'section': '1A', 'room_type': 'Lecture'},
-        {'day': 'Monday', 'start_time': '13:00:00', 'end_time': '15:00:00', 'course_name': 'IT102', 'section': '1B', 'room_type': 'Lecture'},
+        {'day': 'Monday', 'start_time': '08:00:00', 'end_time': '11:00:00', 'course_code': 'IT101', 'section': '1A', 'room_type': 'Lecture'},
+        {'day': 'Monday', 'start_time': '13:00:00', 'end_time': '15:00:00', 'course_code': 'IT102', 'section': '1B', 'room_type': 'Lecture'},
         # Tuesday: 07:00 to 12:00 (5h) and 13:00 to 20:00 (7h) -> 12h occupied (all usable hours booked, lunch 12-1 excluded) -> Fully Booked
-        {'day': 'Tuesday', 'start_time': '07:00:00', 'end_time': '12:00:00', 'course_name': 'IT103', 'section': '1C', 'room_type': 'Lecture'},
-        {'day': 'Tuesday', 'start_time': '13:00:00', 'end_time': '20:00:00', 'course_name': 'IT104', 'section': '1D', 'room_type': 'Lecture'},
+        {'day': 'Tuesday', 'start_time': '07:00:00', 'end_time': '12:00:00', 'course_code': 'IT103', 'section': '1C', 'room_type': 'Lecture'},
+        {'day': 'Tuesday', 'start_time': '13:00:00', 'end_time': '20:00:00', 'course_code': 'IT104', 'section': '1D', 'room_type': 'Lecture'},
     ]
     room = {'room_id': 1, 'room_name': 'Lecture Hall 101', 'room_type': 'Lecture'}
 
-    avail = app_module._calculate_room_availability(entries, timeslots=None, room=room)
+    avail = app_module._calculate_room_availability(entries, working_hours=None, room=room)
     metrics = avail['metrics']
 
     # 6 operating days (Mon-Sat), 07:00 to 20:00 = 13 hrs window - 1 hr lunch = 12 usable hrs/day => 72 operating hours total
@@ -1802,7 +1814,7 @@ def test_calculate_room_availability_logic():
 def test_calculate_room_availability_lunch_slot_in_grid():
     """Verify that timetable grid explicitly marks lunch slots with type='lunch' and not 'available'."""
     room = {'room_id': 1, 'room_name': 'Lecture Hall 101', 'room_type': 'Lecture'}
-    avail = app_module._calculate_room_availability([], timeslots=None, room=room)
+    avail = app_module._calculate_room_availability([], working_hours=None, room=room)
     grid = avail['timetable_grid']
 
     # Find the 12:00 PM - 01:00 PM slot row
@@ -1821,11 +1833,11 @@ def test_calculate_room_availability_partial_occupancy_protection():
     """Verify that partially occupied slots are never marked as fully available."""
     entries = [
         # Monday: 08:30 to 10:30 (starts halfway in 08:00-09:00, ends halfway in 10:00-11:00)
-        {'day': 'Monday', 'start_time': '08:30:00', 'end_time': '10:30:00', 'course_name': 'IT101', 'section': '1A', 'room_type': 'Lecture'},
+        {'day': 'Monday', 'start_time': '08:30:00', 'end_time': '10:30:00', 'course_code': 'IT101', 'section': '1A', 'room_type': 'Lecture'},
     ]
     room = {'room_id': 2, 'room_name': 'Room 202', 'room_type': 'Lecture'}
 
-    avail = app_module._calculate_room_availability(entries, timeslots=None, room=room)
+    avail = app_module._calculate_room_availability(entries, working_hours=None, room=room)
     grid = avail['timetable_grid']
 
     # 07:00 - 08:00 Monday should be fully available
@@ -1866,7 +1878,7 @@ def test_view_room_schedule_preview_mode(monkeypatch):
             'day': 'Monday',
             'start': '08:00:00',
             'end': '11:00:00',
-            'course_name': 'IT101 - Intro to Computing',
+            'course_code': 'IT101 - Intro to Computing',
             'course_code': 'IT101',
             'professor_name': 'Alan Turing',
             'professor_load_id': 101,
@@ -1915,7 +1927,7 @@ def test_api_room_availability_endpoint(monkeypatch):
             'day': 'Wednesday',
             'start': '09:00:00',
             'end': '12:00:00',
-            'course_name': 'IT201 - Data Structures',
+            'course_code': 'IT201 - Data Structures',
             'section': '2A',
             'session_type': 'Lecture',
         }
@@ -1961,7 +1973,7 @@ def test_edit_preview_entry_blocks_lunch_time_overlap(monkeypatch):
             'id': 1,
             'professor_load_id': 101,
             'course_id': 1,
-            'course_name': 'IT101 - Intro to Computing',
+            'course_code': 'IT101 - Intro to Computing',
             'prof_id': 1,
             'professor_name': 'Alan Turing',
             'section': '1A',
@@ -2034,11 +2046,11 @@ def test_edit_schedule_entry_blocks_lunch_time_overlap(monkeypatch):
                                 'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
-                                'course': {'course_name': 'IT101 - Intro to Computing'},
+                                'course': {'course_code': 'IT101 - Intro to Computing'},
                                 'professor': {'first_name': 'Alan', 'last_name': 'Turing'}
                             }
                         }])
-                    elif self.table_name == 'timeslot':
+                    elif self.table_name == 'working_hours':
                         return FakeResponse([{
                             'start_time': '07:00:00',
                             'end_time': '19:00:00',
@@ -2103,7 +2115,7 @@ def test_calculate_room_availability_calendar_blocks_single_render():
             'day': 'Monday',
             'start_time': '13:00:00',
             'end_time': '15:00:00',
-            'course_name': 'IT201 - Data Structures',
+            'course_code': 'IT201 - Data Structures',
             'section': '2A',
             'room_type': 'Lecture',
             'professor': 'Grace Hopper',
@@ -2111,7 +2123,7 @@ def test_calculate_room_availability_calendar_blocks_single_render():
         }
     ]
     room = {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture'}
-    avail = app_module._calculate_room_availability(entries, timeslots=None, room=room)
+    avail = app_module._calculate_room_availability(entries, working_hours=None, room=room)
 
     # 1. Verify single hour markers on time axis (no 'to ' range strings)
     assert 'time_markers' in avail
@@ -2129,7 +2141,7 @@ def test_calculate_room_availability_calendar_blocks_single_render():
     mon_blocks = avail['day_calendar_blocks']['Monday']
 
     # Must contain exactly ONE block for IT201 - Data Structures (not two individual hourly slots!)
-    it201_blocks = [b for b in mon_blocks if b.get('course_name') == 'IT201 - Data Structures']
+    it201_blocks = [b for b in mon_blocks if b.get('course_code') == 'IT201 - Data Structures']
     assert len(it201_blocks) == 1, f"Expected exactly 1 contiguous block for 2-hour class, found {len(it201_blocks)}"
 
     it201 = it201_blocks[0]
@@ -2203,11 +2215,11 @@ def test_view_room_schedule_renders_true_calendar_view(monkeypatch):
                                 'professor_load_id': 101,
                                 'prof_id': 1,
                                 'course_id': 1,
-                                'course': {'course_name': 'IT101 - Intro to Computing'},
+                                'course': {'course_code': 'IT101 - Intro to Computing'},
                                 'professor': {'first_name': 'Alan', 'last_name': 'Turing'}
                             }
                         }])
-                    elif self.table_name == 'timeslot':
+                    elif self.table_name == 'working_hours':
                         return FakeResponse([{
                             'start_time': '07:00:00',
                             'end_time': '20:00:00',
@@ -2237,7 +2249,7 @@ def test_view_room_schedule_renders_true_calendar_view(monkeypatch):
 
     # Verify contiguous subject card renders once
     assert 'IT101 - Intro to Computing' in html
-    # Count occurrences of the course name inside calendar event blocks
+    # Count occurrences of the course code inside calendar event blocks
     import re
     block_matches = re.findall(r'calendar-block-occupied.*?IT101 - Intro to Computing', html, re.DOTALL)
     assert len(block_matches) == 1, f"Expected class to render in exactly 1 calendar block, found {len(block_matches)}"
@@ -2257,7 +2269,7 @@ def test_confirm_preview_resolves_synthetic_professor_load_id(monkeypatch):
                 # 999900002 is a fake/synthetic ID that does NOT exist in professor_load
                 'professor_load_id': 999900002,
                 'course_id': 2,
-                'course_name': 'IT201',
+                'course_code': 'IT201',
                 'section': '2A',
                 'prof_id': 2,
                 'room_id': 2,
@@ -2309,7 +2321,7 @@ def test_confirm_preview_nulls_unresolvable_load_id_to_prevent_fk_violation(monk
                 # Fake ID and no prof_id/course_id to resolve
                 'professor_load_id': 888888,
                 'course_id': None,
-                'course_name': 'Unknown',
+                'course_code': 'Unknown',
                 'section': '3A',
                 'prof_id': None,
                 'room_id': 2,
@@ -2393,8 +2405,8 @@ def test_generate_schedule_with_specialized_tracks_and_loads(monkeypatch):
         session['role'] = 'Scheduler'
 
     mock_courses = [
-        {'course_id': 74, 'course_name': 'IT-CAP01 (WST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'major': 'Web', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
-        {'course_id': 50, 'course_name': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'major': 'General', 'lecture_hours': 2, 'lab_hours': 2, 'ilp_hours': 1, 'program_id': 1},
+        {'course_id': 74, 'course_code': 'IT-CAP01 (WST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'major': 'Web', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
+        {'course_id': 50, 'course_code': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'major': 'General', 'lecture_hours': 2, 'lab_hours': 2, 'ilp_hours': 1, 'program_id': 1},
     ]
     mock_loads = [
         {'professor_load_id': 105, 'course_id': 74, 'prof_id': 22, 'sections': 1, 'professor': {'first_name': 'Alexander', 'last_name': 'Cochanco', 'max_hours': 25}},
@@ -2421,7 +2433,7 @@ def test_generate_schedule_with_specialized_tracks_and_loads(monkeypatch):
                         return FakeResponse(mock_profs)
                     elif self_inner.table_name == 'room':
                         return FakeResponse(mock_rooms)
-                    elif self_inner.table_name == 'timeslot':
+                    elif self_inner.table_name == 'working_hours':
                         return FakeResponse([
                             {'day': 'Monday', 'start_time': '08:00:00', 'end_time': '09:00:00', 'professor_cutoff': '17:00:00'},
                             {'day': 'Monday', 'start_time': '09:00:00', 'end_time': '10:00:00', 'professor_cutoff': '17:00:00'},
@@ -2479,7 +2491,7 @@ def test_generate_schedule_reports_unscheduled_loads(monkeypatch):
 
     mock_courses = [
         # Course with 0 hours
-        {'course_id': 999, 'course_name': 'ZERO-01', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
+        {'course_id': 999, 'course_code': 'ZERO-01', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 0, 'program_id': 1},
     ]
     mock_loads = [
         {'professor_load_id': 888, 'course_id': 999, 'prof_id': 1, 'sections': 1, 'professor': {'first_name': 'Alan', 'last_name': 'Turing', 'max_hours': 25}},
@@ -2503,7 +2515,7 @@ def test_generate_schedule_reports_unscheduled_loads(monkeypatch):
                         return FakeResponse(mock_profs)
                     elif self_inner.table_name == 'room':
                         return FakeResponse(mock_rooms)
-                    elif self_inner.table_name == 'timeslot':
+                    elif self_inner.table_name == 'working_hours':
                         return FakeResponse([
                             {'day': 'Monday', 'start_time': '08:00:00', 'end_time': '09:00:00', 'professor_cutoff': '17:00:00'},
                         ])
@@ -2534,12 +2546,6 @@ def test_generate_schedule_reports_unscheduled_loads(monkeypatch):
         assert unscheduled[0]['course'] == 'ZERO-01'
         assert unscheduled[0]['professor'] == 'Alan Turing'
         assert unscheduled[0]['placed'] == 0
-
-
-
-
-
-
 
 
 

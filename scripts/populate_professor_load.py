@@ -62,7 +62,7 @@ NEW_FACULTY_POOL = [
 
 def get_course_domain_key(course):
     """Return domain rank and name for clustering related courses."""
-    name = (course.get("course_name") or "").upper()
+    name = (course.get("course_code") or "").upper()
     major = (course.get("major") or "").upper()
     year = course.get("year_level") or 1
     sem = course.get("semester") or ""
@@ -98,7 +98,7 @@ def group_courses_by_domain(courses):
     
     # Sort courses within each domain
     for dname in domains:
-        domains[dname].sort(key=lambda x: (x.get("year_level") or 1, x.get("course_name") or ""))
+        domains[dname].sort(key=lambda x: (x.get("year_level") or 1, x.get("course_code") or ""))
     return domains
 
 
@@ -163,7 +163,7 @@ def balance_and_assign_domain_circulant(domain_courses, domain_profs, profs_per_
                 "prof_id": prof.get("prof_id"),
                 "course_id": course.get("course_id"),
                 "prof_name": f"{prof.get('first_name', '')} {prof.get('last_name', '')}".strip(),
-                "course_name": course.get("course_name"),
+                "course_code": course.get("course_code"),
                 "department": prof.get("department"),
             })
 

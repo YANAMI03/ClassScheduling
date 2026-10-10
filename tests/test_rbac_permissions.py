@@ -69,7 +69,7 @@ class FakeSupabase:
             'professor': FakeTable('professor', []),
             'course': FakeTable('course', []),
             'room': FakeTable('room', []),
-            'timeslot': FakeTable('timeslot', []),
+            'working_hours': FakeTable('working_hours', []),
             'academic_ranking': FakeTable('academic_ranking', []),
             'professor_load': FakeTable('professor_load', []),
             'schedule': FakeTable('schedule', []),
@@ -157,7 +157,7 @@ def test_admin_allowed_pages(test_client):
     _login_as(test_client, 'admin')
 
     # Allowed: Courses, Rooms, Timeslots, Schedules, Professor Schedule, Room Schedule, Archive, Users, Activity Log
-    for path in ['/courses', '/rooms', '/timeslot', '/schedules', '/professor_schedule', '/room_schedule', '/schedule_archive', '/users', '/activity_log']:
+    for path in ['/courses', '/rooms', '/working_hours', '/schedules', '/professor_schedule', '/room_schedule', '/schedule_archive', '/users', '/activity_log']:
         res = test_client.get(path)
         assert res.status_code == 200, f"Admin should have access to {path}, got {res.status_code}"
 
@@ -217,9 +217,9 @@ def test_admin_allowed_data_setup_writes(test_client):
 
     # Admin CAN write to data setup routes (should NOT be 403)
     endpoints = [
-        ('POST', '/add_course', {'course_name': 'New Course', 'units': '3'}),
+        ('POST', '/add_course', {'course_code': 'New Course', 'units': '3'}),
         ('POST', '/add_room', {'room_name': 'Room 101', 'room_type': 'Lecture Room'}),
-        ('POST', '/add_timeslot', {'day': 'Monday', 'start_time': '08:00', 'end_time': '12:00'}),
+        ('POST', '/add_working_hours', {'day': 'Monday', 'start_time': '08:00', 'end_time': '12:00'}),
     ]
     for method, path, data in endpoints:
         res = test_client.post(path, data=data)
@@ -243,7 +243,7 @@ def test_scheduler_restricted_pages_return_403(test_client):
     _login_as(test_client, 'scheduler')
 
     # Blocked: Courses, Rooms, Timeslots, Users, Activity Log
-    for path in ['/courses', '/rooms', '/timeslot', '/users', '/activity_log']:
+    for path in ['/courses', '/rooms', '/working_hours', '/users', '/activity_log']:
         res = test_client.get(path)
         assert res.status_code == 403, f"Scheduler should receive 403 on {path}, got {res.status_code}"
         soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
@@ -255,15 +255,15 @@ def test_scheduler_restricted_write_actions_return_403_json(test_client):
 
     # Blocked writes: Courses, Rooms, Timeslots, Users, Backup & Restore
     endpoints = [
-        ('POST', '/add_course', {'course_name': 'test'}),
-        ('POST', '/edit_course/1', {'course_name': 'test'}),
+        ('POST', '/add_course', {'course_code': 'test'}),
+        ('POST', '/edit_course/1', {'course_code': 'test'}),
         ('GET', '/delete_course/1', None),
         ('POST', '/add_room', {'room_name': 'test'}),
         ('POST', '/edit_room/1', {'room_name': 'test'}),
         ('GET', '/delete_room/1', None),
-        ('POST', '/add_timeslot', {'day': 'Monday'}),
-        ('POST', '/edit_timeslot/1', {}),
-        ('GET', '/delete_timeslot/1', None),
+        ('POST', '/add_working_hours', {'day': 'Monday'}),
+        ('POST', '/edit_working_hours/1', {}),
+        ('GET', '/delete_working_hours/1', None),
         ('POST', '/create_user', {'username': 'newuser'}),
         ('POST', '/edit_user/some-id', {'username': 'newuser'}),
         ('POST', '/delete_user/some-id', {}),
@@ -306,7 +306,7 @@ def test_viewer_permissions(test_client):
         assert res.status_code == 200, f"Viewer should have access to {path}, got {res.status_code}"
 
     # Blocked: Schedule Archive (403), Users, Activity Log, Courses, Rooms, Timeslots, Professor Load, Generate Schedule
-    blocked = ['/schedule_archive', '/users', '/activity_log', '/courses', '/rooms', '/timeslot', '/professor_load', '/']
+    blocked = ['/schedule_archive', '/users', '/activity_log', '/courses', '/rooms', '/working_hours', '/professor_load', '/']
     for path in blocked:
         res = test_client.get(path)
         assert res.status_code == 403, f"Viewer should receive 403 on {path}, got {res.status_code}"
@@ -325,7 +325,7 @@ def test_admin_sidebar_visibility(test_client):
     # Admin should see Courses, Rooms, Timeslots, Users, Activity Log, Schedules Dropdown
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is not None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/rooms') is not None
-    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/timeslot') is not None
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/working_hours') is not None
     assert soup.find('a', href=lambda h: h and '/users' in h) is not None
     assert soup.find('a', href=lambda h: h and '/activity_log' in h) is not None
     assert soup.find('a', href=lambda h: h and '/schedule_archive' in h) is not None
@@ -353,7 +353,7 @@ def test_scheduler_sidebar_visibility(test_client):
     # Scheduler should NOT see Courses, Rooms, Timeslots, Users, Activity Log
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/rooms') is None
-    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/timeslot') is None
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/working_hours') is None
     assert soup.find('a', href=lambda h: h and '/users' in h) is None
     assert soup.find('a', href=lambda h: h and '/activity_log' in h) is None
 
@@ -373,7 +373,7 @@ def test_viewer_sidebar_visibility(test_client):
     assert soup.find('a', href=lambda h: h and '/schedule_archive' in h) is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/courses') is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/rooms') is None
-    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/timeslot') is None
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/working_hours') is None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professor_load') is None
     assert soup.find('a', href=lambda h: h and '/users' in h) is None
     assert soup.find('a', href=lambda h: h and '/activity_log' in h) is None
@@ -447,4 +447,3 @@ def test_post_login_landing_pages():
     assert _normalize_role('admin') in ('admin', 'viewer')
     assert _normalize_role('viewer') in ('admin', 'viewer')
     assert _normalize_role('scheduler') == 'scheduler'
-

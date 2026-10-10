@@ -5,6 +5,7 @@ class FakeTable:
     def __init__(self):
         self.inserted = []
         self.updated = []
+        self.filters = {}
 
     def select(self, *args, **kwargs):
         return self
@@ -18,6 +19,8 @@ class FakeTable:
         return self
 
     def eq(self, *args, **kwargs):
+        if len(args) >= 2:
+            self.filters[args[0]] = args[1]
         return self
 
     def order(self, *args, **kwargs):
@@ -27,11 +30,17 @@ class FakeTable:
         return self
 
     def execute(self):
+        filters = self.filters
+        self.filters = {}
+
         class Response:
             data = [
-                {'course_id': 1, 'course_name': 'CC-100', 'lecture_hours': 3, 'lab_hours': 2, 'ilp_hours': 1, 'program': 'BSIT', 'year_level': '1', 'major': 'General', 'semester': '1st Semester'},
+                {'course_id': 1, 'course_code': 'CC-100', 'lecture_hours': 3, 'lab_hours': 2, 'ilp_hours': 1, 'program': 'BSIT', 'year_level': '1', 'major': 'General', 'semester': '1st Semester'},
             ]
-        return Response()
+        response = Response()
+        if 'program_id' in filters:
+            response.data = []
+        return response
 
 
 class FakeSupabase:
@@ -63,7 +72,7 @@ def test_add_course_inserts_semester(monkeypatch):
     client, fake_supabase = _build_client(monkeypatch)
 
     response = client.post('/add_course', data={
-        'course_name': 'CC-100',
+        'course_code': 'CC-100',
         'units': '3',
         'lecture_hours': '3',
         'lab_hours': '2',
@@ -78,14 +87,14 @@ def test_add_course_inserts_semester(monkeypatch):
     assert response.headers['Location'].endswith('/courses')
     assert len(fake_supabase.table_obj.inserted) > 0
     assert fake_supabase.table_obj.inserted[0]['semester'] == '1st Semester'
-    assert fake_supabase.table_obj.inserted[0]['course_name'] == 'CC-100'
+    assert fake_supabase.table_obj.inserted[0]['course_code'] == 'CC-100'
 
 
 def test_edit_course_updates_semester(monkeypatch):
     client, fake_supabase = _build_client(monkeypatch)
 
     response = client.post('/edit_course/7', data={
-        'course_name': 'CC-100',
+        'course_code': 'CC-100',
         'units': '4',
         'lecture_hours': '3',
         'lab_hours': '2',
@@ -100,14 +109,14 @@ def test_edit_course_updates_semester(monkeypatch):
     assert response.headers['Location'].endswith('/courses')
     assert len(fake_supabase.table_obj.updated) > 0
     assert fake_supabase.table_obj.updated[0]['semester'] == '2nd Semester'
-    assert fake_supabase.table_obj.updated[0]['course_name'] == 'CC-100'
+    assert fake_supabase.table_obj.updated[0]['course_code'] == 'CC-100'
 
 
 def test_add_course_requires_semester(monkeypatch):
     client, _ = _build_client(monkeypatch)
 
     response = client.post('/add_course', data={
-        'course_name': 'CC-100',
+        'course_code': 'CC-100',
         'units': '3',
         'lecture_hours': '3',
         'lab_hours': '2',

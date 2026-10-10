@@ -141,11 +141,11 @@ def _seconds_to_display_time(seconds):
     return f"{hour_12:02d}:{minutes:02d} {suffix}"
 
 
-def _split_course_code_name(course_name):
+def _split_course_code_name(course_code):
     """Split course string into code and title, e.g. 'IT101 - Intro to Computing' -> ('IT101', 'Intro to Computing')."""
-    if not course_name:
+    if not course_code:
         return 'TBA', ''
-    c_str = str(course_name).strip()
+    c_str = str(course_code).strip()
     if ' - ' in c_str:
         parts = c_str.split(' - ', 1)
         return parts[0].strip(), parts[1].strip()
@@ -251,7 +251,7 @@ def _cell_text(entry, mode='room'):
     Line 2: Professor name (section export) / Section (professor export)
     Line 3: Room name (or Section if room TBA)
     """
-    c_raw = _safe_str(entry.get('course_code') or entry.get('course_name') or entry.get('course'))
+    c_raw = _safe_str(entry.get('course_code') or entry.get('course'))
     code, _ = _split_course_code_name(c_raw)
     course_code = code if code else (c_raw or 'TBA')
 
@@ -797,10 +797,10 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
         name = None
         title = None
         for e in entries:
-            if e.get('prepared_by_name'):
-                name = e.get('prepared_by_name')
-            if e.get('prepared_by_title'):
-                title = e.get('prepared_by_title')
+            if e.get('preparer_name'):
+                name = e.get('preparer_name')
+            if e.get('preparer_title'):
+                title = e.get('preparer_title')
             if name or title:
                 break
         
@@ -837,10 +837,10 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
             p_name = None
             p_title = None
             for e in p_entries:
-                if e.get('prepared_by_name'):
-                    p_name = e.get('prepared_by_name')
-                if e.get('prepared_by_title'):
-                    p_title = e.get('prepared_by_title')
+                if e.get('preparer_name'):
+                    p_name = e.get('preparer_name')
+                if e.get('preparer_title'):
+                    p_title = e.get('preparer_title')
                 if p_name or p_title:
                     break
             
@@ -860,7 +860,7 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
 # Public Unified Timetable PDF Generator
 # ---------------------------------------------------------------------------
 
-def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, filter_metadata=None):
+def generate_timetable_pdf(schedule_type, entity_info, entries, working_hours=None, filter_metadata=None):
     """
     Generate an official NEUST timetable PDF adhering to the official HEADER_FOOTER format.
     Fits strictly on ONE portrait page (Philippine Folio 8.5" x 13" = 612 x 936 pt).
@@ -869,7 +869,7 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
         schedule_type: 'professor', 'teacher', 'section', or 'room'
         entity_info: dict or obj with name, type, etc.
         entries: list of schedule entry dictionaries
-        timeslots: optional list of timeslot records from database
+        working_hours: optional list of working-hours records from database
         filter_metadata: optional dict containing filter parameters (semester, school_year, year, major, etc.)
 
     Returns:
@@ -877,7 +877,7 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
     """
     filter_metadata = filter_metadata or {}
     entries = entries or []
-    timeslots = timeslots or []
+    working_hours = working_hours or []
 
     norm_type = 'professor' if schedule_type in ('professor', 'teacher') else ('section' if schedule_type == 'section' else 'room')
 
@@ -992,4 +992,3 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, timeslots=None, 
     c.save()
     buf.seek(0)
     return buf
-

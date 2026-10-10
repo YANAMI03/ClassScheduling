@@ -17,8 +17,8 @@ for item in canon:
 
 app._CACHED_BASELINE_LOAD_ORDER = canonical_order_map
 
-# 2. Patch timeslots fallback to the exact canonical system configuration
-canonical_timeslots = [
+# 2. Patch working_hours fallback to the exact canonical system configuration
+canonical_working_hours = [
     {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '16:00:00'},
     {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
     {'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
@@ -27,7 +27,7 @@ canonical_timeslots = [
 ]
 
 orig_bcs = app._build_candidate_slots
-app._build_candidate_slots = lambda ts: orig_bcs(canonical_timeslots)
+app._build_candidate_slots = lambda ts: orig_bcs(canonical_working_hours)
 
 client = app.app.test_client()
 with client.session_transaction() as sess:

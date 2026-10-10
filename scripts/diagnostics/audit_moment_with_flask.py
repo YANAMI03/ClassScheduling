@@ -41,7 +41,7 @@ print("="*80)
 s3c = [e for e in preview if e['section'] == '3C-Networking']
 s3c.sort(key=lambda e: (e['day'], e['start']))
 for e in s3c:
-    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_name']:<15} | Prof: {e['professor_name']:<25} | Room: {e['room_name']}")
+    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_code']:<15} | Prof: {e['professor_name']:<25} | Room: {e['room_name']}")
 
 # 2. Print all scheduled classes for Section 3F-Networking
 print("\n" + "="*80)
@@ -50,7 +50,7 @@ print("="*80)
 s3f = [e for e in preview if e['section'] == '3F-Networking']
 s3f.sort(key=lambda e: (e['day'], e['start']))
 for e in s3f:
-    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_name']:<15} | Prof: {e['professor_name']:<25} | Room: {e['room_name']}")
+    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_code']:<15} | Prof: {e['professor_name']:<25} | Room: {e['room_name']}")
 
 # 3. Print schedule of Prof Tambio
 print("\n" + "="*80)
@@ -59,7 +59,7 @@ print("="*80)
 pt = [e for e in preview if e.get('prof_id') == 19]
 pt.sort(key=lambda e: (e['day'], e['start']))
 for e in pt:
-    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_name']:<15} | Sec: {e['section']:<15} | Room: {e['room_name']}")
+    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_code']:<15} | Sec: {e['section']:<15} | Room: {e['room_name']}")
 
 # 4. Print schedule of Prof Ronald Santos
 print("\n" + "="*80)
@@ -68,7 +68,7 @@ print("="*80)
 ps = [e for e in preview if e.get('prof_id') == 34]
 ps.sort(key=lambda e: (e['day'], e['start']))
 for e in ps:
-    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_name']:<15} | Sec: {e['section']:<15} | Room: {e['room_name']}")
+    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_code']:<15} | Sec: {e['section']:<15} | Room: {e['room_name']}")
 
 # 5. Print schedule of Prof Jev Corpuz
 print("\n" + "="*80)
@@ -77,4 +77,4 @@ print("="*80)
 pj = [e for e in preview if e.get('prof_id') == 35]
 pj.sort(key=lambda e: (e['day'], e['start']))
 for e in pj:
-    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_name']:<15} | Sec: {e['section']:<15} | Room: {e['room_name']}")
+    print(f"  {e['day']:<10} | {e['start']} - {e['end']} | {e['session_type']:<10} | {e['course_code']:<15} | Sec: {e['section']:<15} | Room: {e['room_name']}")

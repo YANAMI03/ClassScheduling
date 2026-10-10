@@ -176,11 +176,11 @@ The system is designed to assist academic schedulers in generating, managing, an
 
 ---
 
-## 4.7 Time Slot System
+## 4.7 Working Hours
 
 * Schedule range: **7:00 AM – 8:00 PM**
 
-### Timeslot Fields:
+### Working Hours Fields:
 
 * start_day
 * end_day

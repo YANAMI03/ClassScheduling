@@ -26,7 +26,7 @@ def run_instrumented_generation():
 
     calc_result = app.calculate_semester_section_counts(program_id=user_prog_id, semester=standard_semester, department=department)
     query = app.supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester).eq('program_id', user_prog_id)
-    all_courses = query.order('year_level').order('course_name').execute().data or []
+    all_courses = query.order('year_level').order('course_code').execute().data or []
     for c in all_courses:
         p_rel = app._rel(c, 'program') or {}
         c['program_name'] = p_rel.get('program_name') or program or ''
@@ -44,7 +44,7 @@ def run_instrumented_generation():
         seen_cids = set()
         deduped = []
         for c in courses_by_year[yl]:
-            cid = c.get('course_id') or c.get('course_name')
+            cid = c.get('course_id') or c.get('course_code')
             if cid not in seen_cids:
                 seen_cids.add(cid)
                 deduped.append(c)
@@ -98,12 +98,12 @@ def run_instrumented_generation():
     lecture_rooms = [r for r in all_rooms if app._is_lecture_room_type(r.get('room_type'))]
     lab_rooms = [r for r in all_rooms if app._is_lab_room_type(r.get('room_type'))]
 
-    timeslots = (app.supabase.table('timeslot').select('*').execute().data) or []
-    timeslots.sort(key=lambda t: str(t.get('start_time') or ''))
-    candidate_slots = app._build_candidate_slots(timeslots)
+    working_hours = (app.supabase.table('working_hours').select('*').execute().data) or []
+    working_hours.sort(key=lambda t: str(t.get('start_time') or ''))
+    candidate_slots = app._build_candidate_slots(working_hours)
 
     _day_cutoff_map = {}
-    for _ts in timeslots:
+    for _ts in working_hours:
         _d = (_ts.get('day') or '').strip()
         _cutoff = _ts.get('professor_cutoff')
         if _d and _cutoff and _d not in _day_cutoff_map:
@@ -286,7 +286,7 @@ def run_instrumented_generation():
                     prof_full_name = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip()
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
-                        'course_id': course_id, 'course_name': course.get('course_name'),
+                        'course_id': course_id, 'course_code': course.get('course_code'),
                         'prof_id': pk, 'professor_name': prof_full_name,
                         'section': section_name, 'room_id': rk, 'room_name': room_name,
                         'day': day, 'start': block_start, 'end': block_end,
@@ -310,7 +310,7 @@ def run_instrumented_generation():
 
         # FAILED! Audit at this exact moment
         rc, vs, dt = audit_rejections_at_moment(session_type, duration, course, assigned_prof, section_name, sec_key)
-        target_failures[f"{assigned_prof.get('first_name')} {assigned_prof.get('last_name')} | {course.get('course_name')} | {section_name} | {session_type}"] = {
+        target_failures[f"{assigned_prof.get('first_name')} {assigned_prof.get('last_name')} | {course.get('course_code')} | {section_name} | {session_type}"] = {
             'rejection_counts': rc, 'valid_slots': vs, 'prof_hours': professor_hours.get(pk, 0.0),
             'sec_classes': copy.deepcopy(section_bookings[sec_key]),
             'prof_classes': copy.deepcopy(professor_bookings.get(pk, []))
@@ -381,7 +381,7 @@ def run_instrumented_generation():
                     lab_rk = assigned_lab_room['room_id']
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
-                        'course_id': course_id, 'course_name': course.get('course_name'),
+                        'course_id': course_id, 'course_code': course.get('course_code'),
                         'prof_id': pk, 'professor_name': prof_name, 'section': section_name,
                         'room_id': lec_rk, 'room_name': assigned_lec_room.get('room_name'),
                         'day': day, 'start': lec_start, 'end': lec_end, 'session_type': 'Lecture',
@@ -396,7 +396,7 @@ def run_instrumented_generation():
 
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
-                        'course_id': course_id, 'course_name': course.get('course_name'),
+                        'course_id': course_id, 'course_code': course.get('course_code'),
                         'prof_id': pk, 'professor_name': prof_name, 'section': section_name,
                         'room_id': lab_rk, 'room_name': assigned_lab_room.get('room_name'),
                         'day': day, 'start': lab_start, 'end': lab_end, 'session_type': 'Laboratory',

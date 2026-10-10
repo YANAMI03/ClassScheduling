@@ -222,11 +222,11 @@ def _seconds_to_display_time(seconds):
     return f"{hour_12:02d}:{minutes:02d} {suffix}"
 
 
-def _split_course_code_name(course_name):
+def _split_course_code_name(course_code):
     """Split course string into code and title, e.g. 'IT101 - Intro to Computing' -> ('IT101', 'Intro to Computing')."""
-    if not course_name:
+    if not course_code:
         return 'TBA', ''
-    c_str = str(course_name).strip()
+    c_str = str(course_code).strip()
     if ' - ' in c_str:
         parts = c_str.split(' - ', 1)
         return parts[0].strip(), parts[1].strip()
@@ -236,14 +236,14 @@ def _split_course_code_name(course_name):
     return c_str, ''
 
 
-def generate_timetable_excel(schedule_type, entity_info, entries, timeslots=None, filter_metadata=None, theme='Blue'):
+def generate_timetable_excel(schedule_type, entity_info, entries, working_hours=None, filter_metadata=None, theme='Blue'):
     """Generate a high-quality, vertically stretched Microsoft Excel (.xlsx) timetable workbook.
 
     Args:
         schedule_type: 'room', 'section', or 'professor'
         entity_info: dict or obj with name, type, department, etc.
         entries: list of schedule entry dictionaries
-        timeslots: optional list of timeslot records from database
+        working_hours: optional list of working-hours records from database
         filter_metadata: optional dict containing active filter parameters (semester, year, major, etc.)
         theme: optional theme name ('Blue', 'Red', 'Green', 'Purple', 'Orange', 'Teal', 'Pink')
 
@@ -251,7 +251,7 @@ def generate_timetable_excel(schedule_type, entity_info, entries, timeslots=None
         io.BytesIO: Binary Excel (.xlsx) stream
     """
     filter_metadata = filter_metadata or {}
-    timeslots = timeslots or []
+    working_hours = working_hours or []
     entries = entries or []
 
     # Resolve Theme Palette
@@ -403,7 +403,7 @@ def generate_timetable_excel(schedule_type, entity_info, entries, timeslots=None
     latest_sec = 19 * 3600    # 7:00 PM
     lunch_sec = 12 * 3600     # 12:00 PM
 
-    for ts in timeslots:
+    for ts in working_hours:
         s_val = _parse_time_to_seconds(ts.get('start_time'))
         e_val = _parse_time_to_seconds(ts.get('end_time'))
         l_val = _parse_time_to_seconds(ts.get('lunch_time'))
@@ -424,16 +424,16 @@ def generate_timetable_excel(schedule_type, entity_info, entries, timeslots=None
         if st_sec is not None and et_sec is not None and et_sec > st_sec:
             earliest_sec = min(earliest_sec, st_sec)
             latest_sec = max(latest_sec, et_sec)
-            c_code, c_title = _split_course_code_name(e.get('course_name'))
+            c_code, c_title = _split_course_code_name(e.get('course_code'))
             parsed_entries.append({
                 'day': (e.get('day') or '').strip().title(),
                 'start_sec': st_sec,
                 'end_sec': et_sec,
                 'start_fmt': _seconds_to_display_time(st_sec),
                 'end_fmt': _seconds_to_display_time(et_sec),
-                'course_code': e.get('course_code') or c_code,
-                'course_name': c_title or (c_code if not c_title else ''),
-                'raw_course': e.get('course_name') or 'TBA',
+                'course_code': c_code,
+                'course_title': c_title,
+                'raw_course': e.get('course_code') or 'TBA',
                 'professor': e.get('professor') or e.get('professor_name') or 'TBA',
                 'room': e.get('room') or e.get('room_name') or 'TBA',
                 'section': e.get('section') or 'TBA',
@@ -560,7 +560,7 @@ def generate_timetable_excel(schedule_type, entity_info, entries, timeslots=None
 
                 card_texts = []
                 for m in matches:
-                    c_title_part = f" - {m['course_name']}" if m['course_name'] else ""
+                    c_title_part = f" - {m['course_title']}" if m['course_title'] else ""
                     line1 = f"{m['course_code']}{c_title_part}"
 
                     if schedule_type == 'room':

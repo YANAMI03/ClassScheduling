@@ -178,8 +178,6 @@ def test_bsit_scheduler_archives_without_a_request(monkeypatch, test_setup):
                 'archived_at': None,
                 'archive_batch_id': None,
                 'prepared_by_user_id': 'user-111',
-                'prepared_by_name': 'Prof John',
-                'prepared_by_title': 'Chairperson',
             }
         ],
         'schedule_with_semester': [
@@ -215,10 +213,8 @@ def test_bsit_scheduler_archives_without_a_request(monkeypatch, test_setup):
     assert row['archive'] is True
     assert row['archived_at'] is not None
     assert row['archive_batch_id'] is not None
-    # Prepared by fields must remain unchanged
+    # The preparer user link must remain unchanged
     assert row['prepared_by_user_id'] == 'user-111'
-    assert row['prepared_by_name'] == 'Prof John'
-    assert row['prepared_by_title'] == 'Chairperson'
 
     # Activity log recorded
     assert any(

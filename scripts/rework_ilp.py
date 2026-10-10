@@ -60,7 +60,7 @@ new_func = """        def _schedule_ilp_session(course, section_name, yr, sec_ma
                 preview_entries.append({
                     'professor_load_id': assigned_load_id,
                     'course_id': course_id,
-                    'course_name': course.get('course_name'),
+                    'course_code': course.get('course_code'),
                     'prof_id': pk,
                     'professor_name': prof_name,
                     'section': section_name,
@@ -118,7 +118,7 @@ new_func = """        def _schedule_ilp_session(course, section_name, yr, sec_ma
             
             prof_name_fallback = primary_profs[0].get('last_name', 'X') if primary_profs else 'X'
             generation_warnings.append(
-                f"ILP for {course.get('course_name')} could not be placed for Professor {prof_name_fallback} and was set to TBA"
+                f"ILP for {course.get('course_code')} could not be placed for Professor {prof_name_fallback} and was set to TBA"
             )
             return _commit_ilp_entry(default_day, default_slot, None)"""
 

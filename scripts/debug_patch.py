@@ -6,7 +6,7 @@ with open('app.py', 'r', encoding='utf-8') as f:
 for i, l in enumerate(lines):
     if 'cand_profs = [' in l:
         lines.insert(i, '''
-                        print(f"DEBUG CHECKING PROFS FOR {course['course_name']} {session_type} on {day} {block_start}-{block_end} PASS {p_config['strict_rules']}")
+                        print(f"DEBUG CHECKING PROFS FOR {course['course_code']} {session_type} on {day} {block_start}-{block_end} PASS {p_config['strict_rules']}")
                         for p in prof_pool:
                             print(f"  Prof {p.get('last_name')}:")
                             print(f"    max_hours check: {professor_hours.get(p['prof_id'], 0.0) + duration} <= {p.get('max_hours', 40)}")

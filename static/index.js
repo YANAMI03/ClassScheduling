@@ -374,7 +374,7 @@
                 '<div class="form-check">' +
                 '<input class="form-check-input" type="checkbox" name="course_ids" value="' + course.course_id + '" id="course_' + course.course_id + '" checked>' +
                 '<label class="form-check-label" for="course_' + course.course_id + '">' +
-                (course.course_name || "Untitled Course") +
+                (course.course_code || "Untitled Course") +
                 (course.program ? '<small class="text-muted d-block">' + course.program + "</small>" : "") +
                 "</label>" +
                 "</div>";
@@ -714,7 +714,7 @@
             if (msgLower.includes("course")) title = "Delete Course";
             else if (msgLower.includes("professor")) title = "Delete Professor";
             else if (msgLower.includes("room")) title = "Delete Room";
-            else if (msgLower.includes("timeslot") || msgLower.includes("operating day")) title = "Delete Timeslot";
+            else if (msgLower.includes("working hours") || msgLower.includes("operating day")) title = "Remove Working Hours";
             else if (msgLower.includes("schedule")) title = "Delete Schedule";
             else if (msgLower.includes("user")) title = "Delete User";
             else if (msgLower.includes("program")) title = "Delete Program";

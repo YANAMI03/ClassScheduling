@@ -36,7 +36,7 @@ def process_file():
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
                         'course_id': course_id,
-                        'course_name': course.get('course_name'),
+                        'course_code': course.get('course_code'),
                         'prof_id': pk,
                         'professor_name': prof_name,
                         'section': section_name,
@@ -62,7 +62,7 @@ def process_file():
                     total_sessions_scheduled += 1
                     
                     generation_warnings.append(
-                        f"{session_type} for {course.get('course_name')} could not be placed for Professor {primary_profs[0].get('last_name', 'X') if primary_profs else 'X'} and was set to TBA"
+                        f"{session_type} for {course.get('course_code')} could not be placed for Professor {primary_profs[0].get('last_name', 'X') if primary_profs else 'X'} and was set to TBA"
                     )
                     return True
 
@@ -106,7 +106,7 @@ def process_file():
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
                         'course_id': course_id,
-                        'course_name': course.get('course_name'),
+                        'course_code': course.get('course_code'),
                         'prof_id': pk,
                         'professor_name': prof_name,
                         'section': section_name,
@@ -124,7 +124,7 @@ def process_file():
                     preview_entries.append({
                         'professor_load_id': assigned_professor_load_id,
                         'course_id': course_id,
-                        'course_name': course.get('course_name'),
+                        'course_code': course.get('course_code'),
                         'prof_id': pk,
                         'professor_name': prof_name,
                         'section': section_name,
@@ -154,7 +154,7 @@ def process_file():
                     total_sessions_scheduled += 2
                     
                     generation_warnings.append(
-                        f"Lecture/Lab for {course.get('course_name')} could not be placed for Professor {primary_profs[0].get('last_name', 'X') if primary_profs else 'X'} and was set to TBA"
+                        f"Lecture/Lab for {course.get('course_code')} could not be placed for Professor {primary_profs[0].get('last_name', 'X') if primary_profs else 'X'} and was set to TBA"
                     )
                     return True
 

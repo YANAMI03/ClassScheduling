@@ -42,13 +42,17 @@ def test_section_pdf_confirmed_by_scheduler_exported_by_admin(monkeypatch):
             'program': {'id': 1, 'program_name': 'BSIT'},
             'professor_load_id': 1,
             'prepared_by_user_id': '077438bb-a507-4c8b-a947-e1a08a7092e4',
-            'prepared_by_name': 'MICKO LA MADRID',
-            'prepared_by_title': 'Program Scheduler - BSIT',
+            'preparer': {
+                'first_name': 'Micko',
+                'last_name': 'La Madrid',
+                'role': 'Scheduler',
+                'program_id': 1,
+            },
             'professor_load': {
                 'id': 1,
                 'prof_id': 1,
                 'course_id': 1,
-                'course': {'course_id': 1, 'course_name': 'IT101 - Intro to Computing'},
+                'course': {'course_id': 1, 'course_code': 'IT101 - Intro to Computing'},
                 'professor': {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}
             },
             'room': {'room_name': 'Lab 1'}
@@ -65,7 +69,7 @@ def test_section_pdf_confirmed_by_scheduler_exported_by_admin(monkeypatch):
         def execute(self):
             if self.table == 'schedule':
                 return type('Resp', (), {'data': sched_rows})()
-            if self.table == 'timeslot':
+            if self.table == 'working_hours':
                 return type('Resp', (), {'data': []})()
             return type('Resp', (), {'data': []})()
 
@@ -102,21 +106,21 @@ def test_room_pdf_multiple_programs_shows_two_blocks():
             'day': 'Monday',
             'start_time_raw': '08:00:00',
             'end_time_raw': '10:00:00',
-            'course_name': 'IT101 - Intro to Computing',
+            'course_code': 'IT101 - Intro to Computing',
             'section': 'BSIT 1A',
             'program': 'BSIT',
-            'prepared_by_name': 'MICKO LA MADRID',
-            'prepared_by_title': 'Program Scheduler - BSIT',
+            'preparer_name': 'MICKO LA MADRID',
+            'preparer_title': 'Program Scheduler - BSIT',
         },
         {
             'day': 'Monday',
             'start_time_raw': '10:00:00',
             'end_time_raw': '12:00:00',
-            'course_name': 'DS101 - Intro to Data Science',
+            'course_code': 'DS101 - Intro to Data Science',
             'section': 'BSDS 1A',
             'program': 'BSDS',
-            'prepared_by_name': 'BSDS USER',
-            'prepared_by_title': 'Program Scheduler - BSDS',
+            'preparer_name': 'BSDS USER',
+            'preparer_title': 'Program Scheduler - BSDS',
         }
     ]
 
@@ -155,12 +159,12 @@ def test_archived_schedule_keeps_original_preparer():
             'day': 'Tuesday',
             'start_time_raw': '09:00:00',
             'end_time_raw': '11:00:00',
-            'course_name': 'IT201 - OOP',
+            'course_code': 'IT201 - OOP',
             'section': 'BSIT 2A',
             'program': 'BSIT',
             'archive': True,
-            'prepared_by_name': 'OLD SCHEDULER NAME',
-            'prepared_by_title': 'Program Scheduler - BSIT',
+            'preparer_name': 'OLD SCHEDULER NAME',
+            'preparer_title': 'Program Scheduler - BSIT',
         }
     ]
 
@@ -174,53 +178,25 @@ def test_archived_schedule_keeps_original_preparer():
 # ---------------------------------------------------------------------------
 # Test Case 4: Old schedule with NULL fields shows the fallback
 # ---------------------------------------------------------------------------
-def test_old_schedule_null_fields_fallback_single_scheduler(monkeypatch):
+def test_preparer_display_uses_linked_user_fields():
     """
-    Requirement: If prepared_by fields are NULL (old data), if the program has exactly
-    one scheduler user, use that person.
+    A linked user supplies the current name and role used to render the signature.
     """
-    # Mock users table with exactly one scheduler for BSIT (program_id = 1)
-    mock_users = [
-        {'id': 'u1', 'first_name': 'Sole', 'last_name': 'Scheduler', 'role': 'Scheduler', 'program_id': 1},
-        {'id': 'u2', 'first_name': 'Admin', 'last_name': 'Person', 'role': 'admin', 'program_id': None},
-    ]
-
-    class MockQuery:
-        def select(self, *args, **kwargs):
-            return self
-        def execute(self):
-            return type('Resp', (), {'data': mock_users})()
-
-    monkeypatch.setattr(app_module.supabase, 'table', lambda tbl: MockQuery())
-
-    name, title = app_module._resolve_program_scheduler_fallback('BSIT')
+    name, title = app_module._preparer_display_details(
+        {'first_name': 'Sole', 'last_name': 'Scheduler', 'role': 'Scheduler', 'program_id': 1},
+        'BSIT'
+    )
     assert name == 'SOLE SCHEDULER'
     assert title == 'Program Scheduler - BSIT'
 
 
-def test_old_schedule_null_fields_fallback_multiple_or_zero_schedulers(monkeypatch):
+def test_missing_preparer_user_is_not_guessed():
     """
-    Requirement: If prepared_by fields are NULL and the program does NOT have exactly
-    one scheduler (e.g. 0 or 2), print the blank signature line with only the title
-    "Program Scheduler - <Program>", with no made-up name.
+    When the referenced user no longer exists, do not attribute the schedule to another account.
     """
-    # Mock users table with 2 schedulers for BSIT
-    mock_users = [
-        {'id': 'u1', 'first_name': 'Alice', 'last_name': 'One', 'role': 'Scheduler', 'program_id': 1},
-        {'id': 'u2', 'first_name': 'Bob', 'last_name': 'Two', 'role': 'Scheduler', 'program_id': 1},
-    ]
-
-    class MockQuery:
-        def select(self, *args, **kwargs):
-            return self
-        def execute(self):
-            return type('Resp', (), {'data': mock_users})()
-
-    monkeypatch.setattr(app_module.supabase, 'table', lambda tbl: MockQuery())
-
-    name, title = app_module._resolve_program_scheduler_fallback('BSIT')
-    assert name is None
-    assert title == 'Program Scheduler - BSIT'
+    name, title = app_module._preparer_display_details(None, 'BSIT')
+    assert name == 'Preparer account unavailable'
+    assert title == 'Role/title unavailable'
 
     # Export PDF with NULL name
     entries = [
@@ -228,17 +204,17 @@ def test_old_schedule_null_fields_fallback_multiple_or_zero_schedulers(monkeypat
             'day': 'Wednesday',
             'start_time_raw': '08:00:00',
             'end_time_raw': '10:00:00',
-            'course_name': 'IT102 - Discrete Math',
+            'course_code': 'IT102 - Discrete Math',
             'section': 'BSIT 1B',
             'program': 'BSIT',
-            'prepared_by_name': None,
-            'prepared_by_title': 'Program Scheduler - BSIT',
+            'preparer_name': name,
+            'preparer_title': title,
         }
     ]
     buf = pdf_export.generate_timetable_pdf('section', {'section_name': 'BSIT 1B'}, entries)
     data = buf.getvalue()
     assert data.startswith(b'%PDF-')
-    assert b'Program Scheduler - BSIT' in data
+    assert b'Role/title unavailable' in data
     # No made-up name should appear
     assert b'ANDREW CAEZAR' not in data
     assert b'Alice One' not in data
@@ -259,11 +235,11 @@ def test_long_name_and_title_does_not_overflow():
             'day': 'Thursday',
             'start_time_raw': '13:00:00',
             'end_time_raw': '16:00:00',
-            'course_name': 'IT401 - Capstone',
+            'course_code': 'IT401 - Capstone',
             'section': 'BSIT 4A',
             'program': 'BSIT',
-            'prepared_by_name': long_name,
-            'prepared_by_title': long_title,
+            'preparer_name': long_name,
+            'preparer_title': long_title,
         }
     ]
 
@@ -304,10 +280,7 @@ def test_safekeeptogether_wraps_signature_area():
 # Test Case 7: Migration SQL file integrity and idempotency
 # ---------------------------------------------------------------------------
 def test_migration_file_integrity():
-    """
-    Requirement: Idempotent migration with BEGIN/COMMIT, snapshot fields,
-    confirm_schedule_transaction RPC update, best-effort backfill, and reload schema.
-    """
+    """The historical migration added the fields; the new migration removes them safely."""
     migration_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
         'migrations',
@@ -330,3 +303,19 @@ def test_migration_file_integrity():
     assert 'p_prepared_by_name' in sql
     assert 'p_prepared_by_title' in sql
     assert 'NOTIFY pgrst, \'reload schema\';' in sql
+
+    removal_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        'supabase',
+        'migrations',
+        '20261010052106_remove_prepared_by_snapshot_columns.sql'
+    )
+    assert os.path.exists(removal_path), "Removal migration must exist"
+    with open(removal_path, 'r', encoding='utf-8') as f:
+        removal_sql = f.read()
+
+    assert 'DROP COLUMN IF EXISTS prepared_by_name' in removal_sql
+    assert 'DROP COLUMN IF EXISTS prepared_by_title' in removal_sql
+    assert 'LEFT JOIN public.users u ON u.id = sc.prepared_by_user_id' in removal_sql
+    assert 'sc.prepared_by_name' not in removal_sql
+    assert 'sc.prepared_by_title' not in removal_sql

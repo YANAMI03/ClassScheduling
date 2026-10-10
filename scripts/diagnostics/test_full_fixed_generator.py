@@ -19,7 +19,7 @@ program = 'BSIT'
 
 calc_result = app.calculate_semester_section_counts(program_id=user_prog_id, semester=standard_semester)
 query = app.supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester).eq('program_id', user_prog_id)
-all_courses = query.order('year_level').order('course_name').execute().data or []
+all_courses = query.order('year_level').order('course_code').execute().data or []
 for c in all_courses:
     p_rel = app._rel(c, 'program') or {}
     c['program_name'] = p_rel.get('program_name') or program or ''
@@ -110,13 +110,13 @@ lecture_rooms = [r for r in all_rooms if app._is_lecture_room_type(r.get('room_t
 lab_rooms = [r for r in all_rooms if app._is_lab_room_type(r.get('room_type'))]
 
 try:
-    timeslots = (app.supabase.table('timeslot').select('*').execute().data) or []
+    working_hours = (app.supabase.table('working_hours').select('*').execute().data) or []
 except Exception:
-    timeslots = []
+    working_hours = []
 
-if not timeslots:
+if not working_hours:
     for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']:
-        timeslots.append({
+        working_hours.append({
             'day': d,
             'start_time': '07:00:00',
             'end_time': '19:00:00',
@@ -124,11 +124,11 @@ if not timeslots:
             'professor_cutoff': '17:00:00' if d != 'Monday' else '16:00:00'
         })
 
-timeslots.sort(key=lambda t: str(t.get('start_time') or ''))
-candidate_slots = app._build_candidate_slots(timeslots)
+working_hours.sort(key=lambda t: str(t.get('start_time') or ''))
+candidate_slots = app._build_candidate_slots(working_hours)
 
 _day_cutoff_map = {}
-for _ts in timeslots:
+for _ts in working_hours:
     _d = (_ts.get('day') or '').strip()
     _cutoff = _ts.get('professor_cutoff')
     if _d and _cutoff and _d not in _day_cutoff_map:
@@ -414,7 +414,7 @@ def run_simulation(use_fixed_affinity=True):
             sec_disp = ", ".join(sorted(set(assigned_secs))) if assigned_secs else "Unassigned (No matching section)"
             unscheduled.append({
                 'professor': get_professor_name(pl_row),
-                'course': c_info.get('course_name'),
+                'course': c_info.get('course_code'),
                 'section': sec_disp,
                 'placed': actual_sessions,
                 'required': total_expected_sessions,
