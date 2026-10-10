@@ -200,14 +200,14 @@
                                             <tr class="schedule-row"
                                                 tabindex="0"
                                                 role="button"
-                                                data-course="{{ entry.course_name or 'TBA' }}"
+                                                data-course="{{ entry.course_code or 'TBA' }}"
                                                 data-professor="{{ entry.professor_name or 'TBA' }}"
                                                 data-room="{{ entry.room_name or 'TBA' }}"
                                                 data-timeslot="{{ entry.time_range }}"
                                                 data-session="{{ entry.session_type or 'TBA' }}"
                                                 title="Click to view details">
                                                 <td>
-                                                    <strong>{{ entry.course_name or 'TBA' }}</strong>
+                                                    <strong>{{ entry.course_code or 'TBA' }}</strong>
                                                     <small class="text-primary d-block font-monospace" style="font-size: 0.75rem;"><i class="bx bx-info-circle me-1"></i>Click for details</small>
                                                 </td>
                                                 <td>{{ entry.professor_name or 'TBA' }}</td>

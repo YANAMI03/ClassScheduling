@@ -184,7 +184,7 @@ def _setup_import_test_environment(client, monkeypatch):
     for j, c_code in enumerate(sorted(cleaned_courses), 1):
         courses.append({
             'course_id': j,
-            'course_name': c_code,
+            'course_code': c_code,
             'program_id': 1,
             'year_level': 1,
             'lecture_hours': 3,
@@ -366,7 +366,7 @@ def test_untouched_assignments_preserved(test_client, monkeypatch):
     # Insert an existing assignment for prof_id 1 with a course not in import.xlsx
     unrelated_course = {
         'course_id': 999,
-        'course_name': 'CS-SPECIAL999',
+        'course_code': 'CS-SPECIAL999',
         'lecture_hours': 3,
         'lab_hours': 0,
         'ilp_hours': 0,
@@ -486,7 +486,7 @@ def test_bad_data_rows_flagged_in_preview(test_client, monkeypatch):
         courses=[
             {
                 'course_id': 101,
-                'course_name': 'CS-101',
+                'course_code': 'CS-101',
                 'lecture_hours': 3,
                 'lab_hours': 0,
                 'ilp_hours': 0,
@@ -495,7 +495,7 @@ def test_bad_data_rows_flagged_in_preview(test_client, monkeypatch):
             },
             {
                 'course_id': 102,
-                'course_name': 'CS-102',
+                'course_code': 'CS-102',
                 'lecture_hours': 10,
                 'lab_hours': 5,
                 'ilp_hours': 0,
@@ -640,7 +640,7 @@ def test_csv_import_support(test_client, monkeypatch):
     """Confirm CSV format is seamlessly parsed and validated."""
     mock_db = MockSupabase(
         professors=[{'prof_id': 1, 'first_name': 'Ada', 'last_name': 'Lovelace', 'department': 'CICT'}],
-        courses=[{'course_id': 1, 'course_name': 'CC-101', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3, 'year_level': 1}]
+        courses=[{'course_id': 1, 'course_code': 'CC-101', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3, 'year_level': 1}]
     )
     monkeypatch.setattr(app_module, 'supabase', mock_db)
 
@@ -752,7 +752,7 @@ def test_csv_variants(test_client, monkeypatch):
             {'prof_id': 2, 'first_name': 'René', 'last_name': 'Descartes', 'department': 'CICT'},
         ],
         courses=[
-            {'course_id': 1, 'course_name': 'CC-102', 'units': 3, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'year_level': 1}
+            {'course_id': 1, 'course_code': 'CC-102', 'units': 3, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'year_level': 1}
         ]
     )
     monkeypatch.setattr(app_module, 'supabase', mock_db)
@@ -833,7 +833,7 @@ def test_auto_create_professors_on_import(test_client, monkeypatch):
             {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1}
         ],
         courses=[
-            {'course_id': 101, 'course_name': 'CC-101', 'program_id': 1, 'units': 3, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'year_level': 1}
+            {'course_id': 101, 'course_code': 'CC-101', 'program_id': 1, 'units': 3, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'year_level': 1}
         ],
         professor_loads=[]
     )
@@ -890,8 +890,8 @@ def test_scheduler_scoped_to_own_program_cross_program_error(test_client, monkey
     mock_db = MockSupabase(
         professors=[{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}],
         courses=[
-            {'course_id': 101, 'course_name': 'CS-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
-            {'course_id': 201, 'course_name': 'BA-101', 'program_id': 2, 'program': 'BSBA', 'year_level': 1},
+            {'course_id': 101, 'course_code': 'CS-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+            {'course_id': 201, 'course_code': 'BA-101', 'program_id': 2, 'program': 'BSBA', 'year_level': 1},
         ],
         programs=[
             {'id': 1, 'program_name': 'BSIT'},
@@ -934,9 +934,9 @@ def test_import_ilp_hours_parsing_and_validation(test_client, monkeypatch):
     mock_db = MockSupabase(
         professors=[{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1}],
         courses=[
-            {'course_id': 101, 'course_name': 'CS-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
-            {'course_id': 102, 'course_name': 'CS-102', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
-            {'course_id': 103, 'course_name': 'CS-103', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+            {'course_id': 101, 'course_code': 'CS-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+            {'course_id': 102, 'course_code': 'CS-102', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
+            {'course_id': 103, 'course_code': 'CS-103', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
         ],
         programs=[{'id': 1, 'program_name': 'BSIT'}]
     )

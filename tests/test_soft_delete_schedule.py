@@ -73,7 +73,7 @@ class FakeTrackingQuery:
                 self.data = data
                 self.count = count
 
-        if self.table_name == 'schedule':
+        if self.table_name in ('schedule', 'schedule_with_semester'):
             if self._filters.get('schedule_id') == 42:
                 return Resp([{'schedule_id': 42, 'section': 'BSIT-1A', 'semester': '1st Semester', 'archive': False}])
             if self._filters.get('archive') is True:
@@ -164,7 +164,7 @@ def test_delete_section_schedule_soft_archives(monkeypatch):
     sched_updates = [u for u in tracker.updates if u['table'] == 'schedule']
     assert len(sched_updates) > 0
     assert sched_updates[0]['payload'] == {'archive': True}
-    assert sched_updates[0]['filters'].get('section') == 'BSIT-1A'
+    assert sched_updates[0]['filters'].get('schedule_id') == [10]
 
 
 def test_delete_all_schedules_soft_archives(monkeypatch):

@@ -40,7 +40,7 @@ content = re.sub(
 # ILP final safety net:
 content = re.sub(
     r'# 4\. Final safety net:.*?fallback_prof = _ensure_fallback_professor_by_index\(0, department\).*?return _commit_ilp_entry\(default_day, default_slot, fallback_prof, is_fallback=True\)',
-    '# 3. Final safety net: Section was booked at all available slots, assign to earliest priority slot with TBA\n            default_day, default_slot = first_hour_early_slots[0] if first_hour_early_slots else (last_hour_slots_raw[0] if last_hour_slots_raw else (\'Monday\', {\'start_time\': timedelta(hours=7), \'end_time\': timedelta(hours=8)}))\n            generation_warnings.append(\n                f"ILP for {course.get(\'course_name\')} could not be placed for Professor {desig_p.get(\'last_name\', \'\') if desig_p else \'X\'} and was set to TBA"\n            )\n            return _commit_ilp_entry(default_day, default_slot, None, is_fallback=True)',
+    '# 3. Final safety net: Section was booked at all available slots, assign to earliest priority slot with TBA\n            default_day, default_slot = first_hour_early_slots[0] if first_hour_early_slots else (last_hour_slots_raw[0] if last_hour_slots_raw else (\'Monday\', {\'start_time\': timedelta(hours=7), \'end_time\': timedelta(hours=8)}))\n            generation_warnings.append(\n                f"ILP for {course.get(\'course_code\')} could not be placed for Professor {desig_p.get(\'last_name\', \'\') if desig_p else \'X\'} and was set to TBA"\n            )\n            return _commit_ilp_entry(default_day, default_slot, None, is_fallback=True)',
     content,
     flags=re.DOTALL
 )

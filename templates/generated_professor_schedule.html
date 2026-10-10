@@ -179,7 +179,7 @@
                                      tabindex="0"
                                      role="button"
                                      style="top: calc(var(--top-pad) + {{ block.top_offset_minutes }} / 60 * var(--hour-height) + 2px); height: calc({{ block.duration_minutes }} / 60 * var(--hour-height) - 4px);"
-                                     data-course="{{ block.course_name }}"
+                                     data-course="{{ block.course_code }}"
                                      data-professor="{{ professor_name }}"
                                      data-section="{{ block.section }}"
                                      data-room="{{ block.room_name or block.room or 'TBA' }}"
@@ -194,7 +194,7 @@
                                     <div class="calendar-card-body p-2 d-flex flex-column justify-content-between h-100">
                                         <div>
                                             <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
-                                                <strong class="text-truncate d-block fw-bold text-dark" style="font-size: 0.8rem; max-width: 140px;" title="{{ block.course_name }}">{{ block.course_name }}</strong>
+                                                <strong class="text-truncate d-block fw-bold text-dark" style="font-size: 0.8rem; max-width: 140px;" title="{{ block.course_code }}">{{ block.course_code }}</strong>
                                                 <span class="calendar-pill-badge calendar-pill-badge--type" style="font-size: 0.65rem; padding: 1px 6px; flex-shrink: 0;">
                                                     {{ block.session_type }}
                                                 </span>
@@ -268,7 +268,7 @@
             </div>
             <div class="modal-body">
                 <div class="p-3 bg-light rounded-3 mb-3 border">
-                    <h6 class="fw-bold text-primary mb-1" id="modalCourseName">Course Name</h6>
+                    <h6 class="fw-bold text-primary mb-1" id="modalCourseName">Course Code</h6>
                     <small class="text-muted" id="modalMeta">Section Details</small>
                 </div>
 

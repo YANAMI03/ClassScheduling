@@ -133,7 +133,7 @@ def _build_test_db():
     courses = [
         {
             'course_id': 1,
-            'course_name': 'CC-100',
+            'course_code': 'CC-100',
             'lecture_hours': 2.0,
             'lab_hours': 2.0,
             'ilp_hours': 1.0,
@@ -142,7 +142,7 @@ def _build_test_db():
         },
         {
             'course_id': 101,
-            'course_name': 'IT-PF02',
+            'course_code': 'IT-PF02',
             'lecture_hours': 3.0,
             'lab_hours': 0.0,
             'ilp_hours': 0.0,
@@ -151,7 +151,7 @@ def _build_test_db():
         },
         {
             'course_id': 102,
-            'course_name': 'CC-104',
+            'course_code': 'CC-104',
             'lecture_hours': 2.0,
             'lab_hours': 3.0,
             'ilp_hours': 0.0,
@@ -160,7 +160,7 @@ def _build_test_db():
         },
         {
             'course_id': 103,
-            'course_name': 'IT-NET01',
+            'course_code': 'IT-NET01',
             'lecture_hours': 3.0,
             'lab_hours': 0.0,
             'ilp_hours': 0.0,

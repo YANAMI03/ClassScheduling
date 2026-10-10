@@ -48,4 +48,4 @@ with client.session_transaction() as sess:
 olipas = [p for p in preview if 'Olipas' in p['professor_name']]
 print("OLIPAS CLASSES IN CURRENT PREVIEW:")
 for p in sorted(olipas, key=lambda x: (x['day'], x['start'])):
-    print(f"  {p['day']:<10} {p['start']:<8} - {p['end']:<8} | {p['course_name']:<12} | Sec: {p['section']:<8} | Room: {p.get('room_name')}")
+    print(f"  {p['day']:<10} {p['start']:<8} - {p['end']:<8} | {p['course_code']:<12} | Sec: {p['section']:<8} | Room: {p.get('room_name')}")

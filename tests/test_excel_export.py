@@ -38,7 +38,7 @@ def test_generate_excel_room_schedule():
             'day': 'Monday',
             'start_time_raw': '08:00:00',
             'end_time_raw': '10:00:00',
-            'course_name': 'IT101 - Intro to Computing',
+            'course_code': 'IT101 - Intro to Computing',
             'section': '1A',
             'professor': 'Dr. Alan Turing',
             'session_type': 'Lecture',
@@ -76,7 +76,7 @@ def test_generate_excel_section_schedule():
             'day': 'Tuesday',
             'start_time_raw': '09:00:00',
             'end_time_raw': '11:00:00',
-            'course_name': 'NET201 - Advanced Networking',
+            'course_code': 'NET201 - Advanced Networking',
             'professor': 'Grace Hopper',
             'room': 'Cisco Lab',
             'session_type': 'Laboratory',
@@ -112,7 +112,7 @@ def test_generate_excel_professor_schedule():
             'day': 'Wednesday',
             'start_time_raw': '13:00:00',
             'end_time_raw': '15:00:00',
-            'course_name': 'CS102 - Data Structures',
+            'course_code': 'CS102 - Data Structures',
             'section': '1B',
             'room': 'Room 305',
             'session_type': 'Lecture',
@@ -146,7 +146,7 @@ def test_generate_excel_multiple_classes_same_slot():
             'day': 'Monday',
             'start_time_raw': '08:00:00',
             'end_time_raw': '09:00:00',
-            'course_name': 'MATH101 - Calculus 1',
+            'course_code': 'MATH101 - Calculus 1',
             'professor': 'Prof Gauss',
             'room': 'Room 101',
             'session_type': 'Lecture',
@@ -155,7 +155,7 @@ def test_generate_excel_multiple_classes_same_slot():
             'day': 'Monday',
             'start_time_raw': '08:00:00',
             'end_time_raw': '09:00:00',
-            'course_name': 'HIST101 - Philippine History',
+            'course_code': 'HIST101 - Philippine History',
             'professor': 'Prof Rizal',
             'room': 'Room 102',
             'session_type': 'Lecture',
@@ -216,13 +216,13 @@ def test_routes_export_room_excel(monkeypatch):
                         'major': None,
                         'session_type': 'Laboratory',
                         'professor_load': {
-                            'course': {'course_id': 1, 'course_name': 'IT101 - Intro to Computing'},
+                            'course': {'course_id': 1, 'course_code': 'IT101 - Intro to Computing'},
                             'professor': {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing'}
                         },
                         'room': {'room_name': 'CL-1'}
                     }
                 ]})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'}]})()
             return type('Resp', (), {'data': []})()
 
@@ -272,13 +272,13 @@ def test_routes_export_section_excel(monkeypatch):
                         'semester': '1st Semester',
                         'major': 'General',
                         'professor_load': {
-                            'course': {'course_id': 2, 'course_name': 'CC-102 Programming'},
+                            'course': {'course_id': 2, 'course_code': 'CC-102 Programming'},
                             'professor': {'prof_id': 2, 'first_name': 'Grace', 'last_name': 'Hopper'}
                         },
                         'room': {'room_name': 'Room 201'}
                     }
                 ]})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': []})()
             return type('Resp', (), {'data': []})()
 
@@ -320,7 +320,7 @@ def test_routes_export_professor_excel(monkeypatch):
             if self.table_name == 'professor':
                 return type('Resp', (), {'data': [{'prof_id': 5, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CS', 'max_hours': 30}]})()
             elif self.table_name == 'professor_load':
-                return type('Resp', (), {'data': [{'professor_load_id': 10, 'course_id': 1, 'course': {'course_name': 'IT101'}}]})()
+                return type('Resp', (), {'data': [{'professor_load_id': 10, 'course_id': 1, 'course': {'course_code': 'IT101'}}]})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': [
                     {
@@ -334,11 +334,11 @@ def test_routes_export_professor_excel(monkeypatch):
                         'semester': '1st Semester',
                         'major': None,
                         'session_type': 'Lecture',
-                        'professor_load': {'course': {'course_name': 'IT101'}},
+                        'professor_load': {'course': {'course_code': 'IT101'}},
                         'room': {'room_name': 'Room 105'}
                     }
                 ]})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': []})()
             return type('Resp', (), {'data': []})()
 
@@ -386,7 +386,7 @@ def test_ui_templates_contain_export_to_excel_buttons(monkeypatch):
                 return type('Resp', (), {'data': [{'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CS', 'max_hours': 30}]})()
             elif self.table_name == 'professor_load':
                 return type('Resp', (), {'data': []})()
-            elif self.table_name == 'timeslot':
+            elif self.table_name == 'working_hours':
                 return type('Resp', (), {'data': []})()
             elif self.table_name == 'schedule':
                 return type('Resp', (), {'data': []})()
@@ -425,7 +425,7 @@ def test_all_7_themes_generation_and_styling():
             'day': 'Monday',
             'start_time_raw': '08:00:00',
             'end_time_raw': '10:00:00',
-            'course_name': 'CS101 - Intro to CS',
+            'course_code': 'CS101 - Intro to CS',
             'section': '1A',
             'professor': 'Prof Turing',
             'room': 'Lab 1',
@@ -617,7 +617,7 @@ def test_export_routes_use_assigned_section_themes(tmp_path, monkeypatch):
                         'semester': '1st Semester',
                         'major': None,
                         'professor_load': {
-                            'course': {'course_name': 'CS101 Intro'},
+                            'course': {'course_code': 'CS101 Intro'},
                             'professor': {'first_name': 'Alan', 'last_name': 'Turing'}
                         },
                         'room': {'room_name': 'R101'}

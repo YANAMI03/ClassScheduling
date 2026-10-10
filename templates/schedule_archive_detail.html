@@ -107,7 +107,7 @@
                             <tbody>
                                 {% for entry in item.entries %}
                                 <tr>
-                                    <td class="ps-3 fw-medium text-dark">{{ entry.course_name or 'Course #' ~ entry.course_id }}</td>
+                                    <td class="ps-3 fw-medium text-dark">{{ entry.course_code or 'Course #' ~ entry.course_id }}</td>
                                     <td>
                                         <i class="bx bx-user me-1 text-muted"></i>
                                         <span>{{ entry.professor_name or 'TBA' }}</span>

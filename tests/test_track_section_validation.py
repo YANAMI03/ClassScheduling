@@ -9,22 +9,22 @@ def test_specialized_term_sum_matches_2_5_6_equals_13():
     """Verify that when Database=2, Web=5, Networking=6, General IT-IAS02=13 passes with no General course error."""
     courses = [
         # Database Systems (2 sections each)
-        {'course_id': 55, 'course_name': 'IT-IM02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 56, 'course_name': 'IT-IM03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 57, 'course_name': 'IT-IM04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 73, 'course_name': 'IT-CAP01 (DST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 55, 'course_code': 'IT-IM02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 56, 'course_code': 'IT-IM03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 57, 'course_code': 'IT-IM04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 73, 'course_code': 'IT-CAP01 (DST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
         # Web Systems (5 sections each)
-        {'course_id': 52, 'course_name': 'IT-WS03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 53, 'course_name': 'IT-WS04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 54, 'course_name': 'IT-WS05', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 74, 'course_name': 'IT-CAP01 (WST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 52, 'course_code': 'IT-WS03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 53, 'course_code': 'IT-WS04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 54, 'course_code': 'IT-WS05', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 74, 'course_code': 'IT-CAP01 (WST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
         # Networking (6 sections each)
-        {'course_id': 58, 'course_name': 'IT-NET03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
-        {'course_id': 59, 'course_name': 'IT-NET04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
-        {'course_id': 60, 'course_name': 'IT-NET05', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
-        {'course_id': 51, 'course_name': 'IT-CAP01 (NST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 58, 'course_code': 'IT-NET03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 59, 'course_code': 'IT-NET04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 60, 'course_code': 'IT-NET05', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 51, 'course_code': 'IT-CAP01 (NST)', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
         # General Course (13 sections)
-        {'course_id': 50, 'course_name': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
+        {'course_id': 50, 'course_code': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
     ]
 
     loads = [
@@ -89,10 +89,10 @@ def test_purposeful_mismatch_shows_detailed_breakdown():
     """Test intentional mismatch where General course IT-IAS02 has 10 sections instead of 13.
     Verifies error triggers and displays detailed course code counts per track."""
     courses = [
-        {'course_id': 55, 'course_name': 'IT-IM02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 52, 'course_name': 'IT-WS03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 58, 'course_name': 'IT-NET03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
-        {'course_id': 50, 'course_name': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
+        {'course_id': 55, 'course_code': 'IT-IM02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 52, 'course_code': 'IT-WS03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 58, 'course_code': 'IT-NET03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 50, 'course_code': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
     ]
 
     # Database: 2, Web: 5, Net: 6. General: 10 (mismatch! should be 13)
@@ -143,12 +143,12 @@ def test_internal_track_mismatch_preserves_representative_track_count():
     Web Systems is counted as 5 (not 0) for the General course required total,
     while still reporting the internal mismatch error."""
     courses = [
-        {'course_id': 55, 'course_name': 'IT-IM02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 52, 'course_name': 'IT-WS03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 53, 'course_name': 'IT-WS04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 54, 'course_name': 'IT-WS05', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 58, 'course_name': 'IT-NET03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
-        {'course_id': 50, 'course_name': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
+        {'course_id': 55, 'course_code': 'IT-IM02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 52, 'course_code': 'IT-WS03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 53, 'course_code': 'IT-WS04', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 54, 'course_code': 'IT-WS05', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 58, 'course_code': 'IT-NET03', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 50, 'course_code': 'IT-IAS02', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
     ]
 
     # Web Systems: IT-WS03=2, IT-WS04=5, IT-WS05=5 -> representative = 5

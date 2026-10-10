@@ -17,8 +17,8 @@ for item in canon:
 
 app._CACHED_BASELINE_LOAD_ORDER = canonical_order_map
 
-# 2. Canonical timeslots
-canonical_timeslots = [
+# 2. Canonical working_hours
+canonical_working_hours = [
     {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '16:00:00'},
     {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
     {'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
@@ -26,7 +26,7 @@ canonical_timeslots = [
     {'day': 'Friday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
 ]
 orig_bcs = app._build_candidate_slots
-app._build_candidate_slots = lambda ts: orig_bcs(canonical_timeslots)
+app._build_candidate_slots = lambda ts: orig_bcs(canonical_working_hours)
 
 # 3. What if _check_professor_cutoff_conflict has has_cutoff = False when prof_cutoff_map has no entry?
 # Or let's test what happens if prof_cutoff_map defaults to False (or if prof_cutoff_map is empty)

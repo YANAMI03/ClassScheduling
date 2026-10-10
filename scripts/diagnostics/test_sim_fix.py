@@ -35,7 +35,7 @@ standard_semester = '2nd Semester'
 program = 'BSIT'
 
 calc_result = app.calculate_semester_section_counts(program_id=user_prog_id, semester=standard_semester)
-all_courses = app.supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester).eq('program_id', user_prog_id).order('year_level').order('course_name').execute().data or []
+all_courses = app.supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester).eq('program_id', user_prog_id).order('year_level').order('course_code').execute().data or []
 for c in all_courses:
     p_rel = app._rel(c, 'program') or {}
     c['program_name'] = p_rel.get('program_name') or program or ''

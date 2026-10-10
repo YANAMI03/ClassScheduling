@@ -61,7 +61,7 @@ def test_button_coverage_zero_leftovers():
                 'edit-schedule-btn' in cls or
                 'restore-batch-btn' in cls or
                 'btn-notif-bell' in cls or
-                (tag == 'button' and onclick and ('openCreateModal' in onclick or 'openEditModal' in onclick or 'openEditTimeslotModal' in onclick or 'click()' in onclick))
+                (tag == 'button' and onclick and ('openCreateModal' in onclick or 'openEditModal' in onclick or 'openEditWorkingHoursModal' in onclick or 'click()' in onclick))
             )
 
             # Class C: Live / silent controls

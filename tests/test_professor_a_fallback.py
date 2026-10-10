@@ -113,7 +113,7 @@ def test_no_fallback_professors_or_tba_created(monkeypatch):
     uses real faculty and never creates 'Professor A' or 'TBA'.
     """
     courses = [
-        {'course_id': 101, 'course_name': 'IT101 - Intro', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'major': None},
+        {'course_id': 101, 'course_code': 'IT101 - Intro', 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'program': 'BSIT', 'major': None},
     ]
     rooms = [
         {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'department': 'CICT'},
@@ -121,7 +121,7 @@ def test_no_fallback_professors_or_tba_created(monkeypatch):
     professors = [
         {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CICT', 'max_hours': 40}
     ]
-    timeslots = [
+    working_hours = [
         {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '11:00:00', 'lunch_time': '12:00:00'},
     ]
 
@@ -133,7 +133,7 @@ def test_no_fallback_professors_or_tba_created(monkeypatch):
         'professor_load': [
             {'id': 1, 'course_id': 101, 'prof_id': 10, 'sections': 1},
         ],
-        'timeslot': timeslots,
+        'working_hours': working_hours,
         'schedule': [],
     }
 
@@ -161,13 +161,13 @@ def test_no_fallback_professors_or_tba_created(monkeypatch):
         for entry in preview:
             assert entry.get('professor_name') != 'Professor A'
             assert entry.get('professor_name') != 'TBA'
-            assert entry.get('course_name') != 'TBA'
+            assert entry.get('course_code') != 'TBA'
             assert entry.get('professor_load_id') is not None
 
 
 def test_preview_context_no_fallback_to_professor_a():
     entries = [
-        {'id': 1, 'course_id': 1, 'course_name': 'IT101', 'room_id': 1, 'room_name': 'Room 1', 'day': 'Monday', 'start': '08:00 AM', 'end': '11:00 AM', 'section': '1A', 'professor_name': None}
+        {'id': 1, 'course_id': 1, 'course_code': 'IT101', 'room_id': 1, 'room_name': 'Room 1', 'day': 'Monday', 'start': '08:00 AM', 'end': '11:00 AM', 'section': '1A', 'professor_name': None}
     ]
     for e in entries:
         prof = e.get('professor_name') or ''

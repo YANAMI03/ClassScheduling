@@ -127,7 +127,7 @@ class MockSupabase:
                 {'id': 2, 'semester_id': 10, 'year_level': 2, 'number_of_sections': 2},
             ]),
             'course': MockTable('course', [
-                {'course_id': 1, 'course_name': 'IT101', 'units': 3, 'lecture_hours': 3, 'lab_hours': 0, 'year_level': '1', 'program': 'BSIT', 'program_id': 1, 'semester_id': 10, 'semester': '1st Semester'},
+                {'course_id': 1, 'course_code': 'IT101', 'units': 3, 'lecture_hours': 3, 'lab_hours': 0, 'year_level': '1', 'program': 'BSIT', 'program_id': 1, 'semester_id': 10, 'semester': '1st Semester'},
             ]),
             'professor': MockTable('professor', [
                 {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CICT', 'program_id': 1, 'time_designation': 4, 'academic_ranking_id': 1},
@@ -139,7 +139,7 @@ class MockSupabase:
             'room': MockTable('room', [
                 {'room_id': 1, 'room_name': 'Lab 101', 'room_type': 'Laboratory', 'department': 'CICT', 'program_id': 1},
             ]),
-            'timeslot': MockTable('timeslot', [
+            'working_hours': MockTable('working_hours', [
                 {'timeslot_id': 1, 'semester_id': 10, 'start_day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
             ]),
             'professor_load': MockTable('professor_load', []),
@@ -195,7 +195,7 @@ def test_scheduler_nav_has_exactly_four_tabs(mock_db):
         assert any(ep == h or h.endswith(ep) for h in feature_links), f"Expected endpoint {ep} in scheduler nav"
 
     # Must NOT have administrative links
-    forbidden_endpoints = ['/rooms', '/timeslot', '/academic_ranking', '/semesters', '/section_config', '/users']
+    forbidden_endpoints = ['/rooms', '/working_hours', '/academic_ranking', '/semesters', '/section_config', '/users']
     for f_ep in forbidden_endpoints:
         assert not any(f_ep == h or h.endswith(f_ep) for h in feature_links), f"Forbidden endpoint {f_ep} found in scheduler nav"
 

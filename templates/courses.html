@@ -41,17 +41,17 @@
     <form action="/add_course" method="POST">
         <div class="row g-3">
             <div class="col-lg-4">
-                <label class="form-label">Course Name</label>
+                <label class="form-label">Course Code</label>
                 <div class="course-search-wrapper">
-                    <input type="text" name="course_name" id="add_course_name" class="form-control" placeholder="Enter course name" autocomplete="off" required>
+                    <input type="text" name="course_code" id="add_course_code" class="form-control" placeholder="Enter course code" autocomplete="off" required>
                     <i id="courseValidationIcon" class="course-validation-icon bx d-none"></i>
                     <div id="courseSearchDropdown" class="course-search-dropdown d-none"></div>
                 </div>
                 <div id="courseDuplicateWarning" class="course-duplicate-warning d-none">
-                    <i class="bx bx-error-circle"></i> Course already exists
+                    <i class="bx bx-error-circle"></i> Course already exists in this program
                 </div>
                 <div id="courseAvailableSuccess" class="course-available-success d-none">
-                    <i class="bx bx-check-circle"></i> Course name is available
+                    <i class="bx bx-check-circle"></i> Course code is available
                 </div>
             </div>
             <div class="col-lg-2 col-md-3">
@@ -244,7 +244,7 @@
         <table class="table-custom">
             <thead>
                 <tr>
-                    <th>Course Name</th>
+                    <th>Course Code</th>
                     <th>Units</th>
                     <th>Lecture Hrs</th>
                     <th>Lab Hrs</th>
@@ -263,7 +263,7 @@
             <tbody>
                 {% for course in items %}
                 <tr class="course-row" data-year-level="{{ course.year_level or '' }}" data-semester="{{ course.semester or '' }}">
-                    <td><strong>{{course.course_name}}</strong></td>
+                    <td><strong>{{course.course_code}}</strong></td>
                     <td>{{course.units if course.units is not none else '—'}}</td>
                     <td>{{course.lecture_hours}}</td>
                     <td>{{course.lab_hours}}</td>
@@ -283,7 +283,7 @@
                     <td>{{ course.semester or '—' }}</td>
                     {% if can_edit_courses %}
                     <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_name}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program-id="{{course.program_id or ''}}" data-program="{{course.program or course.program_name or ''}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-semester="{{course.semester or ''}}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_code}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program-id="{{course.program_id or ''}}" data-program="{{course.program or course.program_name or ''}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         <a href="/delete_course/{{course.course_id}}" class="btn btn-danger btn-sm" data-action="delete" data-title="Delete Course" data-confirm="Are you sure you want to delete this course?">
@@ -340,8 +340,8 @@
             <form id="editForm" method="POST">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Course Name</label>
-                        <input type="text" name="course_name" id="edit_name" class="form-control" required>
+                        <label class="form-label">Course Code</label>
+                        <input type="text" name="course_code" id="edit_name" class="form-control" required>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
@@ -523,6 +523,8 @@ $(function(){
     refreshCourseFilters();
 
     // Real-time Course Search & Visual Validation Feedback
+    var courseSearchRequestId = 0;
+
     function escapeHtml(text) {
         if (!text) return '';
         return text.replace(/[&<>"']/g, function(m) {
@@ -550,15 +552,17 @@ $(function(){
     }
 
     function performCourseSearch() {
-        var query = $('#add_course_name').val().trim();
+        var query = $('#add_course_code').val().trim();
+        var programId = $('#add_program_id').val() || $('input[name="program_id"]').val() || '';
         var $dropdown = $('#courseSearchDropdown');
         var $warning = $('#courseDuplicateWarning');
         var $success = $('#courseAvailableSuccess');
         var $valIcon = $('#courseValidationIcon');
-        var $input = $('#add_course_name');
+        var $input = $('#add_course_code');
         var $submitBtn = $('#addCourseBtn');
 
-        if (!query) {
+        var requestId = ++courseSearchRequestId;
+        if (!query || !programId) {
             $dropdown.addClass('d-none').empty();
             $warning.addClass('d-none');
             $success.addClass('d-none');
@@ -568,8 +572,13 @@ $(function(){
             return;
         }
 
-        $.getJSON('/search_courses', { q: query })
+        $.getJSON('/search_courses', { q: query, program: programId })
             .done(function(data) {
+                if (requestId !== courseSearchRequestId ||
+                    query !== $('#add_course_code').val().trim() ||
+                    programId !== ($('#add_program_id').val() || $('input[name="program_id"]').val() || '')) {
+                    return;
+                }
                 var courses = data.courses || [];
                 var exactMatch = data.exact_match || false;
 
@@ -579,7 +588,7 @@ $(function(){
                     ).removeClass('d-none');
                 } else {
                     var html = courses.map(function(c) {
-                        var highlightedName = highlightMatch(c.course_name, query);
+                        var highlightedName = highlightMatch(c.course_code, query);
                         var progBadge = c.program ? '<span class="badge-custom badge-info">' + escapeHtml(c.program) + '</span>' : '';
                         var yrBadge = c.year_level ? '<span class="badge-custom badge-secondary">Yr ' + escapeHtml(String(c.year_level)) + '</span>' : '';
                         return '<div class="course-search-item">' +
@@ -591,14 +600,12 @@ $(function(){
                 }
 
                 if (exactMatch) {
-                    // Duplicate state (Red border, error icon, warning message)
                     $warning.removeClass('d-none');
                     $success.addClass('d-none');
                     $input.addClass('is-invalid').removeClass('is-valid');
                     $valIcon.removeClass('d-none bx-check-circle text-success').addClass('bx-error-circle text-danger');
                     $submitBtn.prop('disabled', true);
                 } else {
-                    // Available state (Green border, check icon, success message)
                     $warning.addClass('d-none');
                     $success.removeClass('d-none');
                     $input.addClass('is-valid').removeClass('is-invalid');
@@ -607,13 +614,20 @@ $(function(){
                 }
             })
             .fail(function() {
+                if (requestId !== courseSearchRequestId) return;
                 $dropdown.addClass('d-none').empty();
+                $warning.addClass('d-none');
+                $success.addClass('d-none');
+                $valIcon.addClass('d-none').removeClass('bx-error-circle text-danger bx-check-circle text-success');
+                $input.removeClass('is-invalid is-valid');
+                $submitBtn.prop('disabled', false);
             });
     }
 
     var debouncedCourseSearch = debounce(performCourseSearch, 300);
 
-    $('#add_course_name').on('input focus', debouncedCourseSearch);
+    $('#add_course_code').on('input focus', debouncedCourseSearch);
+    $('#add_program_id').on('change', performCourseSearch);
 
     $(document).on('click', function(e) {
         if (!$(e.target).closest('.course-search-wrapper').length) {

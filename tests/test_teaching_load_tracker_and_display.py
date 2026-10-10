@@ -67,10 +67,10 @@ def test_client_and_db(monkeypatch):
     - Prof 4 (John von Neumann): 0 loads -> 0 hrs
     """
     courses = [
-        {'course_id': 101, 'course_name': 'IT101', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
-        {'course_id': 102, 'course_name': 'IT102', 'program_id': 1, 'lecture_hours': 2, 'lab_hours': 3, 'ilp_hours': 0, 'units': 3},
-        {'course_id': 103, 'course_name': 'IT103', 'program_id': 1, 'lecture_hours': 4, 'lab_hours': 0, 'ilp_hours': 0, 'units': 4},
-        {'course_id': 104, 'course_name': 'IT104', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 3, 'ilp_hours': 0, 'units': 4},
+        {'course_id': 101, 'course_code': 'IT101', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
+        {'course_id': 102, 'course_code': 'IT102', 'program_id': 1, 'lecture_hours': 2, 'lab_hours': 3, 'ilp_hours': 0, 'units': 3},
+        {'course_id': 103, 'course_code': 'IT103', 'program_id': 1, 'lecture_hours': 4, 'lab_hours': 0, 'ilp_hours': 0, 'units': 4},
+        {'course_id': 104, 'course_code': 'IT104', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 3, 'ilp_hours': 0, 'units': 4},
     ]
 
     professor_loads = [

@@ -445,14 +445,14 @@ def validate_import_data(
     # Build fast lookup maps
     courses_by_code: Dict[str, Dict[str, Any]] = {}
     for c in courses_list:
-        c_code = normalize_course_code(c.get('course_name') or '')
+        c_code = normalize_course_code(c.get('course_code') or '')
         if c_code:
             courses_by_code[c_code] = c
 
     all_courses_by_code: Dict[str, Dict[str, Any]] = {}
     if all_courses_list:
         for c in all_courses_list:
-            c_code = normalize_course_code(c.get('course_name') or '')
+            c_code = normalize_course_code(c.get('course_code') or '')
             if c_code:
                 all_courses_by_code[c_code] = c
 
@@ -622,7 +622,7 @@ def validate_import_data(
                 c_yl_int = None
             if c_yl_int and c_yl_int != divider_year:
                 row_warnings.append(
-                    f"Year level mismatch: Course '{matched_course.get('course_name')}' is Year {c_yl_int}, "
+                    f"Year level mismatch: Course '{matched_course.get('course_code')}' is Year {c_yl_int}, "
                     f"but file placed it under Year {divider_year} divider."
                 )
 
@@ -681,7 +681,7 @@ def validate_import_data(
             'prof_id': prof_id,
             'department': (matched_prof.get('department') if matched_prof else None) or 'CICT',
             'raw_course_code': raw_course,
-            'course_code': matched_course.get('course_name') if matched_course else raw_course,
+            'course_code': matched_course.get('course_code') if matched_course else raw_course,
             'course_id': course_id,
             'sections': sections,
             'ilp_hours': ilp_hours if raw_ilp is not None and str(raw_ilp).strip() != '' else (int(matched_course.get('ilp_hours') or 0) if matched_course and matched_course.get('ilp_hours') in (0, 1) else 0),

@@ -55,11 +55,11 @@ for d, st, et in slots_to_check:
     
     # Check 3C-Networking conflict
     s3c_entries = [e for e in preview if e['section'] == '3C-Networking' and e['day'] == d and max(st_sec, app._to_seconds(app._parse_time(e['start']))) < min(et_sec, app._to_seconds(app._parse_time(e['end'])))]
-    print(f"  3C-Networking has class? {bool(s3c_entries)} -> {[e['course_name'] for e in s3c_entries]}")
+    print(f"  3C-Networking has class? {bool(s3c_entries)} -> {[e['course_code'] for e in s3c_entries]}")
     
     # Check Prof Tambio conflict
     tambio_entries = [e for e in preview if e.get('prof_id') == 19 and e['day'] == d and max(st_sec, app._to_seconds(app._parse_time(e['start']))) < min(et_sec, app._to_seconds(app._parse_time(e['end'])))]
-    print(f"  Prof Tambio has class? {bool(tambio_entries)} -> {[e['course_name'] + ' in ' + e['section'] for e in tambio_entries]}")
+    print(f"  Prof Tambio has class? {bool(tambio_entries)} -> {[e['course_code'] + ' in ' + e['section'] for e in tambio_entries]}")
     
     # Check each lab room
     booked_labs = []
@@ -69,7 +69,7 @@ for d, st, et in slots_to_check:
         rname = lr['room_name']
         occupants = [e for e in preview if e.get('room_id') == rid and e['day'] == d and max(st_sec, app._to_seconds(app._parse_time(e['start']))) < min(et_sec, app._to_seconds(app._parse_time(e['end'])))]
         if occupants:
-            booked_labs.append(f"{rname} (booked by {occupants[0]['section']} {occupants[0]['course_name']})")
+            booked_labs.append(f"{rname} (booked by {occupants[0]['section']} {occupants[0]['course_code']})")
         else:
             free_labs.append(rname)
     print(f"  Free labs ({len(free_labs)}/7): {free_labs}")

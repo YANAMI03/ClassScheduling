@@ -118,8 +118,8 @@ def test_setup(monkeypatch):
         {'prof_id': 30, 'program_id': 2},
     ]
     courses = [
-        {'course_id': 101, 'course_name': 'IT-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
-        {'course_id': 201, 'course_name': 'DS-101', 'program_id': 2, 'program': 'BSDS', 'year_level': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
+        {'course_id': 101, 'course_code': 'IT-101', 'program_id': 1, 'program': 'BSIT', 'year_level': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
+        {'course_id': 201, 'course_code': 'DS-101', 'program_id': 2, 'program': 'BSDS', 'year_level': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
     ]
     loads = [
         {'id': 1, 'prof_id': 10, 'course_id': 101, 'sections': 1, 'professor': profs[0], 'course': courses[0]},
@@ -249,7 +249,7 @@ def test_change2_block_unlinking_with_existing_loads(test_setup):
 
 
 def test_change2_importer_rejects_out_of_program_prof(test_setup):
-    courses = [{'course_id': 101, 'course_name': 'IT-101', 'program_id': 1, 'program': 'BSIT'}]
+    courses = [{'course_id': 101, 'course_code': 'IT-101', 'program_id': 1, 'program': 'BSIT'}]
     existing_loads = []
 
     # All professors in the system
@@ -344,7 +344,7 @@ def test_change3_add_course_program_selection(test_setup):
         assert res_get.status_code == 403
 
         res_post = client.post('/add_course', data={
-            'course_name': 'HACK-101',
+            'course_code': 'HACK-101',
             'program_id': '1',
             'year_level': '1',
             'semester': '1st Semester'

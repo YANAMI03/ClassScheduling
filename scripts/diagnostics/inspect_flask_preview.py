@@ -35,4 +35,4 @@ for prof_id, name in [(19, 'Tambio'), (34, 'Santos'), (35, 'Corpuz')]:
     print(f"\n=== {name} (prof_id {prof_id}) in PREVIEW ===")
     print(f"Total sessions placed: {len(entries)}")
     for e in entries:
-        print(f"  LoadID: {e.get('professor_load_id')} | {e['course_name']} | Sec: {e['section']} | {e['session_type']} | {e['day']} {e['start']} - {e['end']} | Room: {e['room_name']}")
+        print(f"  LoadID: {e.get('professor_load_id')} | {e['course_code']} | Sec: {e['section']} | {e['session_type']} | {e['day']} {e['start']} - {e['end']} | Room: {e['room_name']}")

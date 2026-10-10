@@ -31,8 +31,8 @@ backup_sched = [s for s in data.get('full_schedule_rows', []) if not s.get('arch
 
 # Also load course map and prof map from backup to know which course is which
 # Look at courses in backup
-courses = app.supabase.table('course').select('course_id, course_name').execute().data or []
-c_map = {c['course_id']: c['course_name'] for c in courses}
+courses = app.supabase.table('course').select('course_id, course_code').execute().data or []
+c_map = {c['course_id']: c['course_code'] for c in courses}
 backup_pls = data.get('professor_load_rows', [])
 pl_to_course = {p['id']: c_map.get(p['course_id'], f"C{p['course_id']}") for p in backup_pls}
 pl_to_prof = {p['id']: p['prof_id'] for p in backup_pls}
@@ -55,7 +55,7 @@ print("\n--- CURRENT PREVIEW (3C-Networking) ---")
 c_3c = [s for s in preview if s.get('section') == '3C-Networking']
 c_3c.sort(key=lambda s: (s['day'], s['start']))
 for s in c_3c:
-    print(f"  {s['day']:<10} | {s['start']}-{s['end']} | {s['session_type']:<10} | {s['course_name']:<15} | {s['professor_name']:<25} | Room {s.get('room_name')}")
+    print(f"  {s['day']:<10} | {s['start']}-{s['end']} | {s['session_type']:<10} | {s['course_code']:<15} | {s['professor_name']:<25} | Room {s.get('room_name')}")
 
 print("\n" + "="*80)
 print("SECTION 3F-NETWORKING: BACKUP (441 rows) vs CURRENT PREVIEW (438 rows)")
@@ -72,4 +72,4 @@ print("\n--- CURRENT PREVIEW (3F-Networking) ---")
 c_3f = [s for s in preview if s.get('section') == '3F-Networking']
 c_3f.sort(key=lambda s: (s['day'], s['start']))
 for s in c_3f:
-    print(f"  {s['day']:<10} | {s['start']}-{s['end']} | {s['session_type']:<10} | {s['course_name']:<15} | {s['professor_name']:<25} | Room {s.get('room_name')}")
+    print(f"  {s['day']:<10} | {s['start']}-{s['end']} | {s['session_type']:<10} | {s['course_code']:<15} | {s['professor_name']:<25} | Room {s.get('room_name')}")

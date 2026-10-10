@@ -108,10 +108,10 @@ console.log('✓ Test 4 passed.');
 
 // Test 6: Course dropdown unique sorted population including master catalog (e.g. CC-100)
 console.log('Test 6: Unique sorted assigned courses dropdown population...');
-const allCatalogCourses = [{ course_name: 'CC-100' }, { course_name: 'CC-101' }, { course_name: 'CC-102' }];
+const allCatalogCourses = [{ course_code: 'CC-100' }, { course_code: 'CC-101' }, { course_code: 'CC-102' }];
 const courseSet = new Set();
 // Add catalog courses
-allCatalogCourses.forEach(c => courseSet.add(c.course_name));
+allCatalogCourses.forEach(c => courseSet.add(c.course_code));
 // Add assigned courses
 professors.forEach(p => {
     p.courses.split('|').forEach(c => { if (c.trim()) courseSet.add(c.trim()); });

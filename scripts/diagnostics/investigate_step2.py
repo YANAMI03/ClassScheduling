@@ -19,9 +19,9 @@ print("="*80)
 # 1. Course definitions for IT-IAS02, IT-CAP01 (NST), IT-NET05
 print("\n--- 1. COURSE DEFINITIONS ---")
 target_courses = ['IT-IAS02', 'IT-CAP01 (NST)', 'IT-NET05']
-courses_res = app.supabase.table('course').select('*, program:program_id(id, program_name)').in_('course_name', target_courses).execute()
+courses_res = app.supabase.table('course').select('*, program:program_id(id, program_name)').in_('course_code', target_courses).execute()
 for c in courses_res.data or []:
-    print(f"Course: {c.get('course_name')} (ID: {c.get('course_id')})")
+    print(f"Course: {c.get('course_code')} (ID: {c.get('course_id')})")
     print(f"  Program ID: {c.get('program_id')}, Semester: {c.get('semester')}, Year Level: {c.get('year_level')}")
     print(f"  Lec Hours: {c.get('lecture_hours')}, Lab Hours: {c.get('lab_hours')}, ILP Hours: {c.get('ilp_hours')}, Units: {c.get('units')}")
     print(f"  Specialization: {c.get('specialization')}")
@@ -64,27 +64,27 @@ except Exception as e:
 
 # 3. TIMESLOTS
 print("\n--- 3. TIMESLOTS ---")
-ts_res = app.supabase.table('timeslot').select('*').order('day').order('start_time').execute()
+ts_res = app.supabase.table('working_hours').select('*').order('day').order('start_time').execute()
 all_ts = ts_res.data or []
-print(f"Total timeslots in 'timeslot' table: {len(all_ts)}")
+print(f"Total working_hours rows: {len(all_ts)}")
 days = set(t.get('day') for t in all_ts)
 print(f"Days: {days}")
 cutoffs = {t.get('day'): t.get('professor_cutoff') for t in all_ts if t.get('professor_cutoff')}
 print(f"Cutoffs per day: {cutoffs}")
 # Check lunch timeslot
 lunch_ts = [t for t in all_ts if '12:00' in str(t.get('start_time')) or '12:00' in str(t.get('end_time'))]
-print(f"Lunch timeslots: {lunch_ts}")
+print(f"Lunch working_hours: {lunch_ts}")
 
 # 4. LOADS
 print("\n--- 4. PROFESSOR LOADS FOR TARGET PROFESSORS/COURSES ---")
-pl_res = app.supabase.table('professor_load').select('*, professor(prof_id, first_name, last_name, program_id), course(course_id, course_name, program_id, lecture_hours, lab_hours, ilp_hours)').execute()
+pl_res = app.supabase.table('professor_load').select('*, professor(prof_id, first_name, last_name, program_id), course(course_id, course_code, program_id, lecture_hours, lab_hours, ilp_hours)').execute()
 all_pls = pl_res.data or []
 print(f"Total professor_load rows: {len(all_pls)}")
 for pl in all_pls:
     p = pl.get('professor') or {}
     c = pl.get('course') or {}
     p_name = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
-    c_name = c.get('course_name')
+    c_name = c.get('course_code')
     if c_name in target_courses or any(target in p_name for target in ['Tambio', 'Santos', 'Corpuz']):
         print(f"Load ID {pl.get('id')}: Prof='{p_name}' (prof_id={pl.get('prof_id')}) | Course='{c_name}' (c_id={pl.get('course_id')}) | Sections={pl.get('sections')} | load.program_id={pl.get('program_id')}")
 

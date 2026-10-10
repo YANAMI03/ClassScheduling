@@ -12,4 +12,4 @@ for prof_id, name in [(19, 'Tambio'), (34, 'Santos'), (35, 'Corpuz')]:
     print(f"\n=== {name} (prof_id {prof_id}) ===")
     print(f"Total sessions placed: {len(entries)}")
     for e in entries:
-        print(f"  {e['course_name']} | Sec: {e['section']} | {e['session_type']} | {e['day']} {e['start']} - {e['end']} | Room: {e['room_name']}")
+        print(f"  {e['course_code']} | Sec: {e['section']} | {e['session_type']} | {e['day']} {e['start']} - {e['end']} | Room: {e['room_name']}")

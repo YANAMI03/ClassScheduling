@@ -17,7 +17,7 @@ for item in canon:
 
 app._CACHED_BASELINE_LOAD_ORDER = canonical_order_map
 
-# 2. Patch timeslots fallback to 20:00:00 (7:00 AM - 8:00 PM)
+# 2. Patch working_hours fallback to 20:00:00 (7:00 AM - 8:00 PM)
 orig_bcs = app._build_candidate_slots
 def patched_bcs(ts):
     ts_fixed = []
@@ -66,7 +66,7 @@ for p in baseline:
 first_diff_sec = None
 for sec in sec_order:
     b_slots = sorted([(p['day'], p['start'], p['course'], p['room']) for p in b_by_sec.get(sec, [])])
-    c_slots = sorted([(p['day'], p['start'], p['course_name'], p.get('room_name')) for p in cur_by_sec.get(sec, [])])
+    c_slots = sorted([(p['day'], p['start'], p['course_code'], p.get('room_name')) for p in cur_by_sec.get(sec, [])])
     if b_slots != c_slots:
         print(f"First section with difference: {sec} (baseline count={len(b_slots)}, current count={len(c_slots)})")
         first_diff_sec = sec

@@ -86,8 +86,8 @@ class ExtendedFakeSupabase(FakeSupabase):
             {'room_id': 103, 'room_name': 'Active Room 103', 'room_type': 'Lecture Room', 'program_id': 1},
         ])
         self.tables['course'] = FilteringFakeTable('course', [
-            {'course_id': 10, 'course_name': 'IT 101', 'program_id': 1, 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
-            {'course_id': 20, 'course_name': 'IT 102', 'program_id': 1, 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
+            {'course_id': 10, 'course_code': 'IT 101', 'program_id': 1, 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
+            {'course_id': 20, 'course_code': 'IT 102', 'program_id': 1, 'year_level': 1, 'semester': '1st Semester', 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
         ])
         self.tables['professor'] = FilteringFakeTable('professor', [
             {'prof_id': 1, 'first_name': 'John', 'last_name': 'Doe', 'academic_ranking_id': 1, 'program_id': 1},
@@ -97,7 +97,7 @@ class ExtendedFakeSupabase(FakeSupabase):
             {'academic_ranking_id': 1, 'ranking_name': 'Instructor I', 'name': 'Instructor I', 'max_teaching_load': 18, 'max_preparations': 3, 'rate_per_hour': 200, 'program_id': 1},
             {'academic_ranking_id': 2, 'ranking_name': 'Assistant Professor', 'name': 'Assistant Professor', 'max_teaching_load': 21, 'max_preparations': 4, 'rate_per_hour': 300, 'program_id': 1},
         ])
-        self.tables['timeslot'] = FilteringFakeTable('timeslot', [
+        self.tables['working_hours'] = FilteringFakeTable('working_hours', [
             {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
             {'timeslot_id': 2, 'day': 'Saturday', 'start_time': '08:00:00', 'end_time': '12:00:00', 'lunch_time': None},
         ])
@@ -213,7 +213,7 @@ def test_admin_courses_crud_and_protection(extended_client):
 
     # Add Course
     res_add = client.post('/add_course', data={
-        'course_name': 'IT 103',
+        'course_code': 'IT 103',
         'program': 'BSIT',
         'year_level': '1',
         'semester': '1st Semester',
@@ -226,7 +226,7 @@ def test_admin_courses_crud_and_protection(extended_client):
 
     # Edit Course
     res_edit = client.post('/edit_course/10', data={
-        'course_name': 'IT 101 Updated',
+        'course_code': 'IT 101 Updated',
         'program': 'BSIT',
         'year_level': '1',
         'semester': '1st Semester',
@@ -281,23 +281,23 @@ def test_admin_access_to_academic_ranking_removed(extended_client):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5. Timeslots (/timeslot)
+# 5. Working hours (/working_hours)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_admin_timeslot_crud_and_protection(extended_client):
+def test_admin_working_hours_crud_and_protection(extended_client):
     client, fake_db = extended_client
     _login_as(client, 'admin')
 
     # Page view: no read-only banner, no dean/chair
-    res = client.get('/timeslot')
+    res = client.get('/working_hours')
     assert res.status_code == 200
     html = res.data.decode('utf-8')
     assert 'read-only mode' not in html.lower()
     assert 'dean' not in html.lower()
     assert 'chair' not in html.lower()
 
-    # Add Timeslot
-    res_add = client.post('/add_timeslot', data={
+    # Add working hours
+    res_add = client.post('/add_working_hours', data={
         'day': 'Friday',
         'start_time': '08:00',
         'end_time': '17:00',
@@ -305,29 +305,29 @@ def test_admin_timeslot_crud_and_protection(extended_client):
     })
     assert res_add.status_code in (200, 302)
 
-    # Edit Timeslot
-    res_edit = client.post('/edit_timeslot/2', data={
+    # Edit working hours
+    res_edit = client.post('/edit_working_hours/2', data={
         'start_time': '09:00',
         'end_time': '15:00',
     })
     assert res_edit.status_code in (200, 302)
 
     # Delete Monday (active classes scheduled on Monday) -> blocked
-    res_del_in_use = client.post('/delete_timeslot/1', headers={'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'})
+    res_del_in_use = client.post('/delete_working_hours/1', headers={'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'})
     assert res_del_in_use.status_code == 400
 
     # Delete Saturday (unused) -> allowed
-    res_del_unused = client.post('/delete_timeslot/2', headers={'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'})
+    res_del_unused = client.post('/delete_working_hours/2', headers={'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'})
     assert res_del_unused.status_code == 200
 
 
-def test_scheduler_blocked_from_timeslot(extended_client):
+def test_scheduler_blocked_from_working_hours(extended_client):
     client, _ = extended_client
     _login_as(client, 'scheduler')
-    assert client.get('/timeslot').status_code == 403
-    assert client.post('/add_timeslot', data={'day': 'Sunday'}).status_code == 403
-    assert client.post('/edit_timeslot/1', data={'start_time': '08:00'}).status_code == 403
-    assert client.get('/delete_timeslot/1').status_code == 403
+    assert client.get('/working_hours').status_code == 403
+    assert client.post('/add_working_hours', data={'day': 'Sunday'}).status_code == 403
+    assert client.post('/edit_working_hours/1', data={'start_time': '08:00'}).status_code == 403
+    assert client.get('/delete_working_hours/1').status_code == 403
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -395,7 +395,7 @@ def test_all_management_pages_clean_of_dean_and_chair(extended_client):
     admin_pages = [
         '/rooms',
         '/courses',
-        '/timeslot',
+        '/working_hours',
         '/schedules',
     ]
     for path in admin_pages:

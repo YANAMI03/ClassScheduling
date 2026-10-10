@@ -19,7 +19,7 @@ class FakeCourseQuery:
         courses = [
             {
                 'course_id': 1,
-                'course_name': 'CC-100',
+                'course_code': 'CC-100',
                 'program': 'BSIT',
                 'year_level': '1',
                 'major': 'General',
@@ -27,7 +27,7 @@ class FakeCourseQuery:
             },
             {
                 'course_id': 2,
-                'course_name': 'CC-101',
+                'course_code': 'CC-101',
                 'program': 'BSIT',
                 'year_level': '1',
                 'major': 'General',
@@ -72,7 +72,7 @@ def test_api_courses_filters_by_year_level_and_semester(monkeypatch):
     assert response.status_code == 200
     payload = response.get_json()
     assert len(payload['courses']) == 2
-    assert payload['courses'][0]['course_name'] == 'CC-100'
+    assert payload['courses'][0]['course_code'] == 'CC-100'
     assert fake_supabase.query.filters.get('year_level') == '1'
     assert fake_supabase.query.filters.get('semester') == '1st Semester'
 

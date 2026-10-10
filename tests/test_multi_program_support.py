@@ -2,7 +2,7 @@
 Comprehensive test suite for Multi-Program Support:
 - Programs CRUD and reference-protection deletion
 - Courses scoped to programs with per-program code uniqueness
-- Shared pools: rooms, timeslots, and cross-program professors
+- Shared pools: rooms, working_hours, and cross-program professors
 - Cross-program load validation and 'Also teaches in' badge computation
 - Multi-program schedule isolation and cross-program conflict prevention
 - Concurrency protection on confirm & restore
@@ -213,7 +213,7 @@ def test_admin_programs_crud(test_client, monkeypatch):
         {'id': 2, 'program_name': 'BSDS'},
     ]
     users_data = [{'id': 1, 'username': 'admin', 'role': 'Admin', 'program_id': 1}]
-    courses_data = [{'course_id': 101, 'course_name': 'IT101', 'program_id': 1}]
+    courses_data = [{'course_id': 101, 'course_code': 'IT101', 'program_id': 1}]
     mock_db = MockSupabaseClient({
         'program': programs_data,
         'users': users_data,
@@ -270,7 +270,7 @@ def test_courses_program_scoping_and_duplicate_rules(test_client, monkeypatch):
         {'id': 2, 'program_name': 'BSDS'},
     ]
     courses_data = [
-        {'course_id': 1, 'course_name': 'CS101', 'program_id': 1, 'semester': '1st Semester'},
+        {'course_id': 1, 'course_code': 'CS101', 'program_id': 1, 'semester': '1st Semester'},
     ]
     mock_db = MockSupabaseClient({
         'program': programs_data,
@@ -287,7 +287,7 @@ def test_courses_program_scoping_and_duplicate_rules(test_client, monkeypatch):
 
     # Same course code in ANOTHER program (BSDS, program_id=2) should succeed!
     res_diff_prog = test_client.post('/add_course', data={
-        'course_name': 'CS101',
+        'course_code': 'CS101',
         'program_id': '2',
         'year_level': '1',
         'semester': '1st Semester',
@@ -296,11 +296,11 @@ def test_courses_program_scoping_and_duplicate_rules(test_client, monkeypatch):
         'lab_hours': '0',
     }, follow_redirects=True)
     assert res_diff_prog.status_code == 200
-    assert len([c for c in mock_db.table('course').data if c['course_name'] == 'CS101']) == 2
+    assert len([c for c in mock_db.table('course').data if c['course_code'] == 'CS101']) == 2
 
     # Duplicate course code in the SAME program (BSIT, program_id=1) must be blocked
     res_same_prog = test_client.post('/add_course', data={
-        'course_name': 'CS101',
+        'course_code': ' cs101 ',
         'program_id': '1',
         'year_level': '1',
         'semester': '1st Semester',
@@ -308,7 +308,34 @@ def test_courses_program_scoping_and_duplicate_rules(test_client, monkeypatch):
         'lecture_hours': '3',
         'lab_hours': '0',
     }, follow_redirects=True)
-    assert b'already exists in BSIT' in res_same_prog.data
+    assert b'Course already exists in this program' in res_same_prog.data
+
+    # Duplicate preflight is scoped to the selected program.
+    search_other_program = test_client.get('/search_courses?q=CS101&program=2')
+    assert search_other_program.get_json()['exact_match'] is True
+    search_empty_program = test_client.get('/search_courses?q=CS101&program=3')
+    assert search_empty_program.get_json()['exact_match'] is False
+
+    # Editing keeps the current row out of its own duplicate check, but rejects
+    # a code already present in the target program.
+    edit_same_program = test_client.post('/edit_course/1', data={
+        'course_code': ' cs101 ',
+        'program_id': '1',
+        'year_level': '1',
+        'semester': '1st Semester',
+        'ilp_hours': '0',
+    })
+    assert edit_same_program.status_code == 302
+
+    edit_duplicate_program = test_client.post('/edit_course/1', data={
+        'course_code': 'CS101',
+        'program_id': '2',
+        'year_level': '1',
+        'semester': '1st Semester',
+        'ilp_hours': '0',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert edit_duplicate_program.status_code == 400
+    assert edit_duplicate_program.get_json()['message'] == 'Course already exists in this program.'
 
 
 # -----------------------------------------------------------------------------
@@ -317,11 +344,11 @@ def test_courses_program_scoping_and_duplicate_rules(test_client, monkeypatch):
 def test_professor_load_cross_program_import_and_badge(test_client, monkeypatch):
     # Test validate_import_data distinguishes cross-program courses
     target_program_courses = [
-        {'course_id': 10, 'course_name': 'IT101', 'program_id': 1},
+        {'course_id': 10, 'course_code': 'IT101', 'program_id': 1},
     ]
     all_institution_courses = [
-        {'course_id': 10, 'course_name': 'IT101', 'program_id': 1},
-        {'course_id': 20, 'course_name': 'DS201', 'program_id': 2},
+        {'course_id': 10, 'course_code': 'IT101', 'program_id': 1},
+        {'course_id': 20, 'course_code': 'DS201', 'program_id': 2},
     ]
     professors = [{'prof_id': 1, 'first_name': 'Grace', 'last_name': 'Hopper'}]
     existing_loads = []
@@ -351,8 +378,8 @@ def test_professor_load_cross_program_import_and_badge(test_client, monkeypatch)
 def test_professor_load_view_cross_program_badge(test_client, monkeypatch):
     # Prof 1 teaches in BSIT (3 units, 1 sec) AND BSDS (3 units, 2 sec = 6 units)
     courses_data = [
-        {'course_id': 1, 'course_name': 'IT101', 'program_id': 1, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_name': 'BSIT'}},
-        {'course_id': 2, 'course_name': 'DS201', 'program_id': 2, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_name': 'BSDS'}},
+        {'course_id': 1, 'course_code': 'IT101', 'program_id': 1, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_name': 'BSIT'}},
+        {'course_id': 2, 'course_code': 'DS201', 'program_id': 2, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_name': 'BSDS'}},
     ]
     profs_data = [
         {'prof_id': 1, 'first_name': 'Grace', 'last_name': 'Hopper', 'specialization': 'CS', 'program_id': 1, 'academic_ranking': {'name': 'Prof', 'min_units': 6, 'max_units': 18, 'min_hours': 10, 'max_hours': 40}},
@@ -433,7 +460,7 @@ def test_room_and_professor_schedule_cross_program_masking(test_client, monkeypa
             'archive': False,
             'session_type': 'Laboratory',
             'program': {'program_name': 'BSIT'},
-            'professor_load': {'professor_load_id': 1, 'prof_id': 1, 'course': {'course_name': 'IT-Net1'}, 'professor': profs_data[0]},
+            'professor_load': {'professor_load_id': 1, 'prof_id': 1, 'course': {'course_code': 'IT-Net1'}, 'professor': profs_data[0]},
         },
         {
             'schedule_id': 2,
@@ -448,7 +475,7 @@ def test_room_and_professor_schedule_cross_program_masking(test_client, monkeypa
             'archive': False,
             'session_type': 'Laboratory',
             'program': {'program_name': 'BSDS'},
-            'professor_load': {'professor_load_id': 2, 'prof_id': 1, 'course': {'course_name': 'DS-Math'}, 'professor': profs_data[0]},
+            'professor_load': {'professor_load_id': 2, 'prof_id': 1, 'course': {'course_code': 'DS-Math'}, 'professor': profs_data[0]},
         },
     ]
 
@@ -456,11 +483,11 @@ def test_room_and_professor_schedule_cross_program_masking(test_client, monkeypa
         'room': rooms_data,
         'professor': profs_data,
         'professor_load': [
-            {'professor_load_id': 1, 'id': 1, 'prof_id': 1, 'course': {'course_name': 'IT-Net1'}},
-            {'professor_load_id': 2, 'id': 2, 'prof_id': 1, 'course': {'course_name': 'DS-Math'}},
+            {'professor_load_id': 1, 'id': 1, 'prof_id': 1, 'course': {'course_code': 'IT-Net1'}},
+            {'professor_load_id': 2, 'id': 2, 'prof_id': 1, 'course': {'course_code': 'DS-Math'}},
         ],
         'schedule': sched_data,
-        'timeslot': [],
+        'working_hours': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
     monkeypatch.setattr(app_module, '_get_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
@@ -595,4 +622,3 @@ def test_restore_schedule_cross_program_conflict(test_client, monkeypatch):
     assert b'Conflict with active schedule of another program' in res_restore.data
     # Verify the item remains archived
     assert archived_bsit_sched['archive'] is True
-

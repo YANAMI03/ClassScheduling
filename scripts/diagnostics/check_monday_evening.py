@@ -50,4 +50,4 @@ with client.session_transaction() as sess:
 mon_6pm = [p for p in preview if p['day'] == 'Monday' and p['start'] in ('05:00 PM', '06:00 PM')]
 print("CLASSES AT 5PM/6PM ON MONDAY IN CURRENT PREVIEW:")
 for p in sorted(mon_6pm, key=lambda x: (x['start'], x['section'])):
-    print(f"  {p['start']} - {p['end']} | Sec: {p['section']:<12} | Course: {p['course_name']:<12} | Prof: {p['professor_name']:<25} | Room: {p.get('room_name')}")
+    print(f"  {p['start']} - {p['end']} | Sec: {p['section']:<12} | Course: {p['course_code']:<12} | Prof: {p['professor_name']:<25} | Room: {p.get('room_name')}")

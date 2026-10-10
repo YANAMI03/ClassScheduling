@@ -292,7 +292,7 @@ def audit_failures():
 
     print(f"\nTotal sessions that failed: {len(failed_sessions)}")
     for s_type, course, assigned_prof, section_name, yr, sec_key in failed_sessions:
-        print(f"\n--- AUDIT: {course.get('course_name')} ({s_type}) for Section {section_name} ---")
+        print(f"\n--- AUDIT: {course.get('course_code')} ({s_type}) for Section {section_name} ---")
         print(f"    Assigned Professor: {assigned_prof.get('professor_name')} (key: {assigned_prof.get('professor_key')})")
         reasons = audit_session_rejections('Laboratory' if 'Lab' in s_type else 'Lecture', 2, course, assigned_prof, section_name, yr, sec_key)
         for r, cnt in reasons.most_common():

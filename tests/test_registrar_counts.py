@@ -46,8 +46,8 @@ class MockSupabase:
 def test_multiple_professors_sum_sections_per_course(monkeypatch):
     """Change 2: total_sections = SUM(sections) across professor_load rows (Prof A 2 + Prof B 1 = 3)."""
     courses = [
-        {'course_id': 101, 'course_name': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
-        {'course_id': 102, 'course_name': 'CC-102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 101, 'course_code': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 102, 'course_code': 'CC-102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
     ]
     # Course 101: Prof 1 has 2 sections, Prof 2 has 1 section => total = 3
     # Course 102: Prof 3 has 3 sections => total = 3
@@ -70,8 +70,8 @@ def test_multiple_professors_sum_sections_per_course(monkeypatch):
 def test_course_with_no_load_blocks_generation(monkeypatch):
     """Change 2: A course with no professor_load rows counts as a mismatch (0 sections) and blocks generation."""
     courses = [
-        {'course_id': 101, 'course_name': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
-        {'course_id': 102, 'course_name': 'CC-102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 101, 'course_code': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 102, 'course_code': 'CC-102', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
     ]
     loads = [
         {'id': 1, 'prof_id': 1, 'course_id': 101, 'sections': 2},
@@ -87,8 +87,8 @@ def test_course_with_no_load_blocks_generation(monkeypatch):
 def test_mismatched_section_counts_blocks_generation(monkeypatch):
     """Change 2: All courses in same year level + semester must have same section count."""
     courses = [
-        {'course_id': 101, 'course_name': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
-        {'course_id': 102, 'course_name': 'MATH-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 101, 'course_code': 'CC-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
+        {'course_id': 102, 'course_code': 'MATH-101', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1},
     ]
     loads = [
         {'id': 1, 'prof_id': 1, 'course_id': 101, 'sections': 3},
@@ -107,9 +107,9 @@ def test_specialization_groups_and_naming(monkeypatch):
     """Change 3: Specialized courses group and name sections per specialization (e.g. 3A-Networking)."""
     # 3rd year 2nd sem is specialized
     courses = [
-        {'course_id': 301, 'course_name': 'IT-DB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 302, 'course_name': 'IT-WEB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 303, 'course_name': 'IT-NET1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 301, 'course_code': 'IT-DB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 302, 'course_code': 'IT-WEB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 303, 'course_code': 'IT-NET1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
     ]
     loads = [
         {'id': 1, 'prof_id': 1, 'course_id': 301, 'sections': 2},
@@ -135,10 +135,10 @@ def test_general_courses_must_match_sum_of_specialization_groups(monkeypatch):
     """Change 3: General course total_sections must equal sum of section counts across all specialization groups."""
     # Database (2) + Web (1) + Networking (1) = 4 required for General
     courses = [
-        {'course_id': 301, 'course_name': 'IT-DB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
-        {'course_id': 302, 'course_name': 'IT-WEB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
-        {'course_id': 303, 'course_name': 'IT-NET1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
-        {'course_id': 304, 'course_name': 'GE-ETHICS', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
+        {'course_id': 301, 'course_code': 'IT-DB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Database Systems', 'program_id': 1},
+        {'course_id': 302, 'course_code': 'IT-WEB1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Web Systems', 'program_id': 1},
+        {'course_id': 303, 'course_code': 'IT-NET1', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'Networking', 'program_id': 1},
+        {'course_id': 304, 'course_code': 'GE-ETHICS', 'year_level': 3, 'semester': '2nd Semester', 'specialization': 'General', 'program_id': 1},
     ]
     # Case A: GE-ETHICS has 3 sections (mismatch: 3 != 4) -> should block
     loads_mismatch = [

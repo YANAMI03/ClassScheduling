@@ -75,7 +75,17 @@ class FakeArchiveQuery:
                             'archived_at': '2026-09-01T12:00:00Z',
                             'archived_by': 'Scheduler',
                             'archive_reason': 'Replaced on confirmation',
-                            'course': {'course_name': 'IT101 - Intro to Computing'},
+                            'course': {'course_code': 'IT101 - Intro to Computing'},
+                            'professor_load': {
+                                'id': 101,
+                                'professor_name': 'Alan Turing',
+                                'course': {
+                                    'program_id': 1,
+                                    'program': {'program_name': 'BSIT'},
+                                    'course_code': 'IT101 - Intro to Computing',
+                                    'semester': '1st Semester',
+                                },
+                            },
                             'professor': {'first_name': 'Alan', 'last_name': 'Turing'},
                             'room': {'room_name': 'Room 101'},
                         }
@@ -273,7 +283,7 @@ def test_confirm_preview_second_semester_sets_active_semester_and_redirects(monk
         session['schedule_preview'] = [
             {
                 'course_id': 21,
-                'course_name': 'IT202 - Object Oriented Programming',
+                'course_code': 'IT202 - Object Oriented Programming',
                 'section': '2A',
                 'prof_id': 54,
                 'room_id': 21,
@@ -736,6 +746,11 @@ def test_archive_schedule_payload_only_valid_columns(monkeypatch):
     updated_payload = {}
 
     class InterceptUpdateQuery(FakeArchiveQuery):
+        def execute(self):
+            if self.table_name == 'schedule_with_semester':
+                return FakeResponse([{'schedule_id': 1}])
+            return super().execute()
+
         def update(self, payload):
             updated_payload.update(payload)
             return self
@@ -761,7 +776,6 @@ def test_archive_schedule_payload_only_valid_columns(monkeypatch):
     # Must NOT contain non-existent columns
     assert 'archived_by' not in updated_payload
     assert 'archive_reason' not in updated_payload
-
 
 
 

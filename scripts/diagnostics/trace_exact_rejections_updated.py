@@ -32,7 +32,7 @@ def run_and_trace():
         query = app.supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester)
         if user_prog_id:
             query = query.eq('program_id', user_prog_id)
-        all_courses = query.order('year_level').order('course_name').execute().data or []
+        all_courses = query.order('year_level').order('course_code').execute().data or []
         for c in all_courses:
             p_rel = app._rel(c, 'program') or {}
             c['program_name'] = p_rel.get('program_name') or program or ''
@@ -50,7 +50,7 @@ def run_and_trace():
             seen_cids = set()
             deduped = []
             for c in courses_by_year[yl]:
-                cid = c.get('course_id') or c.get('course_name')
+                cid = c.get('course_id') or c.get('course_code')
                 if cid not in seen_cids:
                     seen_cids.add(cid)
                     deduped.append(c)
@@ -110,12 +110,12 @@ def run_and_trace():
         lecture_rooms = [r for r in all_rooms if app._is_lecture_room_type(r.get('room_type'))]
         lab_rooms = [r for r in all_rooms if app._is_lab_room_type(r.get('room_type'))]
 
-        timeslots = (app.supabase.table('timeslot').select('*').execute().data) or []
-        timeslots.sort(key=lambda t: str(t.get('start_time') or ''))
-        candidate_slots = app._build_candidate_slots(timeslots)
+        working_hours = (app.supabase.table('working_hours').select('*').execute().data) or []
+        working_hours.sort(key=lambda t: str(t.get('start_time') or ''))
+        candidate_slots = app._build_candidate_slots(working_hours)
 
         _day_cutoff_map = {}
-        for _ts in timeslots:
+        for _ts in working_hours:
             _d = (_ts.get('day') or '').strip()
             _cutoff = _ts.get('professor_cutoff')
             if _d and _cutoff and _d not in _day_cutoff_map:

@@ -18,6 +18,6 @@ for i, r in enumerate(backup_rows):
     p = profs.get(r['prof_id'], {})
     c = courses.get(r['course_id'], {})
     pname = f"{p.get('first_name')} {p.get('last_name')}"
-    cname = c.get('course_name')
+    cname = c.get('course_code')
     yl = c.get('year_level')
     print(f"{i:2d}: id={r['id']:3d} | Prof: {pname:<25} (id={r['prof_id']:2d}) | Course: {cname:<15} (id={r['course_id']:2d}, yr={yl}) | Secs: {r['sections']}")

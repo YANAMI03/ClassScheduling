@@ -52,16 +52,16 @@ for e in preview:
     pid = e['prof_id']
     rid = e['room_id']
 
-    sec_sched.setdefault(sec, []).append((d, st, et, e['course_name'], e['session_type']))
-    prof_sched.setdefault(pid, []).append((d, st, et, e['course_name'], sec, e.get('room_name')))
-    room_sched.setdefault(rid, []).append((d, st, et, sec, e['course_name']))
+    sec_sched.setdefault(sec, []).append((d, st, et, e['course_code'], e['session_type']))
+    prof_sched.setdefault(pid, []).append((d, st, et, e['course_code'], sec, e.get('room_name')))
+    room_sched.setdefault(rid, []).append((d, st, et, sec, e['course_code']))
     prof_hours[pid] = prof_hours.get(pid, 0.0) + dur
 
-# Fetch rooms & timeslots
+# Fetch rooms & working_hours
 rooms = app.supabase.table('room').select('*').eq('program_id', 1).execute().data or []
-timeslots = app.supabase.table('timeslot').select('*').execute().data or []
-timeslots.sort(key=lambda t: str(t.get('start_time') or ''))
-candidate_slots = app._build_candidate_slots(timeslots)
+working_hours = app.supabase.table('working_hours').select('*').execute().data or []
+working_hours.sort(key=lambda t: str(t.get('start_time') or ''))
+candidate_slots = app._build_candidate_slots(working_hours)
 slot_groups = {}
 for slot in candidate_slots:
     slot_groups.setdefault(slot['day'], []).append(slot)
@@ -69,7 +69,7 @@ for slot in candidate_slots:
 day_order = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4}
 
 _day_cutoff_map = {}
-for _ts in timeslots:
+for _ts in working_hours:
     _d = (_ts.get('day') or '').strip()
     _cutoff = _ts.get('professor_cutoff')
     if _d and _cutoff and _d not in _day_cutoff_map:
