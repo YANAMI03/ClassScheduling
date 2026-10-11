@@ -110,6 +110,28 @@ def test_edit_course_updates_semester(monkeypatch):
     assert len(fake_supabase.table_obj.updated) > 0
     assert fake_supabase.table_obj.updated[0]['semester'] == '2nd Semester'
     assert fake_supabase.table_obj.updated[0]['course_code'] == 'CC-100'
+    assert fake_supabase.table_obj.updated[0]['units'] == 4
+
+
+def test_edit_course_with_blank_ilp_defaults_to_zero(monkeypatch):
+    client, fake_supabase = _build_client(monkeypatch)
+
+    response = client.post('/edit_course/7', data={
+        'course_code': 'CC-101',
+        'units': '3',
+        'lecture_hours': '3',
+        'lab_hours': '0',
+        'ilp_hours': '',
+        'program': 'BSIT',
+        'year_level': '2',
+        'semester': '1st Semester',
+    })
+
+    assert response.status_code == 302
+    assert len(fake_supabase.table_obj.updated) > 0
+    assert fake_supabase.table_obj.updated[0]['ilp_hours'] == 0
+    assert fake_supabase.table_obj.updated[0]['year_level'] == '2'
+    assert fake_supabase.table_obj.updated[0]['units'] == 3
 
 
 def test_add_course_requires_semester(monkeypatch):

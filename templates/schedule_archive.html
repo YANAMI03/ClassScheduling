@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Schedule Archive - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Schedule Archive</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-archive me-1"></i>Archive</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Schedule History</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
@@ -119,9 +125,14 @@
                         <div class="small text-muted">{{ batch.section_count }} section(s): {{ batch.sections_preview }}</div>
                     </td>
                     <td>
-                        <div class="d-flex align-items-center">
-                            <i class="bx bx-user me-1 text-muted"></i>
-                            <span>{{ batch.archived_by or 'System' }}</span>
+                        <div class="d-flex flex-column">
+                            <div class="d-flex align-items-center">
+                                <i class="bx bx-user me-1 text-muted"></i>
+                                <span class="fw-medium">{{ batch.archived_by or 'System' }}</span>
+                            </div>
+                            {% if batch.archived_by_title and batch.archived_by_title != 'Role/title unavailable' %}
+                            <small class="text-muted ms-3" style="font-size: 0.72rem;">{{ batch.archived_by_title }}</small>
+                            {% endif %}
                         </div>
                     </td>
                     <td>

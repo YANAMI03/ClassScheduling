@@ -421,7 +421,7 @@ def test_add_working_hours_day(monkeypatch):
         session['role'] = 'Admin'
 
     db = MockSupabase(working_hours=[
-        {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
+        {'working_hours_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
     ])
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
@@ -445,7 +445,7 @@ def test_add_working_hours_duplicate_rejected(monkeypatch):
         session['role'] = 'Admin'
 
     db = MockSupabase(working_hours=[
-        {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
+        {'working_hours_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
     ])
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
@@ -469,8 +469,8 @@ def test_delete_working_hours_day(monkeypatch):
         session['role'] = 'Admin'
 
     db = MockSupabase(working_hours=[
-        {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00'},
-        {'timeslot_id': 6, 'day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00'},
+        {'working_hours_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00'},
+        {'working_hours_id': 6, 'day': 'Saturday', 'start_time': '08:00:00', 'end_time': '20:00:00'},
     ])
     monkeypatch.setattr(app_module, 'supabase', db)
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)

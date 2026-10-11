@@ -140,7 +140,7 @@ class MockSupabase:
                 {'room_id': 1, 'room_name': 'Lab 101', 'room_type': 'Laboratory', 'department': 'CICT', 'program_id': 1},
             ]),
             'working_hours': MockTable('working_hours', [
-                {'timeslot_id': 1, 'semester_id': 10, 'start_day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
+                {'working_hours_id': 1, 'timeslot_id': 1, 'semester_id': 10, 'start_day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
             ]),
             'professor_load': MockTable('professor_load', []),
             'schedule': MockTable('schedule', []),

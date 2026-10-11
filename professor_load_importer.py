@@ -1078,8 +1078,6 @@ def execute_bulk_import(
                     'sections': sections,
                     'ilp_hours': ilp_hours,
                 }
-                if program_id is not None:
-                    ins['program_id'] = int(program_id)
                 queued_inserts[ins_key] = ins
                 inserts_to_run.append(ins)
 
@@ -1095,13 +1093,14 @@ def execute_bulk_import(
             except Exception as e:
                 err_str = str(e)
                 # Fallback if DB column ilp_hours or professor_key causes schema cache issue
-                if any(x in err_str for x in ('42703', 'PGRST204', 'ilp_hours', 'prof_id', 'professor_key')):
+                if any(x in err_str for x in ('42703', 'PGRST204', 'ilp_hours', 'prof_id', 'professor_key', 'program_id')):
                     fallback_inserts = []
                     for d in inserts_to_run:
                         f_row = dict(d)
                         f_row.pop('ilp_hours', None)
                         f_row.pop('professor_key', None)
                         f_row.pop('prof_id', None)
+                        f_row.pop('program_id', None)
                         fallback_inserts.append(f_row)
                     try:
                         supabase_client.table('professor_load').insert(fallback_inserts).execute()

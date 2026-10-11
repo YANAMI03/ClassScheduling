@@ -263,7 +263,7 @@ def test_6_multiple_sections_global_distribution(monkeypatch):
     ]
 
     working_hours = [
-        {'timeslot_id': 1, 'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
+        {'working_hours_id': 1, 'timeslot_id': 1, 'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
     ]
 
     table_data = {
@@ -343,7 +343,7 @@ def test_7_existing_schedule_no_conflicts(monkeypatch):
     ]
 
     working_hours = [
-        {'timeslot_id': 1, 'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
+        {'working_hours_id': 1, 'timeslot_id': 1, 'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
     ]
 
     # Existing booking in Room 101 on Monday from 07:00 to 12:00 for another program (BSIS)

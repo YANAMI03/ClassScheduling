@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Rooms - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Room Management</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-building me-1"></i>Facilities</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Room Management</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -220,11 +226,9 @@ $(function(){
                         var badgeClass = isLab ? 'badge-warning' : (isLec ? 'badge-success' : 'badge-secondary');
                         var badgeLabel = isLab ? 'Laboratory Room' : (isLec ? 'Lecture Room' : (room.room_type || 'General'));
                         var typeBadge = '<span class="badge-custom ' + badgeClass + '">' + escapeHtml(badgeLabel) + '</span>';
-                        var progName = room.program_name || 'General';
-                        var progBadge = '<span class="badge-custom badge-info">' + escapeHtml(progName) + '</span>';
                         return '<div class="room-search-item">' +
                                '  <span class="room-search-item__name">' + highlightedName + '</span>' +
-                               '  <div class="room-search-item__details">' + progBadge + ' ' + typeBadge + '</div>' +
+                               '  <div class="room-search-item__details">' + typeBadge + '</div>' +
                                '</div>';
                     }).join('');
                     $dropdown.html(html).removeClass('d-none');

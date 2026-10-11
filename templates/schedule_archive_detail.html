@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Archived Schedule Details - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Archived Schedule Details</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <a href="{{ url_for('schedule_archive') }}"><i class="bx bx-archive me-1"></i>Archive</a>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Batch Details</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
@@ -18,7 +24,7 @@
         </div>
         <h1 class="page-title mb-1">{{ batch_info.semester }} ({{ batch_info.program or 'All Programs' }})</h1>
         <p class="page-subtitle mb-0">
-            Archived on <strong>{{ batch_info.archived_at_fmt }}</strong> by <strong>{{ batch_info.archived_by or 'Scheduler' }}</strong>
+            Archived on <strong>{{ batch_info.archived_at_fmt }}</strong> by <strong>{{ batch_info.archived_by or 'Scheduler' }}</strong>{% if batch_info.archived_by_title and batch_info.archived_by_title != 'Role/title unavailable' %} <span class="text-muted">({{ batch_info.archived_by_title }})</span>{% endif %}
             {% if batch_info.archive_reason %} &bull; <em>{{ batch_info.archive_reason }}</em>{% endif %}
         </p>
     </div>

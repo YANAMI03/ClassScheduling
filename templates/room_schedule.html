@@ -1,12 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Room Schedule - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Room Schedule</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-calendar me-1"></i>Schedules</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Room Schedule</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 <div class="page-header d-flex align-items-center justify-content-between mb-4">
     <div>
         <h1 class="page-title">Room Schedule</h1>
-        <p class="page-subtitle">Read-only view of room utilization and bookings for the active semester</p>
+        <p class="page-subtitle">
+            Read-only view of room utilization and bookings for the active semester
+            {% if is_super_admin and program_filter %}
+            &bull; <span class="badge-custom badge-primary"><i class="bx bx-buildings me-1"></i>{{ program_filter }}</span>
+            {% endif %}
+        </p>
     </div>
     {% if active_semester %}
     <span class="badge bg-primary fs-6 px-3 py-2">
@@ -18,8 +29,26 @@
 <!-- Filter Controls -->
 <div class="card-custom mb-4 p-3 bg-light-subtle">
     <form method="get" class="row g-2 align-items-end" id="roomScheduleFilterForm">
+        {% if is_super_admin and programs %}
+        <!-- Program Filter -->
+        <div class="col-md-2">
+            <label class="form-label small fw-bold text-muted mb-1" for="programFilter">
+                <i class="bx bx-buildings me-1"></i>Program
+            </label>
+            <select id="programFilter" name="program" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for p in programs %}
+                <option value="{{ p.program_name }}" {% if p.program_name == program_filter %}selected{% endif %}>{{ p.program_name }}</option>
+                {% else %}
+                {% if program_filter %}
+                <option value="{{ program_filter }}" selected>{{ program_filter }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
         <!-- Room Selector -->
-        <div class="col-md-3">
+        <div class="{% if is_super_admin and programs %}col-md-3{% else %}col-md-3{% endif %}">
             <label class="form-label small fw-bold text-muted mb-1" for="roomFilter">Room</label>
             <select id="roomFilter" name="room_id" class="form-select form-select-sm">
                 <option value="">All Rooms</option>
@@ -43,7 +72,7 @@
         </div>
 
         <!-- Year Level Filter -->
-        <div class="col-md-2">
+        <div class="{% if is_super_admin and programs %}col-md-1{% else %}col-md-2{% endif %}">
             <label class="form-label small fw-bold text-muted mb-1" for="yearFilter">Year Level</label>
             <select id="yearFilter" name="year" class="form-select form-select-sm">
                 <option value="">All Years</option>
@@ -54,7 +83,7 @@
         </div>
 
         <!-- Major Filter -->
-        <div class="col-md-2">
+        <div class="{% if is_super_admin and programs %}col-md-2{% else %}col-md-2{% endif %}">
             <label class="form-label small fw-bold text-muted mb-1" for="majorFilter">Major</label>
             <select id="majorFilter" name="major" class="form-select form-select-sm">
                 <option value="">All Majors</option>
@@ -65,12 +94,12 @@
         </div>
 
         <!-- Submit & Clear -->
-        <div class="col-md-3 d-flex gap-2">
+        <div class="col-md-2 d-flex gap-2">
             <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
                 <i class="bx bx-filter"></i> Apply Filters
             </button>
             {% if selected_room_id or selected_day or year_filter or major_filter %}
-            <a href="/room_schedule" class="btn btn-outline-secondary btn-sm" title="Clear all filters">
+            <a href="/room_schedule{% if is_super_admin and program_filter %}?program={{ program_filter|urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm" title="Clear all filters">
                 <i class="bx bx-x"></i>
             </a>
             {% endif %}
@@ -81,7 +110,7 @@
 {% if rooms %}
 <div class="d-grid gap-3">
     {% for room in rooms %}
-    <div class="section-card card-custom p-3 transition" data-href="/room_schedule/{{ room.room_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}" tabindex="0" role="button" aria-label="View schedule for Room {{ room.room_name }}" style="cursor: pointer;">
+    <div class="section-card card-custom p-3 transition" data-href="/room_schedule/{{ room.room_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}{% if is_super_admin and program_filter %}&program={{ program_filter | urlencode }}{% endif %}" tabindex="0" role="button" aria-label="View schedule for Room {{ room.room_name }}" style="cursor: pointer;">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
             <div class="section-card__info">
                 <div class="d-flex align-items-center gap-2 mb-1">
@@ -120,7 +149,7 @@
         <div class="empty-state__icon fs-1 text-muted mb-2"><i class="bx bx-building"></i></div>
         <div class="empty-state__text text-muted mb-3">No room schedules match the active criteria.</div>
         {% if selected_room_id or selected_day or year_filter or major_filter %}
-        <a href="/room_schedule" class="btn btn-outline-secondary btn-sm">
+        <a href="/room_schedule{% if is_super_admin and program_filter %}?program={{ program_filter|urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm">
             <i class="bx bx-x me-1"></i> Reset Filters
         </a>
         {% endif %}

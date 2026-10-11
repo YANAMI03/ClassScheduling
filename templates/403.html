@@ -2,7 +2,13 @@
 
 {% block title %}Access Denied - Scheduler{% endblock %}
 
-{% block header_title %}<h5 class="header__title">Access Denied</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-error me-1"></i>Error</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Access Denied</span>
+</nav>
+{% endblock %}
 
 {% block head_extra %}
 <style>
