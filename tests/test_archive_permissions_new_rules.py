@@ -543,14 +543,81 @@ def test_admin_permanently_deletes_archived_batch(monkeypatch, test_setup):
         sess['role'] = 'Admin'
 
     res = client.post(f'/delete_schedule_archive/{batch_uuid}', follow_redirects=False)
-    assert res.status_code == 302
-    assert '/schedule_archive' in res.headers.get('Location', '')
+    assert res.status_code == 403
 
-    # Row is deleted from schedule
-    assert len(store['schedule']) == 0
+    # Row is NOT deleted from schedule (Admin is read-only)
+    assert len(store['schedule']) == 1
 
-    # Activity log recorded
-    assert any(
-        log['action'] == 'delete' and log['target_type'] == 'schedule' and batch_uuid in log['target_detail']
-        for log in test_setup
-    )
+
+def test_archive_schedule_when_no_active_schedule_exists(monkeypatch, test_setup):
+    """Archiving when no active rows exist flashes info message and does not log an archive activity."""
+    client = app_module.app.test_client()
+
+    store = {
+        'schedule': [],
+        'schedule_with_semester': []
+    }
+    mock_sb = MockSupabase(store)
+    monkeypatch.setattr(app_module, 'supabase', mock_sb)
+
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1'
+        sess['username'] = 'bsit_scheduler'
+        sess['role'] = 'Scheduler'
+        sess['program'] = 'BSIT'
+        sess['program_id'] = 1
+
+    res = client.post('/archive_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+    assert res.status_code == 200
+    html = res.data.decode('utf-8')
+    assert 'No active schedule found to archive' in html
+    assert not any(log['action'] == 'archive' for log in test_setup)
+
+
+def test_archive_schedule_fallback_chunks_large_batches(monkeypatch, test_setup):
+    """Fallback archiving chunks queries into <= 200 IDs per update request."""
+    client = app_module.app.test_client()
+
+    # 250 active schedule rows
+    schedule_rows = [
+        {
+            'schedule_id': i,
+            'program_id': 1,
+            'archive': False,
+            'archived_at': None,
+            'archive_batch_id': None,
+        }
+        for i in range(1, 251)
+    ]
+    view_rows = [
+        {
+            'schedule_id': i,
+            'program_id': 1,
+            'semester': '2nd Semester',
+            'archive': False,
+        }
+        for i in range(1, 251)
+    ]
+
+    store = {
+        'schedule': schedule_rows,
+        'schedule_with_semester': view_rows
+    }
+    mock_sb = MockSupabase(store)
+    monkeypatch.setattr(app_module, 'supabase', mock_sb)
+
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1'
+        sess['username'] = 'bsit_scheduler'
+        sess['role'] = 'Scheduler'
+        sess['program'] = 'BSIT'
+        sess['program_id'] = 1
+
+    res = client.post('/archive_schedule', data={'semester': '2nd Semester'}, follow_redirects=True)
+    assert res.status_code == 200
+    html = res.data.decode('utf-8')
+    assert 'Active schedule has been archived successfully (250 classes archived)' in html
+
+    # All 250 rows in store should now be archived
+    assert all(r['archive'] is True for r in store['schedule'])
+    assert all(r['archive_batch_id'] is not None for r in store['schedule'])

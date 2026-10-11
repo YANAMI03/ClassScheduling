@@ -142,7 +142,7 @@ def test_role_normalization():
 # ──────────────────────────────────────────────────────────────────────────────
 
 def test_unauthenticated_redirects_to_login(test_client):
-    for path in ['/schedules', '/courses', '/users', '/professor_load', '/']:
+    for path in ['/schedules', '/courses', '/users', '/professor_load', '/home']:
         res = test_client.get(path)
         assert res.status_code == 302, f"Expected redirect on {path}"
         assert '/login' in res.headers.get('Location', '')
@@ -165,9 +165,9 @@ def test_admin_allowed_pages(test_client):
 def test_admin_restricted_pages_return_403(test_client):
     _login_as(test_client, 'admin')
 
-    # Blocked: Generate Schedule (/), Professor Load, generate_schedule, preview_schedule
+    # Blocked: Generate Schedule (/home), Professor Load, generate_schedule, preview_schedule
     restricted_pages = [
-        '/',
+        '/home',
         '/professor_load',
         '/generate_schedule',
         '/preview_schedule',
@@ -230,8 +230,8 @@ def test_admin_allowed_data_setup_writes(test_client):
 def test_scheduler_allowed_pages(test_client):
     _login_as(test_client, 'scheduler')
 
-    # Allowed: Generate Schedule (/), Professor Load, Schedules, Professor Schedule, Room Schedule, Archive
-    for path in ['/', '/professor_load', '/schedules', '/professor_schedule', '/room_schedule', '/schedule_archive']:
+    # Allowed: Generate Schedule (/home), Professor Load, Schedules, Professor Schedule, Room Schedule, Archive
+    for path in ['/home', '/professor_load', '/schedules', '/professor_schedule', '/room_schedule', '/schedule_archive']:
         res = test_client.get(path)
         assert res.status_code == 200, f"Scheduler should have access to {path}, got {res.status_code}"
 
@@ -300,16 +300,21 @@ def test_scheduler_denied_api_courses_and_admin_allowed(test_client):
 def test_viewer_permissions(test_client):
     _login_as(test_client, 'viewer')
 
-    # Allowed: Schedules, Professor Schedule, Room Schedule
-    for path in ['/schedules', '/professor_schedule', '/room_schedule']:
+    # Allowed: Section Schedule, Room Schedule
+    for path in ['/schedules', '/room_schedule']:
         res = test_client.get(path)
         assert res.status_code == 200, f"Viewer should have access to {path}, got {res.status_code}"
 
-    # Blocked: Schedule Archive (403), Users, Activity Log, Courses, Rooms, Timeslots, Professor Load, Generate Schedule
-    blocked = ['/schedule_archive', '/users', '/activity_log', '/courses', '/rooms', '/working_hours', '/professor_load', '/']
+    # Blocked: Professor Schedule (403), Schedule Archive (403), Users, Activity Log, Courses, Rooms, Timeslots, Professor Load
+    blocked = ['/professor_schedule', '/schedule_archive', '/users', '/activity_log', '/courses', '/rooms', '/working_hours', '/professor_load']
     for path in blocked:
         res = test_client.get(path)
         assert res.status_code == 403, f"Viewer should receive 403 on {path}, got {res.status_code}"
+
+    # Opening / should redirect to Section Schedule page
+    res_landing = test_client.get('/')
+    assert res_landing.status_code == 302
+    assert '/schedules' in res_landing.headers.get('Location', '')
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -339,7 +344,7 @@ def test_admin_sidebar_visibility(test_client):
 
 def test_scheduler_sidebar_visibility(test_client):
     _login_as(test_client, 'scheduler')
-    res = test_client.get('/')
+    res = test_client.get('/home')
     assert res.status_code == 200
     soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
 
@@ -364,10 +369,10 @@ def test_viewer_sidebar_visibility(test_client):
     assert res.status_code == 200
     soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
 
-    # Viewer should see Section Schedule, Professor Schedule, Room Schedule
+    # Viewer should see Section Schedule and Room Schedule ONLY (Professor Schedule NOT visible)
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/schedules') is not None
-    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professor_schedule') is not None
     assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/room_schedule') is not None
+    assert soup.find('a', href=lambda h: h and h.rstrip('/') == '/professor_schedule') is None
 
     # Viewer should NOT see Schedule Archive, Courses, Rooms, Timeslots, Generate Schedule, Professor Load, Users, Activity Log
     assert soup.find('a', href=lambda h: h and '/schedule_archive' in h) is None
@@ -414,12 +419,13 @@ def test_schedule_archive_page_controls_by_role(test_client):
     assert soup_sched.find(id='deleteArchiveModal') is None
     assert soup_sched.find('button', class_='delete-batch-btn') is None
 
-    # Admin: CAN see permanent delete modal
+    # Admin: READ-ONLY (no restore/delete actions, CANNOT see delete modal or delete button)
     _login_as(test_client, 'admin')
     res_admin = test_client.get('/schedule_archive')
     assert res_admin.status_code == 200
     soup_admin = BeautifulSoup(res_admin.data.decode('utf-8'), 'html.parser')
-    assert soup_admin.find(id='deleteArchiveModal') is not None
+    assert soup_admin.find(id='deleteArchiveModal') is None
+    assert soup_admin.find('button', class_='delete-batch-btn') is None
 
 
 def test_scheduler_schedules_page_shows_edit_and_archive_controls(test_client):

@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ClassScheduling | NEUST CICT</title>
+    <meta name="description" content="NEUST CICT Class Scheduling and Room Allocation System. Conflict-free schedule generation, faculty load management, and room allocation.">
+
+    <!-- Fonts: Plus Jakarta Sans via Google Fonts with system fallback -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Standalone Landing Page Stylesheet -->
+    <link href="{{ url_for('static', filename='landing.css') }}" rel="stylesheet">
+</head>
+<body>
+
+    <!-- 1. NAVIGATION -->
+    <header class="landing-nav">
+        <div class="container landing-nav__inner">
+            <a href="/" class="landing-brand" aria-label="ClassScheduling Home">
+                <span class="landing-brand__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                </span>
+                <img src="{{ url_for('static', filename='images/cict_logo.png') }}"
+                     alt="NEUST CICT Logo"
+                     class="landing-brand__logo"
+                     onerror="this.style.display='none';"
+                     onload="this.style.display='inline-block'; var prev = this.previousElementSibling; if (prev) prev.style.display='none';">
+                <span class="landing-brand__name">ClassScheduling</span>
+            </a>
+
+            <div class="landing-nav__right">
+                <nav aria-label="Main Navigation">
+                    <ul class="landing-nav__links">
+                        <li><a href="#features" class="landing-nav__link">Features</a></li>
+                        <li><a href="#workflow" class="landing-nav__link">How it works</a></li>
+                    </ul>
+                </nav>
+
+                <div class="landing-nav__actions">
+                    <a href="{{ url_for('signup') }}" class="btn btn-outline-dark">Sign up</a>
+                    <a href="{{ url_for('login') }}" class="btn btn-primary">Sign in</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- 2. HERO SECTION -->
+        <section class="landing-hero" aria-label="Hero Overview">
+            <div class="container landing-hero__grid">
+                <div class="landing-hero__content">
+                    <div class="landing-hero__badge">
+                        NEUST &middot; College of ICT
+                    </div>
+                    <h1 class="landing-hero__title">
+                        Conflict-free class schedules, <span class="landing-hero__title-accent">generated in seconds.</span>
+                    </h1>
+                    <p class="landing-hero__paragraph">
+                        Import professor loads and let the system place every section, room, and time slot for each program, with conflict detection built in.
+                    </p>
+                    <div class="landing-hero__buttons">
+                        <a href="{{ url_for('login') }}" class="btn btn-primary">Sign in to get started</a>
+                        <a href="{{ url_for('signup') }}" class="btn btn-outline-dark">Sign up</a>
+                        <a href="#workflow" class="hero-link-arrow" data-loader-skip>See how it works &rarr;</a>
+                    </div>
+                </div>
+
+                <!-- Right Side: Sample Weekly Timetable Card (Static Illustration) -->
+                <div class="timetable-card" aria-label="Sample Timetable Preview">
+                    <div class="timetable-card__header">
+                        <span class="timetable-card__title">BSIT &middot; Section 3A</span>
+                        <span class="timetable-card__semester">2nd Semester</span>
+                    </div>
+
+                    <div class="timetable-grid" role="table" aria-label="Weekly Schedule Illustration">
+                        <!-- Column Headers -->
+                        <div class="timetable-grid__col-header" role="columnheader">Mon</div>
+                        <div class="timetable-grid__col-header" role="columnheader">Tue</div>
+                        <div class="timetable-grid__col-header" role="columnheader">Wed</div>
+                        <div class="timetable-grid__col-header" role="columnheader">Thu</div>
+                        <div class="timetable-grid__col-header" role="columnheader">Fri</div>
+
+                        <!-- Row 1: IT-WS03/Lab 2 (lab), empty, CC-104/Rm 305 (lecture), empty, IT-NET03/Lab 5 (lab) -->
+                        <div class="timetable-grid__cell timetable-grid__cell--lab">
+                            <span class="timetable-grid__cell-code">IT-WS03</span>
+                            <span class="timetable-grid__cell-room">Lab 2</span>
+                        </div>
+                        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+                        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+                            <span class="timetable-grid__cell-code">CC-104</span>
+                            <span class="timetable-grid__cell-room">Rm 305</span>
+                        </div>
+                        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+                        <div class="timetable-grid__cell timetable-grid__cell--lab">
+                            <span class="timetable-grid__cell-code">IT-NET03</span>
+                            <span class="timetable-grid__cell-room">Lab 5</span>
+                        </div>
+
+                        <!-- Row 2: IT-IM02/Rm 302 (lecture), IT-WS04/Lab 1 (lab), empty, IT-IAS02/Rm 304 (lecture), empty -->
+                        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+                            <span class="timetable-grid__cell-code">IT-IM02</span>
+                            <span class="timetable-grid__cell-room">Rm 302</span>
+                        </div>
+                        <div class="timetable-grid__cell timetable-grid__cell--lab">
+                            <span class="timetable-grid__cell-code">IT-WS04</span>
+                            <span class="timetable-grid__cell-room">Lab 1</span>
+                        </div>
+                        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+                        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+                            <span class="timetable-grid__cell-code">IT-IAS02</span>
+                            <span class="timetable-grid__cell-room">Rm 304</span>
+                        </div>
+                        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+
+                        <!-- Row 3: empty, IT-NET04/Rm 306 (lecture), IT-CAP01/Lab 3 (lab), empty, IT-WS05/Rm 301 (lecture) -->
+                        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+                        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+                            <span class="timetable-grid__cell-code">IT-NET04</span>
+                            <span class="timetable-grid__cell-room">Rm 306</span>
+                        </div>
+                        <div class="timetable-grid__cell timetable-grid__cell--lab">
+                            <span class="timetable-grid__cell-code">IT-CAP01</span>
+                            <span class="timetable-grid__cell-room">Lab 3</span>
+                        </div>
+                        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+                        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+                            <span class="timetable-grid__cell-code">IT-WS05</span>
+                            <span class="timetable-grid__cell-room">Rm 301</span>
+                        </div>
+                    </div>
+
+                    <!-- Timetable Legend -->
+                    <div class="timetable-legend">
+                        <div class="timetable-legend__item">
+                            <span class="timetable-legend__indicator timetable-legend__indicator--lab" aria-hidden="true"></span>
+                            <span>Laboratory</span>
+                        </div>
+                        <div class="timetable-legend__item">
+                            <span class="timetable-legend__indicator timetable-legend__indicator--lecture" aria-hidden="true"></span>
+                            <span>Lecture</span>
+                        </div>
+                        <div class="timetable-legend__item ms-auto">
+                            <span class="timetable-legend__indicator timetable-legend__indicator--status" aria-hidden="true"></span>
+                            <span>No conflicts detected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. FEATURES SECTION -->
+        <section class="landing-features" id="features" aria-labelledby="features-title">
+            <div class="container">
+                <div class="landing-section-header">
+                    <h2 class="landing-section-header__title" id="features-title">Everything a department needs to schedule</h2>
+                    <p class="landing-section-header__subtitle">From faculty loads to a signed, printable timetable.</p>
+                </div>
+
+                <div class="features-grid">
+                    <!-- Feature 1: Automated generation -->
+                    <article class="feature-card">
+                        <div class="feature-card__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                        </div>
+                        <h3 class="feature-card__title">Automated generation</h3>
+                        <p class="feature-card__text">
+                            Schedules are built from professor loads, matching lecture and laboratory rooms by type.
+                        </p>
+                    </article>
+
+                    <!-- Feature 2: Conflict detection -->
+                    <article class="feature-card">
+                        <div class="feature-card__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                <polyline points="9 12 11 14 15 10"></polyline>
+                            </svg>
+                        </div>
+                        <h3 class="feature-card__title">Conflict detection</h3>
+                        <p class="feature-card__text">
+                            Professor, room, and section clashes are caught during generation and every manual edit.
+                        </p>
+                    </article>
+
+                    <!-- Feature 3: Multi-program ready -->
+                    <article class="feature-card">
+                        <div class="feature-card__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                <polyline points="2 17 12 22 22 17"></polyline>
+                                <polyline points="2 12 12 17 22 12"></polyline>
+                            </svg>
+                        </div>
+                        <h3 class="feature-card__title">Multi-program ready</h3>
+                        <p class="feature-card__text">
+                            BSIT, BSDS, and BSCS share rooms and faculty without ever double-booking them.
+                        </p>
+                    </article>
+
+                    <!-- Feature 4: Excel and CSV import -->
+                    <article class="feature-card">
+                        <div class="feature-card__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                        </div>
+                        <h3 class="feature-card__title">Excel and CSV import</h3>
+                        <p class="feature-card__text">
+                            Upload professor loads, preview the result, and get an error report for rejected rows.
+                        </p>
+                    </article>
+
+                    <!-- Feature 5: Official PDF export -->
+                    <article class="feature-card">
+                        <div class="feature-card__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                        </div>
+                        <h3 class="feature-card__title">Official PDF export</h3>
+                        <p class="feature-card__text">
+                            Print timetables in the NEUST format with prepared, verified, and approved blocks.
+                        </p>
+                    </article>
+
+                    <!-- Feature 6: Archive and restore -->
+                    <article class="feature-card">
+                        <div class="feature-card__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                                <rect x="1" y="3" width="22" height="5"></rect>
+                                <line x1="10" y1="12" x2="14" y2="12"></line>
+                            </svg>
+                        </div>
+                        <h3 class="feature-card__title">Archive and restore</h3>
+                        <p class="feature-card__text">
+                            Every past schedule is kept with its date and can be restored when it causes no conflicts.
+                        </p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. HOW IT WORKS SECTION -->
+        <section class="landing-workflow" id="workflow" aria-labelledby="workflow-title">
+            <div class="container">
+                <div class="landing-section-header">
+                    <h2 class="landing-section-header__title" id="workflow-title">Three steps to a finished schedule</h2>
+                </div>
+
+                <div class="workflow-grid">
+                    <!-- Step 1: Set up -->
+                    <article class="workflow-card">
+                        <div class="workflow-card__number" aria-hidden="true">1</div>
+                        <h3 class="workflow-card__title">Set up</h3>
+                        <p class="workflow-card__text">
+                            The admin adds programs, courses, rooms, and time slots.
+                        </p>
+                    </article>
+
+                    <!-- Step 2: Import loads -->
+                    <article class="workflow-card">
+                        <div class="workflow-card__number" aria-hidden="true">2</div>
+                        <h3 class="workflow-card__title">Import loads</h3>
+                        <p class="workflow-card__text">
+                            The scheduler uploads professor loads for their program.
+                        </p>
+                    </article>
+
+                    <!-- Step 3: Generate and confirm -->
+                    <article class="workflow-card">
+                        <div class="workflow-card__number" aria-hidden="true">3</div>
+                        <h3 class="workflow-card__title">Generate and confirm</h3>
+                        <p class="workflow-card__text">
+                            Review the preview, adjust if needed, and confirm the schedule.
+                        </p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. CLOSING CTA SECTION -->
+        <section class="landing-cta" aria-labelledby="cta-title">
+            <div class="container">
+                <div class="landing-cta__inner">
+                    <h2 class="landing-cta__title" id="cta-title">Ready to build this semester's schedule?</h2>
+                    <p class="landing-cta__text">Sign in with your account to get started.</p>
+                    <div class="landing-cta__buttons">
+                        <a href="{{ url_for('login') }}" class="btn btn-white">Sign in</a>
+                        <a href="{{ url_for('signup') }}" class="btn btn-outline-white">Sign up</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 6. FOOTER -->
+    <footer class="landing-footer">
+        <div class="container">
+            <p class="landing-footer__text">
+                NEUST CICT &middot; Class Scheduling and Room Allocation System
+            </p>
+        </div>
+    </footer>
+
+</body>
+</html>

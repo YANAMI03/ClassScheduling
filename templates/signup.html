@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create your account - Scheduler</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/boxicons@latest/css/boxicons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <style>
+        .login-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--body-bg);
+            padding: 1rem;
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 440px;
+        }
+
+        .login-card__brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            justify-content: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-card__brand i {
+            font-size: 2rem;
+            color: var(--primary);
+        }
+
+        .login-card__brand h3 {
+            font-weight: 700;
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .login-card__subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.938rem;
+            margin-bottom: 1.25rem;
+            font-weight: 600;
+        }
+
+        .login-card .form-label {
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            margin-bottom: 0.375rem;
+        }
+
+        .login-card .form-control {
+            padding: 0.625rem 0.875rem;
+            border-radius: var(--radius-sm);
+            border-color: var(--border-color);
+            font-size: 0.938rem;
+            transition: var(--transition);
+        }
+
+        .login-card .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .login-card .btn-primary {
+            width: 100%;
+            padding: 0.625rem;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            font-size: 0.938rem;
+        }
+
+        .login-card .form-control.is-invalid {
+            border-color: #dc2626;
+        }
+
+        .login-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 0.625rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .login-error i {
+            font-size: 1.125rem;
+            flex-shrink: 0;
+        }
+
+        .login-alert {
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.84rem;
+            line-height: 1.45;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.625rem;
+        }
+
+        .login-alert i {
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+
+        .login-alert-success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+
+        .login-alert-info {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+        }
+
+        .login-alert-warning {
+            background: #fffbeb;
+            border: 1px solid #fef3c7;
+            color: #92400e;
+        }
+
+        .login-alert-danger,
+        .login-alert-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        /* Password field with inside toggle button */
+        .password-field-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .password-field-wrapper .form-control {
+            padding-right: 2.75rem !important;
+        }
+
+        .password-toggle-btn {
+            position: absolute;
+            right: 0.625rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            padding: 0.25rem;
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: color 0.15s ease, background-color 0.15s ease;
+            z-index: 5;
+            line-height: 1;
+        }
+
+        .password-toggle-btn:hover {
+            color: var(--text-primary);
+            background-color: rgba(0, 0, 0, 0.04);
+        }
+
+        .password-toggle-btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+            color: var(--primary);
+        }
+
+        .password-toggle-btn i {
+            font-size: 1.25rem;
+        }
+
+        .login-toggle {
+            text-align: center;
+            margin-top: 1.25rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .login-toggle a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .login-toggle a:hover {
+            text-decoration: underline;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .field-error-msg {
+            font-size: 0.8125rem;
+            color: #dc2626;
+            margin-top: 0.25rem;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="login-card__brand">
+                <i class="bx bx-calendar-alt"></i>
+                <h3>Scheduler</h3>
+            </div>
+            <h1 class="login-card__subtitle">Create your account</h1>
+
+            <!-- Mandatory Note: New accounts have view-only access -->
+            <div class="login-alert login-alert-info">
+                <i class="bx bx-info-circle"></i>
+                <span>New accounts have view-only access to the Section and Room schedules. An administrator can change your role.</span>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="login-alert login-alert-{{ category if category != 'error' else 'danger' }}">
+                <i class="bx {% if category in ('success', 'info') %}bx-check-circle{% elif category == 'warning' %}bx-info-circle{% else %}bx-error-circle{% endif %}"></i>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            {% if error %}
+            <div class="login-error" id="serverErrorBox">
+                <i class="bx bx-error-circle"></i>
+                <span>{{ error }}</span>
+            </div>
+            {% endif %}
+
+            {% if success_message %}
+            <div class="login-alert login-alert-success">
+                <i class="bx bx-check-circle"></i>
+                <span>{{ success_message }}</span>
+            </div>
+            <div class="login-toggle mt-3">
+                <a href="{{ url_for('login') }}" class="btn btn-primary text-white">Proceed to Sign In</a>
+            </div>
+            {% else %}
+
+            <!-- Client-side error box -->
+            <div class="login-error hidden" id="clientErrorBox">
+                <i class="bx bx-error-circle"></i>
+                <span id="clientErrorText"></span>
+            </div>
+
+            <!-- Standalone Sign-up Form -->
+            <form method="post" action="{{ url_for('signup') }}" id="signupForm" novalidate>
+                <!-- Anti-bot Honeypot field (hidden from humans, filled by bots) -->
+                <div style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;" aria-hidden="true">
+                    <input type="text" name="website" tabindex="-1" autocomplete="off">
+                </div>
+
+                <!-- Full Name Field -->
+                <div class="mb-3">
+                    <label for="fullName" class="form-label">Full Name</label>
+                    <input type="text" id="fullName" name="full_name" class="form-control"
+                        placeholder="e.g. Maria Santos" required minlength="2" maxlength="100" autofocus
+                        value="{{ full_name or '' }}">
+                    <div class="field-error-msg" id="nameErrorMsg">Please enter your full name (at least 2 characters).</div>
+                </div>
+
+                <!-- Email Field -->
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" id="email" name="email" class="form-control"
+                        placeholder="e.g. name@neust.edu.ph" required maxlength="254"
+                        value="{{ email or '' }}">
+                    <div class="field-error-msg" id="emailErrorMsg">Please enter a valid email address.</div>
+                </div>
+
+                <!-- Password Field -->
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <div class="password-field-wrapper">
+                        <input type="password" id="password" name="password" class="form-control"
+                            placeholder="At least 8 characters" autocomplete="new-password" required minlength="8">
+                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                            <i class="bx bx-show"></i>
+                        </button>
+                    </div>
+                    <div class="field-error-msg" id="passwordErrorMsg">Password must be at least 8 characters.</div>
+                </div>
+
+                <!-- Confirm Password Field -->
+                <div class="mb-4">
+                    <label for="confirmPassword" class="form-label">Confirm Password</label>
+                    <div class="password-field-wrapper">
+                        <input type="password" id="confirmPassword" name="confirm_password" class="form-control"
+                            placeholder="Re-enter your password" autocomplete="new-password" required minlength="8">
+                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                            <i class="bx bx-show"></i>
+                        </button>
+                    </div>
+                    <div class="field-error-msg" id="confirmErrorMsg">Passwords do not match.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="signupSubmitBtn">
+                    <i class="bx bx-user-plus me-2"></i> Create Account
+                </button>
+
+                <div class="login-toggle">
+                    Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Reusable Password Visibility Toggle
+        function initPasswordToggle(wrapper) {
+            if (!wrapper) return;
+            var input = wrapper.querySelector('input');
+            var btn = wrapper.querySelector('.password-toggle-btn');
+            if (!input || !btn) return;
+
+            function setVisibility(show) {
+                input.type = show ? 'text' : 'password';
+                btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+                var icon = btn.querySelector('i');
+                if (icon) {
+                    icon.className = show ? 'bx bx-hide' : 'bx bx-show';
+                }
+            }
+
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                var isCurrentlyPassword = (input.type === 'password');
+                setVisibility(isCurrentlyPassword);
+            });
+
+            setVisibility(false);
+        }
+
+        document.querySelectorAll('.password-field-wrapper').forEach(initPasswordToggle);
+
+        var form = document.getElementById('signupForm');
+        var nameInput = document.getElementById('fullName');
+        var emailInput = document.getElementById('email');
+        var passInput = document.getElementById('password');
+        var confirmInput = document.getElementById('confirmPassword');
+        var submitBtn = document.getElementById('signupSubmitBtn');
+        var clientErrorBox = document.getElementById('clientErrorBox');
+        var clientErrorText = document.getElementById('clientErrorText');
+
+        function showError(msg) {
+            if (clientErrorBox && clientErrorText) {
+                clientErrorText.textContent = msg;
+                clientErrorBox.classList.remove('hidden');
+            }
+        }
+
+        function clearErrors() {
+            if (clientErrorBox) clientErrorBox.classList.add('hidden');
+            document.querySelectorAll('.field-error-msg').forEach(function(el) { el.style.display = 'none'; });
+            document.querySelectorAll('.form-control').forEach(function(el) { el.classList.remove('is-invalid'); });
+        }
+
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                clearErrors();
+                var hasError = false;
+
+                var nameVal = nameInput ? nameInput.value.trim() : '';
+                var emailVal = emailInput ? emailInput.value.trim() : '';
+                var passVal = passInput ? passInput.value : '';
+                var confirmVal = confirmInput ? confirmInput.value : '';
+
+                // Full name validation
+                if (!nameVal || nameVal.length < 2) {
+                    hasError = true;
+                    if (nameInput) nameInput.classList.add('is-invalid');
+                    var msg = document.getElementById('nameErrorMsg');
+                    if (msg) msg.style.display = 'block';
+                }
+
+                // Email validation
+                var emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailVal || !emailPattern.test(emailVal) || emailVal.length > 254) {
+                    hasError = true;
+                    if (emailInput) emailInput.classList.add('is-invalid');
+                    var msg = document.getElementById('emailErrorMsg');
+                    if (msg) msg.style.display = 'block';
+                }
+
+                // Password validation
+                if (!passVal || passVal.length < 8) {
+                    hasError = true;
+                    if (passInput) passInput.classList.add('is-invalid');
+                    var msg = document.getElementById('passwordErrorMsg');
+                    if (msg) msg.style.display = 'block';
+                }
+
+                // Confirm password validation
+                if (passVal !== confirmVal) {
+                    hasError = true;
+                    if (confirmInput) confirmInput.classList.add('is-invalid');
+                    var msg = document.getElementById('confirmErrorMsg');
+                    if (msg) msg.style.display = 'block';
+                }
+
+                if (hasError) {
+                    e.preventDefault();
+                    showError('Please correct the highlighted fields before submitting.');
+                    return false;
+                }
+
+                // Loading state on submit button
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Creating account...';
+                }
+            });
+        }
+    </script>
+    <script src="{{ url_for('static', filename='index.js') }}"></script>
+</body>
+
+</html>

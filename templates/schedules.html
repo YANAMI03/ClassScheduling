@@ -12,13 +12,14 @@
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
 {% set can_edit_schedule = user_role_lower in ['scheduler'] %}
 {% set is_admin = user_role_lower in ['super_admin', 'super admin', 'admin'] %}
+{% set is_viewer = user_role_lower in ['viewer'] %}
 {% set can_view_archive = user_role_lower in ['super_admin', 'super admin', 'admin', 'scheduler', 'dean', 'chair'] %}
 <div class="page-header d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
         <h1 class="page-title">Section Schedule</h1>
         <p class="page-subtitle">
             View and manage generated class schedules by section
-            {% if is_admin and program_filter %}
+            {% if (is_admin or is_viewer) and program_filter %}
             &bull; <span class="badge-custom badge-primary"><i class="bx bx-buildings me-1"></i>{{ program_filter }}</span>
             {% endif %}
         </p>
@@ -29,11 +30,8 @@
             <i class="bx bx-archive me-1"></i> Archive History
         </a>
         {% endif %}
-        {% if (can_edit_schedule or is_admin) and (sections_with_entries or sections) %}
+        {% if can_edit_schedule and not is_admin and (sections_with_entries or sections) %}
         <form action="/archive_schedule" method="POST" class="d-inline" onsubmit="return confirm('This removes the schedule from active use. You can restore it later from the archive.');">
-            {% if is_admin and program_filter %}
-            <input type="hidden" name="program" value="{{ program_filter }}">
-            {% endif %}
             {% if semester_filter %}
             <input type="hidden" name="semester" value="{{ semester_filter }}">
             {% endif %}
@@ -53,13 +51,14 @@
 <!-- Filter Controls -->
 <div class="card-custom mb-4 p-3 bg-light-subtle">
     <form method="get" class="row g-2 align-items-end" id="sectionScheduleFilterForm" action="{{ url_for('schedules') }}">
-        {% if is_admin %}
+        {% if is_admin or is_viewer %}
         <!-- Program Filter -->
         <div class="col-md-3 col-lg-2">
             <label class="form-label small fw-bold text-muted mb-1" for="programFilter">
                 <i class="bx bx-buildings me-1"></i>Program
             </label>
             <select id="programFilter" name="program" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="" {% if not program_filter or program_filter|lower == 'all' %}selected{% endif %}>All Programs</option>
                 {% for p in programs %}
                 <option value="{{ p.program_name }}" {% if p.program_name == program_filter %}selected{% endif %}>{{ p.program_name }}</option>
                 {% else %}
@@ -119,7 +118,7 @@
                 <i class="bx bx-filter"></i> Apply Filters
             </button>
             {% if year_filter or semester_filter or major_filter %}
-            <a href="{{ url_for('schedules', program=program_filter) if (is_admin and program_filter) else url_for('schedules') }}" class="btn btn-outline-secondary btn-sm" title="Clear filters">
+            <a href="{{ url_for('schedules', program=program_filter) if ((is_admin or is_viewer) and program_filter) else url_for('schedules') }}" class="btn btn-outline-secondary btn-sm" title="Clear filters">
                 <i class="bx bx-x"></i>
             </a>
             {% endif %}
@@ -127,7 +126,17 @@
     </form>
 </div>
 
-{% if no_professor_match %}
+{% if fetch_error %}
+<div class="card-custom mb-4 p-4 border border-danger bg-danger-subtle text-danger">
+    <div class="d-flex align-items-center gap-2">
+        <i class="bx bx-error-circle fs-4"></i>
+        <div>
+            <h5 class="mb-1 text-danger fw-bold">Error Loading Schedule</h5>
+            <p class="mb-0 small">{{ fetch_error }}</p>
+        </div>
+    </div>
+</div>
+{% elif no_professor_match %}
 <div class="card-custom">
     <div class="empty-state">
         <div class="empty-state__icon"><i class="bx bx-user-x"></i></div>
@@ -172,12 +181,14 @@
                                     <small class="text-muted">Year {{ item.section.year_level }}</small>
                                 </div>
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    {% if not is_viewer and session.get('role') != 'viewer' %}
                                     <a href="/schedule/{{ item.section.section }}/export?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-success btn-sm stop-prop" title="Export Section Timetable to Excel">
                                         <i class="bx bx-file me-1"></i> Export to Excel
                                     </a>
                                     <a href="/schedule/{{ item.section.section }}/export_pdf?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-danger btn-sm stop-prop" title="Export Section Timetable to PDF">
                                         <i class="bx bx-file-pdf me-1"></i> Export to PDF
                                     </a>
+                                    {% endif %}
                                     <a href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-outline-primary btn-sm stop-prop" title="View Section Timetable Schedule">
                                         <i class="bx bx-calendar me-1"></i> View Schedule
                                     </a>
@@ -191,11 +202,6 @@
                                         <i class="bx bx-edit me-1"></i> Edit
                                     </button>
                                     {% endif %}
-                                    {% if is_admin %}
-                                    <a href="{{ url_for('delete_section_schedule', section_name=item.section.section, semester=item.section.semester, major=item.section.major) }}" class="btn btn-danger btn-sm stop-prop" data-action="delete" data-method="POST" data-confirm="Are you sure you want to delete the entire schedule for Section {{ item.section.section }}?" data-title="Delete Section Schedule" title="Delete Section Schedule">
-                                        <i class="bx bx-trash me-1"></i> Delete
-                                    </a>
-                                    {% endif %}
                                 </div>
                             </div>
                             <div class="table-responsive">
@@ -207,9 +213,6 @@
                                             <th>Room</th>
                                             <th>Timeslot</th>
                                             <th>Type</th>
-                                            {% if is_admin %}
-                                            <th class="text-end">Actions</th>
-                                            {% endif %}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -236,18 +239,11 @@
                                                         {{ entry.session_type or 'TBA' }}
                                                     </span>
                                                 </td>
-                                                {% if is_admin %}
-                                                <td class="text-end align-middle">
-                                                    <a href="/delete_schedule/{{ entry.schedule_id }}?section_name={{ item.section.section }}&semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}" class="btn btn-danger btn-sm stop-prop" data-action="delete" data-method="GET" data-confirm="Delete this schedule entry?" data-title="Delete Schedule Entry" title="Delete Entry">
-                                                        <i class="bx bx-trash"></i> Delete
-                                                    </a>
-                                                </td>
-                                                {% endif %}
                                             </tr>
                                             {% endfor %}
                                         {% else %}
                                             <tr>
-                                                <td colspan="{% if is_admin %}6{% else %}5{% endif %}">
+                                                <td colspan="5">
                                                     <div class="empty-state py-3">
                                                         <div class="empty-state__icon"><i class="bx bx-calendar-x"></i></div>
                                                         <div class="empty-state__text">No schedule entries found for this section</div>

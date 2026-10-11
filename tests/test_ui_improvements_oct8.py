@@ -110,16 +110,13 @@ def test_part3_delete_inventory_and_shared_mechanism():
     assert 'prefers-reduced-motion' in css
     assert '.import-modal-overlay' in css
 
-    # Verify inventory templates have data-action="delete"
+    # Verify inventory templates have data-action="delete" (schedules and archives are now read-only for admin)
     inventory = {
         'templates/courses.html': '/delete_course/',
         'templates/room.html': '/delete_room/',
         'templates/working_hours.html': '/delete_working_hours/',
         'templates/programs.html': '/delete_program/',
         'templates/users.html': '/delete_user/',
-        'templates/schedule_archive.html': '/delete_schedule_archive/',
-        'templates/schedules.html': 'delete_section_schedule',
-        'templates/generated_schedule.html': 'delete_section_schedule',
         'templates/base.html': '/admin/delete_requests/',
     }
 

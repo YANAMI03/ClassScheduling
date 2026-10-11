@@ -735,4 +735,156 @@ def test_user_to_dict_clean_string_formatting():
     assert d2['program'] == ''
     assert d2['program_id'] is None
 
+    # Test viewer role has program = '' and program_id = None
+    row3 = {
+        'id': 'u3',
+        'role': 'viewer',
+        'program_id': 1,
+        'program': 'BSIT',
+    }
+    d3 = app_module._user_to_dict(row3)
+    assert d3['program'] == ''
+    assert d3['program_id'] is None
+
+
+def test_create_viewer_user_success(mock_db):
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1-admin'
+        sess['role'] = 'admin'
+        sess['username'] = 'adminuser'
+
+    res = client.post('/create_user', data={
+        'first_name': 'Victor',
+        'last_name': 'Viewer',
+        'email': 'viewer_user@example.com',
+        'password': 'Password123!',
+        'role': 'viewer',
+        'program': '',
+    })
+    assert res.status_code == 200
+    data = json.loads(res.data.decode('utf-8'))
+    assert data['success'] is True
+
+    created = next(u for u in mock_db['users'] if u.get('email') == 'viewer_user@example.com')
+    assert created['role'] == 'viewer'
+    assert created.get('program_id') is None
+
+
+def test_create_user_role_whitelist_validation(mock_db):
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1-admin'
+        sess['role'] = 'admin'
+        sess['username'] = 'adminuser'
+
+    # Unknown role should be rejected by server whitelist
+    res = client.post('/create_user', data={
+        'first_name': 'Bad',
+        'last_name': 'Role',
+        'email': 'bad_role@example.com',
+        'password': 'Password123!',
+        'role': 'hacker_role',
+        'program': 'BSIT',
+    })
+    assert res.status_code == 400
+    data = json.loads(res.data.decode('utf-8'))
+    assert data['success'] is False
+    assert 'Invalid role' in data['message']
+
+
+def test_edit_user_role_to_viewer_clears_program(mock_db):
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1-admin'
+        sess['role'] = 'admin'
+        sess['username'] = 'adminuser'
+
+    # Set up a scheduler user with a program_id
+    sched_user = {
+        'id': 'sched-to-viewer-uuid',
+        'first_name': 'Sam',
+        'last_name': 'Sched',
+        'email': 'samsched@example.com',
+        'role': 'scheduler',
+        'program_id': 1,
+    }
+    mock_db['users'].append(sched_user)
+
+    # Edit Sam to Viewer (program not provided / cleared)
+    res = client.post('/edit_user/sched-to-viewer-uuid', data={
+        'first_name': 'Sam',
+        'last_name': 'Sched',
+        'email': 'samsched@example.com',
+        'role': 'viewer',
+        'program': '',
+    })
+    assert res.status_code == 200
+    data = json.loads(res.data.decode('utf-8'))
+    assert data['success'] is True
+
+    updated = next(u for u in mock_db['users'] if u.get('id') == 'sched-to-viewer-uuid')
+    assert updated['role'] == 'viewer'
+    assert updated.get('program_id') is None
+
+
+def test_edit_user_invalid_role_rejected(mock_db):
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1-admin'
+        sess['role'] = 'admin'
+        sess['username'] = 'adminuser'
+
+    u = {
+        'id': 'test-edit-role-uuid',
+        'first_name': 'Test',
+        'last_name': 'User',
+        'email': 'testuser@example.com',
+        'role': 'scheduler',
+        'program_id': 1,
+    }
+    mock_db['users'].append(u)
+
+    res = client.post('/edit_user/test-edit-role-uuid', data={
+        'first_name': 'Test',
+        'last_name': 'User',
+        'email': 'testuser@example.com',
+        'role': 'super_hacker',
+    })
+    assert res.status_code == 400
+    data = json.loads(res.data.decode('utf-8'))
+    assert data['success'] is False
+    assert 'Invalid role' in data['message']
+
+
+def test_users_template_renders_viewer_options_and_badge(mock_db):
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-1-admin'
+        sess['role'] = 'admin'
+        sess['username'] = 'adminuser'
+
+    # Add a viewer to mock_db
+    mock_db['users'].append({
+        'id': 'viewer-render-uuid',
+        'first_name': 'Alice',
+        'last_name': 'Viewer',
+        'email': 'alice.viewer@example.com',
+        'role': 'viewer',
+        'program_id': None,
+    })
+
+    res = client.get('/users')
+    assert res.status_code == 200
+    html = res.data.decode('utf-8')
+
+    # Role options must include viewer
+    assert '<option value="viewer">Viewer</option>' in html
+    # Table must display Viewer badge
+    assert 'badge-viewer' in html
+    assert 'Viewer' in html
+    # Global / All Programs text for Viewer
+    assert 'Global / All Programs' in html
+
+
 

@@ -58,7 +58,8 @@ Follow these 7 steps to get up and running:
    ```
 3. **Add Supabase credentials to `.env`:**
    - Retrieve `SUPABASE_URL` and `SUPABASE_ANON_KEY` from your Supabase Project Settings (`API` tab).
-   - *(Optional)* Add `SUPABASE_SECRET_KEY` if testing server-side user administration features.
+   - Set `SITE_URL` to the base address you access the app from (e.g., `http://127.0.0.1:5000` or your LAN address `http://192.168.254.108:5000`). This ensures verification email confirmation links route back to your exact address.
+   - In Supabase Dashboard > **Authentication** > **URL Configuration**, add your base URLs and wildcard redirect patterns to the Redirect URLs allow-list (e.g., `http://127.0.0.1:5000/**`, `http://localhost:5000/**`, `http://192.168.254.108:5000/**`).
 4. **Choose your development mode:**
    - **Option A:** [Local Python Development](#local-development-setup)
    - **Option B:** [Docker Container Development](#docker-development-setup)
@@ -115,15 +116,39 @@ Ensure your `.env` contains at minimum:
 ```env
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_ANON_KEY=your-supabase-anon-key
+SITE_URL=http://127.0.0.1:5000
 FLASK_DEBUG=1
 PORT=5000
+# Optional email domain restriction (e.g. ALLOWED_SIGNUP_EMAIL_DOMAINS=neust.edu.ph)
+ALLOWED_SIGNUP_EMAIL_DOMAINS=
 ```
+
+> **Note on `SITE_URL`:** Set this to the exact base URL you use to open the app (for example `http://127.0.0.1:5000` for local access or `http://192.168.254.108:5000` for LAN access). The app uses this to dynamically generate email confirmation redirect URLs (`/auth/callback`).
+
+> **Note on `ALLOWED_SIGNUP_EMAIL_DOMAINS`:** Optional comma-separated list of approved email domains for open sign-up (e.g., `neust.edu.ph,cict.neust.edu.ph`). When set, only users with matching email domains can register. If left blank or omitted, registration is open to all valid email addresses.
+
+### Supabase Auth & Email Verification Setup
+To ensure signup verification emails and links function correctly:
+1. **Authentication > URL Configuration**:
+   - **Site URL**: Set to your primary address (e.g. `http://127.0.0.1:5000` or `http://192.168.254.108:5000`).
+   - **Redirect URLs (Allow-list)**: Add all addresses you access the app from:
+     - `http://127.0.0.1:5000/**`
+     - `http://localhost:5000/**`
+     - `http://192.168.254.108:5000/**`
+     - `http://127.0.0.1:5000/auth/callback`
+     - `http://localhost:5000/auth/callback`
+     - `http://192.168.254.108:5000/auth/callback`
+2. **Authentication > Providers > Email**:
+   - Ensure **Confirm email** is enabled.
+   - Email template must contain `{{ .ConfirmationURL }}`.
+3. **Authentication > SMTP Settings (Custom Provider)**:
+   - Supabase's built-in default email service has a strict rate limit (~3-4 emails/hour) intended only for testing. For production or repeated testing, configure a custom SMTP provider (such as Resend, Brevo, SendGrid, or Gmail SMTP with an App Password).
 
 ### 5. Start the Application
 ```bash
 python app.py
 ```
-Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
+Open your browser and navigate to [http://localhost:5000](http://localhost:5000) or [http://192.168.254.108:5000](http://192.168.254.108:5000).
 
 ---
 
