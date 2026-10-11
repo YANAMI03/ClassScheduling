@@ -246,12 +246,8 @@ def test_client_restore_discards_removed_preparer_snapshot_fields(monkeypatch):
 
 
 def test_restore_legacy_timeslot_data_uses_working_hours_table(monkeypatch):
-    """Restore legacy timeslot payloads into working_hours without calling stale RPC SQL."""
-    fake_client = FakeSupabaseClient(rpc_result={
-        'success': True,
-        'total_restored': 0,
-        'details': {},
-    })
+    """Restore legacy timeslot payloads into working_hours via client-side fallback when RPC is unavailable."""
+    fake_client = FakeSupabaseClient(rpc_result=None)
     monkeypatch.setattr(app_module, 'supabase', fake_client)
 
     client = app_module.app.test_client()
@@ -277,13 +273,51 @@ def test_restore_legacy_timeslot_data_uses_working_hours_table(monkeypatch):
     }, follow_redirects=True)
 
     assert res.status_code == 200
-    assert not fake_client.rpc_calls
     restored_rows = [
         payload
         for table, operation, payload in fake_client.operations
         if table == 'working_hours' and operation == 'upsert'
     ]
-    assert restored_rows == [[legacy_backup['data']['timeslot'][0]]]
+    expected_row = dict(legacy_backup['data']['timeslot'][0])
+    expected_row['working_hours_id'] = 7
+    assert restored_rows == [[expected_row]]
+
+
+def test_restore_database_rpc_with_working_hours(monkeypatch):
+    """Test that modern backup with working_hours uses atomic RPC restore."""
+    rpc_return = {
+        'success': True,
+        'total_restored': 5,
+        'details': {'working_hours': 5}
+    }
+    fake_client = FakeSupabaseClient(rpc_result=rpc_return)
+    monkeypatch.setattr(app_module, 'supabase', fake_client)
+
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'user-admin-123'
+        sess['role'] = 'admin'
+        sess['username'] = 'admin'
+
+    sample_backup = {
+        "data": {
+            "working_hours": [
+                {"working_hours_id": 1, "day": "Monday", "start_time": "08:00:00", "end_time": "17:00:00"}
+            ]
+        }
+    }
+
+    res = client.post('/restore', data={
+        'backup_file': (io.BytesIO(json.dumps(sample_backup).encode('utf-8')), 'backup.json'),
+        'clear_existing': 'true'
+    }, follow_redirects=True)
+
+    assert res.status_code == 200
+    assert len(fake_client.rpc_calls) == 1
+    rpc_call_name, rpc_params = fake_client.rpc_calls[0]
+    assert rpc_call_name == 'restore_database_json'
+    assert 'working_hours' in rpc_params['payload']['data']
+    assert b'Database restored successfully' in res.data
 
 
 def test_restore_database_legacy_format_mapping(monkeypatch):
@@ -335,3 +369,103 @@ def test_restore_database_empty_data_rejection(monkeypatch):
 
     assert res.status_code == 200
     assert b'No valid table data found' in res.data
+
+
+def test_client_restore_clear_existing_uses_valid_pk_types(monkeypatch):
+    """Ensure clear_existing passes integer -999999999 for integer PK tables and valid UUID for users."""
+    fake_client = FakeSupabaseClient()
+    monkeypatch.setattr(app_module, 'supabase', fake_client)
+
+    neq_calls = []
+    original_neq = FakeSupabaseTableQuery.neq
+
+    def tracked_neq(self, col, val):
+        neq_calls.append((self._table_name, col, val))
+        return original_neq(self, col, val)
+
+    monkeypatch.setattr(FakeSupabaseTableQuery, 'neq', tracked_neq)
+
+    sample_data = {
+        'program': [{'id': 1, 'program_name': 'BSIT'}],
+        'users': [{'id': '11111111-1111-1111-1111-111111111111', 'username': 'admin'}],
+        'course': [{'course_id': 10, 'course_code': 'CS1'}],
+        'schedule': [{'schedule_id': 100}],
+        'program_department': [{'program_name': 'BSIT'}]
+    }
+
+    result = app_module._execute_client_side_restore(sample_data, clear_existing=True)
+    assert result['success'] is True
+
+    # Check that integer PKs did NOT use '__none__'
+    for tbl, col, val in neq_calls:
+        if tbl == 'users':
+            assert val == '00000000-0000-0000-0000-000000000000'
+        elif tbl == 'program_department':
+            assert val == '__none__'
+        else:
+            assert isinstance(val, int), f"Table {tbl} passed non-integer {val} to neq"
+            assert val == -999999999
+
+
+def test_client_restore_discards_dropped_columns_across_tables(monkeypatch):
+    """Ensure course_name is mapped to course_code, and dropped columns on schedule, room, program are discarded."""
+    fake_client = FakeSupabaseClient()
+    monkeypatch.setattr(app_module, 'supabase', fake_client)
+
+    sample_data = {
+        'program': [{
+            'id': 1, 'program_name': 'BSIT', 'full_name': 'BS Information Tech',
+            'created_at': '2026-01-01', 'updated_at': '2026-01-02'
+        }],
+        'room': [{
+            'room_id': 10, 'room_name': 'CL-1', 'room_type': 'Laboratory',
+            'department': 'CICT', 'program_id': 1
+        }],
+        'course': [{
+            'course_id': 20, 'course_name': 'Old Course Name', 'major': 'Web Dev'
+        }],
+        'professor_load': [{
+            'id': 30, 'course_id': 20, 'professor_name': 'Prof Test', 'program_id': 1, 'prof_id': 5
+        }],
+        'schedule': [{
+            'schedule_id': 40, 'professor_load_id': 30, 'room_id': 10,
+            'course_id': 20, 'program': 'BSIT', 'program_id': 1,
+            'prepared_by': 'Admin', 'prepared_by_name': 'Admin User', 'prepared_by_title': 'Chair'
+        }]
+    }
+
+    result = app_module._execute_client_side_restore(sample_data, clear_existing=False)
+    assert result['success'] is True
+
+    upsert_map = {
+        tbl: payload[0]
+        for tbl, op, payload in fake_client.operations
+        if op == 'upsert'
+    }
+
+    # program: created_at, updated_at discarded
+    assert 'created_at' not in upsert_map['program']
+    assert 'updated_at' not in upsert_map['program']
+
+    # room: department, program_id discarded
+    assert 'department' not in upsert_map['room']
+    assert 'program_id' not in upsert_map['room']
+
+    # course: course_name mapped to course_code, course_name discarded
+    assert upsert_map['course'].get('course_code') == 'Old Course Name'
+    assert 'course_name' not in upsert_map['course']
+    assert upsert_map['course'].get('specialization') == 'Web Dev'
+
+    # professor_load: program_id and prof_id discarded
+    assert 'program_id' not in upsert_map['professor_load']
+    assert 'prof_id' not in upsert_map['professor_load']
+
+    # schedule: course_id, program, program_id, prepared_by snapshot columns discarded
+    sched_row = upsert_map['schedule']
+    assert 'course_id' not in sched_row
+    assert 'program' not in sched_row
+    assert 'program_id' not in sched_row
+    assert 'prepared_by' not in sched_row
+    assert 'prepared_by_name' not in sched_row
+    assert 'prepared_by_title' not in sched_row
+

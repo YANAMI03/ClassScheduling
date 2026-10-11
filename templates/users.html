@@ -2,7 +2,13 @@
 
 {% block title %}User Management - Scheduler{% endblock %}
 
-{% block header_title %}<h5 class="header__title">User Management</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-shield me-1"></i>Administration</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">User Management</span>
+</nav>
+{% endblock %}
 
 {% block head_extra %}
 <style>

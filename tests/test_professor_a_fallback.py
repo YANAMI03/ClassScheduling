@@ -122,7 +122,7 @@ def test_no_fallback_professors_or_tba_created(monkeypatch):
         {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'department': 'CICT', 'max_hours': 40}
     ]
     working_hours = [
-        {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '11:00:00', 'lunch_time': '12:00:00'},
+        {'working_hours_id': 1, 'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '11:00:00', 'lunch_time': '12:00:00'},
     ]
 
     store = {

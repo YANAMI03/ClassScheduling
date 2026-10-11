@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Preview Schedule - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Preview Schedule</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <a href="{{ url_for('home') }}"><i class="bx bx-calendar-event me-1"></i>Generate</a>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Preview Schedule</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 <div class="page-header">

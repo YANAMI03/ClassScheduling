@@ -185,15 +185,12 @@ def test_admin_restricted_pages_return_403(test_client):
 def test_admin_restricted_write_actions_return_403_json(test_client):
     _login_as(test_client, 'admin')
 
-    # Blocked write attempts: Generate Schedule, Professor Load, Schedules write
+    # Blocked write attempts: Generate Schedule, Professor Load, Schedules edit
     endpoints = [
         ('POST', '/confirm_preview', {}),
         ('POST', '/discard_preview', {}),
         ('POST', '/professor_load/import/preview', {}),
-        ('POST', '/delete_all_schedules', {'password': 'pass'}),
-        ('POST', '/delete_section_schedule/BSIT-1A', {}),
         ('POST', '/edit_schedule/BSIT-1A', {'section': 'BSIT-1B'}),
-        ('GET', '/delete_schedule/1', None),
     ]
 
     # Removed manual write route returns 404
@@ -253,7 +250,7 @@ def test_scheduler_restricted_pages_return_403(test_client):
 def test_scheduler_restricted_write_actions_return_403_json(test_client):
     _login_as(test_client, 'scheduler')
 
-    # Blocked writes: Courses, Rooms, Timeslots, Users, Backup & Restore
+    # Blocked writes: Courses, Rooms, Timeslots, Users, Backup & Restore, Schedule Deletion
     endpoints = [
         ('POST', '/add_course', {'course_code': 'test'}),
         ('POST', '/edit_course/1', {'course_code': 'test'}),
@@ -270,6 +267,9 @@ def test_scheduler_restricted_write_actions_return_403_json(test_client):
         ('POST', '/restore', {}),
         ('GET', '/backup', None),
         ('POST', '/delete_schedule_archive/batch1', {}),
+        ('POST', '/delete_all_schedules', {'password': 'pass'}),
+        ('POST', '/delete_section_schedule/BSIT-1A', {}),
+        ('GET', '/delete_schedule/1', None),
     ]
 
     for method, path, data in endpoints:

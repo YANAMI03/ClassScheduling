@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Professor {{ professor_name }} Schedule - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Professor Schedule Details</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <a href="{{ url_for('professor_schedule') }}"><i class="bx bx-calendar me-1"></i>Professor Schedule</a>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">{{ professor_name }}</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 <div class="page-header">

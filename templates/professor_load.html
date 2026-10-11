@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Professor Courses & Teaching Load - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Professor Course Assignments & Teaching Load</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-user me-1"></i>Faculty</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Teaching Load</span>
+</nav>
+{% endblock %}
 
 {% block head_extra %}
 <style>

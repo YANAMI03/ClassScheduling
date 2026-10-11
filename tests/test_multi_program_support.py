@@ -126,7 +126,17 @@ class MockQueryBuilder:
         for item in self.table.data:
             match = True
             for col, val in self._filters.items():
-                if str(item.get(col)) != str(val):
+                item_val = item.get(col)
+                if item_val is None and '.' in col:
+                    curr = item
+                    for part in col.split('.'):
+                        if isinstance(curr, dict):
+                            curr = curr.get(part)
+                        else:
+                            curr = None
+                            break
+                    item_val = curr
+                if str(item_val) != str(val):
                     match = False
                     break
             for col, val_list in self._in_filters.items():
@@ -622,3 +632,189 @@ def test_restore_schedule_cross_program_conflict(test_client, monkeypatch):
     assert b'Conflict with active schedule of another program' in res_restore.data
     # Verify the item remains archived
     assert archived_bsit_sched['archive'] is True
+
+
+# -----------------------------------------------------------------------------
+# 8. Admin Single-Program Schedule Viewing & Selection Dropdown
+# -----------------------------------------------------------------------------
+def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeypatch):
+    """
+    Verify that in schedule viewing in frontend:
+    - Admin users only see 1 program schedule at a time (never mixed)
+    - Admin users get a program selection dropdown with options for available programs
+    - Dropdown does NOT have 'All Programs'
+    - Switching program via query parameter changes the viewed program schedule
+    """
+    bsit_sched = {
+        'schedule_id': 1,
+        'room_id': 101,
+        'section': 'BSIT-1A',
+        'day': 'Monday',
+        'class_start': '08:00:00',
+        'class_end': '10:00:00',
+        'semester': '1st Semester',
+        'archive': False,
+        'professor_load_id': 1,
+        'room': {'room_name': 'Room 101'},
+        'professor_load': {
+            'id': 1,
+            'course_id': 10,
+            'professor_name': 'Prof IT',
+            'course': {
+                'course_id': 10,
+                'course_code': 'IT101',
+                'program_id': 1,
+                'program': {'program_name': 'BSIT'},
+                'semester': '1st Semester',
+                'specialization': None,
+            }
+        }
+    }
+    bsds_sched = {
+        'schedule_id': 2,
+        'room_id': 102,
+        'section': 'BSDS-1A',
+        'day': 'Monday',
+        'class_start': '10:00:00',
+        'class_end': '12:00:00',
+        'semester': '1st Semester',
+        'archive': False,
+        'professor_load_id': 2,
+        'room': {'room_name': 'Room 102'},
+        'professor_load': {
+            'id': 2,
+            'course_id': 20,
+            'professor_name': 'Prof DS',
+            'course': {
+                'course_id': 20,
+                'course_code': 'DS101',
+                'program_id': 2,
+                'program': {'program_name': 'BSDS'},
+                'semester': '1st Semester',
+                'specialization': None,
+            }
+        }
+    }
+
+    mock_db = MockSupabaseClient({
+        'schedule': [bsit_sched, bsds_sched],
+        'program': [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}],
+        'working_hours': [],
+    })
+    monkeypatch.setattr(app_module, 'supabase', mock_db)
+    monkeypatch.setattr(app_module, '_get_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+
+    with test_client.session_transaction() as sess:
+        sess['user_id'] = 1
+        sess['role'] = 'Admin'
+        sess['program'] = 'BSIT'
+
+    # Admin visits /schedules without program param -> defaults to single program (BSIT)
+    resp = test_client.get('/schedules')
+    assert resp.status_code == 200
+    html = resp.data.decode('utf-8')
+
+    # Program dropdown exists
+    assert 'id="programFilter"' in html
+    assert 'name="program"' in html
+    assert '<option value="BSIT"' in html
+    assert '<option value="BSDS"' in html
+    # 'All Programs' is not an option for admin
+    assert 'All Programs' not in html
+
+    # BSIT-1A is displayed, BSDS-1A is NOT displayed
+    assert 'BSIT-1A' in html
+    assert 'BSDS-1A' not in html
+
+    # Admin selects BSDS
+    resp_bsds = test_client.get('/schedules?program=BSDS')
+    assert resp_bsds.status_code == 200
+    html_bsds = resp_bsds.data.decode('utf-8')
+
+    # BSDS-1A is displayed, BSIT-1A is NOT displayed
+    assert 'BSDS-1A' in html_bsds
+    assert 'BSIT-1A' not in html_bsds
+
+
+def test_scheduler_schedule_viewing_isolated_to_program(test_client, monkeypatch):
+    """
+    Verify schedulers can only see their own program schedule and cannot view another program.
+    """
+    bsit_sched = {
+        'schedule_id': 1,
+        'room_id': 101,
+        'section': 'BSIT-1A',
+        'day': 'Monday',
+        'class_start': '08:00:00',
+        'class_end': '10:00:00',
+        'semester': '1st Semester',
+        'archive': False,
+        'professor_load_id': 1,
+        'room': {'room_name': 'Room 101'},
+        'professor_load': {
+            'id': 1,
+            'course_id': 10,
+            'professor_name': 'Prof IT',
+            'course': {
+                'course_id': 10,
+                'course_code': 'IT101',
+                'program_id': 1,
+                'program': {'program_name': 'BSIT'},
+                'semester': '1st Semester',
+                'specialization': None,
+            }
+        }
+    }
+    bsds_sched = {
+        'schedule_id': 2,
+        'room_id': 102,
+        'section': 'BSDS-1A',
+        'day': 'Monday',
+        'class_start': '10:00:00',
+        'class_end': '12:00:00',
+        'semester': '1st Semester',
+        'archive': False,
+        'professor_load_id': 2,
+        'room': {'room_name': 'Room 102'},
+        'professor_load': {
+            'id': 2,
+            'course_id': 20,
+            'professor_name': 'Prof DS',
+            'course': {
+                'course_id': 20,
+                'course_code': 'DS101',
+                'program_id': 2,
+                'program': {'program_name': 'BSDS'},
+                'semester': '1st Semester',
+                'specialization': None,
+            }
+        }
+    }
+
+    mock_db = MockSupabaseClient({
+        'schedule': [bsit_sched, bsds_sched],
+        'program': [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}],
+        'working_hours': [],
+    })
+    monkeypatch.setattr(app_module, 'supabase', mock_db)
+    monkeypatch.setattr(app_module, '_get_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+
+    with test_client.session_transaction() as sess:
+        sess['user_id'] = 2
+        sess['role'] = 'Scheduler'
+        sess['program'] = 'BSIT'
+        sess['program_id'] = 1
+
+    resp = test_client.get('/schedules')
+    assert resp.status_code == 200
+    html = resp.data.decode('utf-8')
+    # Scheduler does not have program dropdown
+    assert 'id="programFilter"' not in html
+    # Schedulers only see BSIT
+    assert 'BSIT-1A' in html
+    assert 'BSDS-1A' not in html
+
+    # If scheduler tries to access another program's schedule
+    resp_tamper = test_client.get('/schedules?program=BSDS')
+    assert resp_tamper.status_code == 403
+

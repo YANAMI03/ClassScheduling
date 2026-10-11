@@ -55,9 +55,9 @@ def wh_client(monkeypatch):
 
     fake_db = FakeSupabase()
     initial_rows = [
-        {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'semester_id': 1},
-        {'timeslot_id': 2, 'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'semester_id': 1},
-        {'timeslot_id': 3, 'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'semester_id': 1},
+        {'working_hours_id': 1, 'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'semester_id': 1},
+        {'working_hours_id': 2, 'timeslot_id': 2, 'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'semester_id': 1},
+        {'working_hours_id': 3, 'timeslot_id': 3, 'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'semester_id': 1},
     ]
     wh_table = WorkingHoursFakeTable('working_hours', list(initial_rows))
     fake_db.tables['working_hours'] = wh_table
@@ -79,7 +79,7 @@ def test_admin_working_hours_view(wh_client):
     assert res.status_code == 200
     html = res.data.decode('utf-8')
     assert 'Working Hours' in html
-    assert 'Daily Operating Windows & Working Hours' in html
+    assert 'Daily Schedule Windows' in html
     assert 'Monday' in html
     assert 'Tuesday' in html
     assert 'Wednesday' in html
@@ -90,7 +90,7 @@ def test_legacy_timeslot_endpoint_alias(wh_client):
     _login_as(client, 'admin')
 
     # Legacy endpoint should resolve to the same view
-    res = client.get('/timeslot')
+    res = client.get('/timeslot', follow_redirects=True)
     assert res.status_code == 200
     html = res.data.decode('utf-8')
     assert 'Working Hours' in html
@@ -139,7 +139,7 @@ def test_admin_edit_working_hours(wh_client):
     }, follow_redirects=True)
     assert res.status_code == 200
 
-    mon_row = next(r for r in fake_db.tables['working_hours'].data if r.get('timeslot_id') == 1)
+    mon_row = next(r for r in fake_db.tables['working_hours'].data if (r.get('working_hours_id') == 1 or r.get('timeslot_id') == 1))
     assert mon_row['start_time'] == '09:00:00'
     assert mon_row['end_time'] == '17:00:00'
 
@@ -152,7 +152,7 @@ def test_admin_delete_working_hours(wh_client):
     assert res.status_code == 200
 
     wh_rows = fake_db.tables['working_hours'].data
-    assert not any(r.get('timeslot_id') == 3 for r in wh_rows)
+    assert not any((r.get('working_hours_id') == 3 or r.get('timeslot_id') == 3) for r in wh_rows)
 
 
 def test_scheduler_and_viewer_blocked(wh_client):
@@ -170,4 +170,4 @@ def test_scheduler_and_viewer_blocked(wh_client):
 
 def test_backup_insert_order_and_pk_configuration():
     assert 'working_hours' in app_module.BACKUP_TABLES_INSERT_ORDER
-    assert app_module.BACKUP_PKS.get('working_hours') == 'timeslot_id'
+    assert app_module.BACKUP_PKS.get('working_hours') == 'working_hours_id'

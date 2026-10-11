@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Working Hours - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Working Hours</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-time-five me-1"></i>Configuration</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Working Hours</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 <div class="page-header d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
@@ -36,11 +42,10 @@
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th style="width: 20%;">Day of Week</th>
-                    <th style="width: 25%;">Operating Window (Start - End)</th>
-                    <th style="width: 20%;">Lunch Break Window</th>
-                    <th style="width: 18%;">Non-LOHB Cutoff</th>
-                    <th class="text-end" style="width: 17%;">Actions</th>
+                    <th style="width: 25%;">Day of Week</th>
+                    <th style="width: 30%;">Operating Window (Start - End)</th>
+                    <th style="width: 25%;">Lunch Break Window</th>
+                    <th class="text-end" style="width: 20%;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -65,25 +70,16 @@
                         <span class="text-muted fst-italic">No lunch break</span>
                         {% endif %}
                     </td>
-                    <td>
-                        {% if ts.professor_cutoff %}
-                        <span class="badge bg-info-subtle text-dark border border-info-subtle px-2 py-1">
-                            <i class="bx bx-stopwatch me-1 text-info"></i>{{ ts.professor_cutoff[:5] }}
-                        </span>
-                        {% else %}
-                        <span class="text-muted fst-italic">None (Window End)</span>
-                        {% endif %}
-                    </td>
                     <td class="text-end">
                         {% if can_edit_working_hours or is_dean_or_admin %}
                         <div class="btn-group btn-group-sm">
                             <button type="button" class="btn btn-outline-secondary btn-sm"
-                                    onclick="openEditWorkingHoursModal({{ ts.timeslot_id }}, '{{ ts.day }}', '{{ ts.start_time[:5] if ts.start_time else '' }}', '{{ ts.end_time[:5] if ts.end_time else '' }}', '{{ ts.lunch_time[:5] if ts.lunch_time else '' }}', '{{ ts.professor_cutoff[:5] if ts.professor_cutoff else '' }}')">
+                                    onclick="openEditWorkingHoursModal({{ ts.working_hours_id or ts.timeslot_id }}, '{{ ts.day }}', '{{ ts.start_time[:5] if ts.start_time else '' }}', '{{ ts.end_time[:5] if ts.end_time else '' }}', '{{ ts.lunch_time[:5] if ts.lunch_time else '' }}')">
                                 <i class="bx bx-edit me-1"></i> Edit Hours
                             </button>
                             <button type="button" class="btn btn-outline-danger btn-sm"
                                     data-action="delete"
-                                    data-url="/delete_working_hours/{{ ts.timeslot_id }}"
+                                    data-url="/delete_working_hours/{{ ts.working_hours_id or ts.timeslot_id }}"
                                     data-method="POST"
                                     data-confirm="Are you sure you want to remove {{ ts.day }} from active schedule windows?"
                                     data-title="Remove Operating Day"
@@ -96,7 +92,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="text-center py-5 text-muted">
+                    <td colspan="4" class="text-center py-5 text-muted">
                         <i class="bx bx-time fs-1 d-block mb-3 text-secondary"></i>
                         <h6 class="fw-bold mb-1">No Active Schedule Days Configured</h6>
                         <p class="text-muted mb-3">Add operating days individually or initialize the standard Monday–Friday schedule.</p>
@@ -164,7 +160,7 @@
                         <small class="text-muted">1-hour block strictly reserved with zero classes scheduled.</small>
                     </div>
                     <div class="alert alert-info py-2 small mb-0">
-                        <i class="bx bx-info-circle me-1"></i> Newly added operating days start with no cutoff. You can configure a Non-LOHB cutoff by editing the day's hours. Changes apply to future schedule generations only.
+                        <i class="bx bx-info-circle me-1"></i> Note: Changes apply to future schedule generations only.
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -200,11 +196,6 @@
                         <label class="form-label fw-bold">Lunch Break Start</label>
                         <input type="time" name="lunch_time" id="edit_lunch_time" class="form-control">
                         <small class="text-muted">1-hour block strictly reserved with zero classes scheduled.</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Non-LOHB Cutoff (Optional)</label>
-                        <input type="time" name="professor_cutoff" id="edit_professor_cutoff" class="form-control">
-                        <small class="text-muted">Professors with cutoffs (non-LOHB) cannot be scheduled past this time. Must be after start time and on/before window end. Leave blank for no cutoff.</small>
                     </div>
                     <div class="alert alert-info py-2 small mb-0">
                         <i class="bx bx-info-circle me-1"></i> Note: Changes apply to future schedule generations only.
@@ -246,13 +237,12 @@
 
 {% block scripts %}
 <script>
-function openEditWorkingHoursModal(id, day, start, end, lunch, cutoff) {
+function openEditWorkingHoursModal(id, day, start, end, lunch) {
     document.getElementById('editWorkingHoursForm').action = '/edit_working_hours/' + id;
     document.getElementById('modalDayLabel').textContent = day;
     document.getElementById('edit_start_time').value = start;
     document.getElementById('edit_end_time').value = end;
     document.getElementById('edit_lunch_time').value = lunch;
-    document.getElementById('edit_professor_cutoff').value = cutoff || '';
     var modal = new bootstrap.Modal(document.getElementById('editWorkingHoursModal'));
     modal.show();
 }

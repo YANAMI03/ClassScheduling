@@ -2,7 +2,13 @@
 
 {% block title %}Activity Log - Scheduler{% endblock %}
 
-{% block header_title %}<h5 class="header__title">Activity Log</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-history me-1"></i>Audit</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Activity Log</span>
+</nav>
+{% endblock %}
 
 {% block head_extra %}
 <style>

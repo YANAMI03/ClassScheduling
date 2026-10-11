@@ -98,10 +98,10 @@ class ExtendedFakeSupabase(FakeSupabase):
             {'academic_ranking_id': 2, 'ranking_name': 'Assistant Professor', 'name': 'Assistant Professor', 'max_teaching_load': 21, 'max_preparations': 4, 'rate_per_hour': 300, 'program_id': 1},
         ])
         self.tables['working_hours'] = FilteringFakeTable('working_hours', [
-            {'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
-            {'timeslot_id': 2, 'day': 'Saturday', 'start_time': '08:00:00', 'end_time': '12:00:00', 'lunch_time': None},
+            {'working_hours_id': 1, 'timeslot_id': 1, 'day': 'Monday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
+            {'working_hours_id': 2, 'timeslot_id': 2, 'day': 'Saturday', 'start_time': '08:00:00', 'end_time': '12:00:00', 'lunch_time': None},
         ])
-        self.tables['working_hours'] = self.tables['timeslot']
+        self.tables['timeslot'] = self.tables['working_hours']
         self.tables['professor_load'] = FilteringFakeTable('professor_load', [
             {'id': 1, 'professor_load_id': 1, 'prof_id': 2, 'course_id': 20, 'sections': 1},
             {'id': 2, 'professor_load_id': 2, 'prof_id': 1, 'course_id': 10, 'sections': 1},

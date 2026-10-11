@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}Programs - Admin{% endblock %}
-{% block header_title %}<h5 class="header__title">Program Management</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <span class="text-muted"><i class="bx bx-shield me-1"></i>Administration</span>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Academic Programs</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 <div class="page-header">

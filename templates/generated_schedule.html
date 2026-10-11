@@ -1,10 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Section {{ section.section_name or section.section }} Schedule - Scheduler{% endblock %}
-{% block header_title %}<h5 class="header__title">Section Schedule Details</h5>{% endblock %}
+{% block header_title %}
+<nav aria-label="breadcrumb" class="header__breadcrumb">
+    <a href="{{ url_for('schedules') }}"><i class="bx bx-calendar me-1"></i>Schedules</a>
+    <i class="bx bx-chevron-right header__breadcrumb-separator"></i>
+    <span class="header__breadcrumb-current">Section {{ section.section_name or section.section }}</span>
+</nav>
+{% endblock %}
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
 {% set can_edit_schedule = user_role_lower in ['scheduler'] %}
+{% set is_admin = user_role_lower in ['super_admin', 'super admin', 'admin'] %}
 <div class="page-header">
     <div>
         <h1 class="page-title">Section Schedule: {{ section.section_name or section.section }}</h1>
@@ -34,7 +41,7 @@
         <a href="/schedules" class="btn btn-outline-secondary">
             <i class="bx bx-arrow-back"></i> Back to Section Schedule
         </a>
-        {% if can_edit_schedule and entries %}
+        {% if is_admin and entries %}
         <a href="{{ url_for('delete_section_schedule', section_name=section.section or section.section_name, semester=section.semester, major=section.major) }}"
             class="btn btn-danger btn-sm stop-prop"
             data-action="delete"
