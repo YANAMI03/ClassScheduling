@@ -709,7 +709,7 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
         sess['role'] = 'Admin'
         sess['program'] = 'BSIT'
 
-    # Admin visits /schedules without program param -> defaults to single program (BSIT)
+    # Admin visits /schedules without program param -> defaults to All Programs
     resp = test_client.get('/schedules')
     assert resp.status_code == 200
     html = resp.data.decode('utf-8')
@@ -719,12 +719,12 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
     assert 'name="program"' in html
     assert '<option value="BSIT"' in html
     assert '<option value="BSDS"' in html
-    # 'All Programs' is not an option for admin
-    assert 'All Programs' not in html
+    # 'All Programs' is an option for admin
+    assert 'All Programs' in html
 
-    # BSIT-1A is displayed, BSDS-1A is NOT displayed
+    # Both BSIT-1A and BSDS-1A are displayed by default (All programs)
     assert 'BSIT-1A' in html
-    assert 'BSDS-1A' not in html
+    assert 'BSDS-1A' in html
 
     # Admin selects BSDS
     resp_bsds = test_client.get('/schedules?program=BSDS')

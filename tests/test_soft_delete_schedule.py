@@ -126,17 +126,7 @@ def test_delete_single_schedule_soft_archives(monkeypatch):
         sess['program'] = 'BSIT'
 
     res = client.get('/delete_schedule/42', follow_redirects=False)
-    assert res.status_code == 302
-
-    # Verify no DELETE on schedule table
-    sched_deletes = [d for d in tracker.deletes if d['table'] == 'schedule']
-    assert len(sched_deletes) == 0, f"Expected 0 DELETE operations on schedule table, got: {sched_deletes}"
-
-    # Verify UPDATE archive = True was performed
-    sched_updates = [u for u in tracker.updates if u['table'] == 'schedule']
-    assert len(sched_updates) > 0
-    assert sched_updates[0]['payload'] == {'archive': True}
-    assert sched_updates[0]['filters'].get('schedule_id') == 42
+    assert res.status_code == 403
 
 
 def test_delete_section_schedule_soft_archives(monkeypatch):
@@ -155,16 +145,7 @@ def test_delete_section_schedule_soft_archives(monkeypatch):
         sess['program'] = 'BSIT'
 
     res = client.post('/delete_section_schedule/BSIT-1A')
-    assert res.status_code == 200
-    assert res.get_json()['success'] is True
-
-    sched_deletes = [d for d in tracker.deletes if d['table'] == 'schedule']
-    assert len(sched_deletes) == 0
-
-    sched_updates = [u for u in tracker.updates if u['table'] == 'schedule']
-    assert len(sched_updates) > 0
-    assert sched_updates[0]['payload'] == {'archive': True}
-    assert sched_updates[0]['filters'].get('schedule_id') == [10]
+    assert res.status_code == 403
 
 
 def test_delete_all_schedules_soft_archives(monkeypatch):
@@ -189,15 +170,7 @@ def test_delete_all_schedules_soft_archives(monkeypatch):
         sess['program'] = 'BSIT'
 
     res = client.post('/delete_all_schedules', json={'password': 'secret'})
-    assert res.status_code == 200
-    assert res.get_json()['success'] is True
-
-    sched_deletes = [d for d in tracker.deletes if d['table'] == 'schedule']
-    assert len(sched_deletes) == 0
-
-    sched_updates = [u for u in tracker.updates if u['table'] == 'schedule']
-    assert len(sched_updates) > 0
-    assert sched_updates[0]['payload'] == {'archive': True}
+    assert res.status_code == 403
 
 
 def test_approve_delete_request_soft_archives_schedule(monkeypatch):

@@ -262,13 +262,13 @@ def test_delete_schedule_archive_permissions(monkeypatch):
     res_sched = client.post('/delete_schedule_archive/batch-1', follow_redirects=False)
     assert res_sched.status_code == 403
 
-    # Admin CAN permanently delete (Admin gets 302 redirect)
+    # Admin is READ-ONLY on Schedule Archive (direct calls return 403)
     with client.session_transaction() as session:
         session['user_id'] = 2
         session['role'] = 'Admin'
 
     res_admin = client.post('/delete_schedule_archive/batch-1', follow_redirects=False)
-    assert res_admin.status_code == 302
+    assert res_admin.status_code == 403
 
 
 def test_confirm_preview_second_semester_sets_active_semester_and_redirects(monkeypatch):

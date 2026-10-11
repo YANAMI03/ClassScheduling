@@ -29,13 +29,14 @@
 <!-- Filter Controls -->
 <div class="card-custom mb-4 p-3 bg-light-subtle">
     <form method="get" class="row g-2 align-items-end" id="roomScheduleFilterForm">
-        {% if is_super_admin and programs %}
+        {% if (is_super_admin or is_admin or is_viewer) and programs %}
         <!-- Program Filter -->
         <div class="col-md-2">
             <label class="form-label small fw-bold text-muted mb-1" for="programFilter">
                 <i class="bx bx-buildings me-1"></i>Program
             </label>
             <select id="programFilter" name="program" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="" {% if not program_filter or program_filter|lower == 'all' %}selected{% endif %}>All Programs</option>
                 {% for p in programs %}
                 <option value="{{ p.program_name }}" {% if p.program_name == program_filter %}selected{% endif %}>{{ p.program_name }}</option>
                 {% else %}
@@ -48,7 +49,7 @@
         {% endif %}
 
         <!-- Room Selector -->
-        <div class="{% if is_super_admin and programs %}col-md-3{% else %}col-md-3{% endif %}">
+        <div class="{% if (is_super_admin or is_admin or is_viewer) and programs %}col-md-3{% else %}col-md-3{% endif %}">
             <label class="form-label small fw-bold text-muted mb-1" for="roomFilter">Room</label>
             <select id="roomFilter" name="room_id" class="form-select form-select-sm">
                 <option value="">All Rooms</option>
@@ -83,7 +84,7 @@
         </div>
 
         <!-- Major Filter -->
-        <div class="{% if is_super_admin and programs %}col-md-2{% else %}col-md-2{% endif %}">
+        <div class="{% if (is_super_admin or is_admin or is_viewer) and programs %}col-md-2{% else %}col-md-2{% endif %}">
             <label class="form-label small fw-bold text-muted mb-1" for="majorFilter">Major</label>
             <select id="majorFilter" name="major" class="form-select form-select-sm">
                 <option value="">All Majors</option>
@@ -99,7 +100,7 @@
                 <i class="bx bx-filter"></i> Apply Filters
             </button>
             {% if selected_room_id or selected_day or year_filter or major_filter %}
-            <a href="/room_schedule{% if is_super_admin and program_filter %}?program={{ program_filter|urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm" title="Clear all filters">
+            <a href="/room_schedule{% if (is_super_admin or is_admin or is_viewer) and program_filter %}?program={{ program_filter|urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm" title="Clear all filters">
                 <i class="bx bx-x"></i>
             </a>
             {% endif %}
@@ -110,7 +111,7 @@
 {% if rooms %}
 <div class="d-grid gap-3">
     {% for room in rooms %}
-    <div class="section-card card-custom p-3 transition" data-href="/room_schedule/{{ room.room_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}{% if is_super_admin and program_filter %}&program={{ program_filter | urlencode }}{% endif %}" tabindex="0" role="button" aria-label="View schedule for Room {{ room.room_name }}" style="cursor: pointer;">
+    <div class="section-card card-custom p-3 transition" data-href="/room_schedule/{{ room.room_id | urlencode }}?year={{ year_filter | urlencode }}&semester={{ semester_filter | urlencode }}&major={{ major_filter | urlencode }}&day={{ selected_day | urlencode }}{% if (is_super_admin or is_admin or is_viewer) and program_filter %}&program={{ program_filter | urlencode }}{% endif %}" tabindex="0" role="button" aria-label="View schedule for Room {{ room.room_name }}" style="cursor: pointer;">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
             <div class="section-card__info">
                 <div class="d-flex align-items-center gap-2 mb-1">

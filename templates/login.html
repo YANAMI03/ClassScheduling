@@ -111,6 +111,93 @@
             flex-shrink: 0;
         }
 
+        .login-alert {
+            padding: 0.625rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .login-alert i {
+            font-size: 1.125rem;
+            flex-shrink: 0;
+        }
+
+        .login-alert-success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+
+        .login-alert-warning {
+            background: #fffbeb;
+            border: 1px solid #fef3c7;
+            color: #92400e;
+        }
+
+        .login-alert-info {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+        }
+
+        .login-alert-danger,
+        .login-alert-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        /* Password field with inside toggle button */
+        .password-field-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .password-field-wrapper .form-control {
+            padding-right: 2.75rem !important;
+        }
+
+        .password-toggle-btn {
+            position: absolute;
+            right: 0.625rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            padding: 0.25rem;
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: color 0.15s ease, background-color 0.15s ease;
+            z-index: 5;
+            line-height: 1;
+        }
+
+        .password-toggle-btn:hover {
+            color: var(--text-primary);
+            background-color: rgba(0, 0, 0, 0.04);
+        }
+
+        .password-toggle-btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+            color: var(--primary);
+        }
+
+        .password-toggle-btn i {
+            font-size: 1.25rem;
+        }
+
         .login-toggle {
             text-align: center;
             margin-top: 1rem;
@@ -129,7 +216,7 @@
         }
 
         .hidden {
-            display: none;
+            display: none !important;
         }
     </style>
 </head>
@@ -141,7 +228,26 @@
                 <i class="bx bx-calendar-alt"></i>
                 <h3>Scheduler</h3>
             </div>
-            <p class="login-card__subtitle" id="formSubtitle">Sign in to manage class schedules</p>
+            <p class="login-card__subtitle" id="formSubtitle">
+                {% if active_tab == 'signup' %}
+                Create a new account
+                {% elif active_tab == 'resend' %}
+                Request a new verification link
+                {% else %}
+                Sign in to manage class schedules
+                {% endif %}
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="login-alert login-alert-{{ category if category != 'error' else 'danger' }}">
+                <i class="bx {% if category in ('success', 'info') %}bx-check-circle{% elif category == 'warning' %}bx-info-circle{% else %}bx-error-circle{% endif %}"></i>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
 
             {% if error %}
             <div class="login-error">
@@ -151,27 +257,35 @@
             {% endif %}
 
             <!-- Login Form -->
-            <form method="post" action="{{ url_for('login') }}" id="loginForm">
+            <form method="post" action="{{ url_for('login') }}" id="loginForm" class="{% if active_tab in ('signup', 'resend') %}hidden{% endif %}">
                 <div class="mb-3">
                     <label for="username" class="form-label">Username or Email</label>
                     <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username or email"
-                        required autofocus>
+                        required autofocus value="{{ request.form.get('username', '') }}">
                 </div>
                 <div class="mb-3">
                     <label for="password" class="form-label">Password</label>
-                    <input type="password" id="password" name="password" class="form-control"
-                        placeholder="Enter your password" required>
+                    <div class="password-field-wrapper">
+                        <input type="password" id="password" name="password" class="form-control"
+                            placeholder="Enter your password" autocomplete="current-password" required>
+                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                            <i class="bx bx-show"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary">
                     <i class="bx bx-log-in me-2"></i> Sign In
                 </button>
                 <div class="login-toggle">
-                    Don't have an account? <a href="#" id="showSignup">Sign Up</a>
+                    Don't have an account? <a href="{{ url_for('signup') }}" id="showSignup">Sign up</a>
+                </div>
+                <div class="login-toggle mt-2">
+                    Didn't receive verification email? <a href="#" id="showResend">Resend Verification</a>
                 </div>
             </form>
 
             <!-- Sign Up Form -->
-            <form method="post" action="{{ url_for('signup') }}" id="signupForm" class="hidden">
+            <form method="post" action="{{ url_for('signup') }}" id="signupForm" class="{% if active_tab != 'signup' %}hidden{% endif %}">
                 <div class="login-error hidden" id="signupError">
                     <i class="bx bx-error-circle"></i>
                     <span id="signupErrorText">Please provide an email, a username, or both.</span>
@@ -179,41 +293,45 @@
                 <div class="mb-3">
                     <label for="firstName" class="form-label">First Name</label>
                     <input type="text" id="firstName" name="first_name" class="form-control"
-                        placeholder="Enter your first name" required>
+                        placeholder="Enter your first name" required value="{{ request.form.get('first_name', '') }}">
                 </div>
                 <div class="mb-3">
                     <label for="lastName" class="form-label">Last Name</label>
                     <input type="text" id="lastName" name="last_name" class="form-control"
-                        placeholder="Enter your last name" required>
-                </div>
-                <div class="mb-3">
-                    <label for="program" class="form-label">Program</label>
-                    <select id="program" name="program" class="form-control" required>
-                        <option value="">Select Program</option>
-                        <option value="BSIT">BSIT</option>
-                        <option value="BSBA">BSBA</option>
-                    </select>
+                        placeholder="Enter your last name" required value="{{ request.form.get('last_name', '') }}">
                 </div>
                 <div class="mb-3">
                     <label for="signupEmail" class="form-label">Email</label>
-                    <input type="email" id="signupEmail" name="email" class="form-control" placeholder="Enter your email">
+                    <input type="email" id="signupEmail" name="email" class="form-control" placeholder="Enter your email"
+                        value="{{ request.form.get('email', '') }}">
                 </div>
                 <div class="login-helper-text">
                     Provide an email, a username, or both.
                 </div>
                 <div class="mb-3">
                     <label for="signupUsername" class="form-label">Username</label>
-                    <input type="text" id="signupUsername" name="username" class="form-control" placeholder="Choose a username">
+                    <input type="text" id="signupUsername" name="username" class="form-control" placeholder="Choose a username"
+                        value="{{ request.form.get('username', '') }}">
                 </div>
                 <div class="mb-3">
                     <label for="signupPassword" class="form-label">Password</label>
-                    <input type="password" id="signupPassword" name="password" class="form-control"
-                        placeholder="Choose a password" required>
+                    <div class="password-field-wrapper">
+                        <input type="password" id="signupPassword" name="password" class="form-control"
+                            placeholder="Choose a password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                            <i class="bx bx-show"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label for="confirmPassword" class="form-label">Confirm Password</label>
-                    <input type="password" id="confirmPassword" name="confirm_password" class="form-control"
-                        placeholder="Confirm your password" required>
+                    <div class="password-field-wrapper">
+                        <input type="password" id="confirmPassword" name="confirm_password" class="form-control"
+                            placeholder="Confirm your password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                            <i class="bx bx-show"></i>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary">
                     <i class="bx bx-user-plus me-2"></i> Sign Up
@@ -221,14 +339,74 @@
                 <div class="login-toggle">
                     Already have an account? <a href="#" id="showLogin">Sign In</a>
                 </div>
+                <div class="login-toggle mt-2">
+                    Didn't receive verification email? <a href="#" id="showResendFromSignup">Resend Verification</a>
+                </div>
+            </form>
+
+            <!-- Resend Verification Form -->
+            <form method="post" action="{{ url_for('resend_verification') }}" id="resendForm" class="{% if active_tab != 'resend' %}hidden{% endif %}">
+                <div class="mb-3">
+                    <label for="resendEmail" class="form-label">Email Address</label>
+                    <input type="email" id="resendEmail" name="email" class="form-control"
+                        placeholder="Enter your registered email" required value="{{ unconfirmed_email or '' }}">
+                </div>
+                <div class="login-helper-text">
+                    Enter your email to receive a new confirmation link.
+                </div>
+                <button type="submit" class="btn btn-primary" id="resendBtn">
+                    <i class="bx bx-envelope me-2"></i> Send Verification Link
+                </button>
+                <div class="login-toggle mt-3">
+                    <a href="#" id="backToLoginFromResend">Back to Sign In</a>
+                </div>
             </form>
         </div>
     </div>
     <script>
+        // Reusable Password Visibility Toggle
+        function initPasswordToggle(wrapper) {
+            if (!wrapper) return;
+            var input = wrapper.querySelector('input');
+            var btn = wrapper.querySelector('.password-toggle-btn');
+            if (!input || !btn) return;
+
+            function setVisibility(show) {
+                input.type = show ? 'text' : 'password';
+                btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+                var icon = btn.querySelector('i');
+                if (icon) {
+                    icon.className = show ? 'bx bx-hide' : 'bx bx-show';
+                }
+            }
+
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                var isCurrentlyPassword = (input.type === 'password');
+                setVisibility(isCurrentlyPassword);
+            });
+
+            var form = wrapper.closest('form');
+            if (form) {
+                form.addEventListener('submit', function () {
+                    setVisibility(false);
+                });
+            }
+
+            setVisibility(false);
+        }
+
+        document.querySelectorAll('.password-field-wrapper').forEach(initPasswordToggle);
+
         var emailInput = document.getElementById('signupEmail');
         var usernameInput = document.getElementById('signupUsername');
         var signupError = document.getElementById('signupError');
         var signupErrorText = document.getElementById('signupErrorText');
+        var loginForm = document.getElementById('loginForm');
+        var signupForm = document.getElementById('signupForm');
+        var resendForm = document.getElementById('resendForm');
+        var formSubtitle = document.getElementById('formSubtitle');
 
         function showSignupError(msg) {
             if (signupError && signupErrorText) {
@@ -251,6 +429,39 @@
             }
         }
 
+        function setView(view) {
+            clearIdentifierErrors();
+            // Reset all password toggles to hidden
+            document.querySelectorAll('.password-field-wrapper').forEach(function(w) {
+                var inp = w.querySelector('input');
+                var btn = w.querySelector('.password-toggle-btn');
+                if (inp && btn) {
+                    inp.type = 'password';
+                    btn.setAttribute('aria-label', 'Show password');
+                    btn.setAttribute('aria-pressed', 'false');
+                    var icon = btn.querySelector('i');
+                    if (icon) icon.className = 'bx bx-show';
+                }
+            });
+
+            if (view === 'signup') {
+                loginForm.classList.add('hidden');
+                resendForm.classList.add('hidden');
+                signupForm.classList.remove('hidden');
+                formSubtitle.textContent = 'Create a new account';
+            } else if (view === 'resend') {
+                loginForm.classList.add('hidden');
+                signupForm.classList.add('hidden');
+                resendForm.classList.remove('hidden');
+                formSubtitle.textContent = 'Request a new verification link';
+            } else {
+                signupForm.classList.add('hidden');
+                resendForm.classList.add('hidden');
+                loginForm.classList.remove('hidden');
+                formSubtitle.textContent = 'Sign in to manage class schedules';
+            }
+        }
+
         if (emailInput) {
             emailInput.addEventListener('input', function () {
                 if (emailInput.value.trim() || (usernameInput && usernameInput.value.trim())) {
@@ -269,19 +480,55 @@
 
         document.getElementById('showSignup').addEventListener('click', function (e) {
             e.preventDefault();
-            clearIdentifierErrors();
-            document.getElementById('loginForm').classList.add('hidden');
-            document.getElementById('signupForm').classList.remove('hidden');
-            document.getElementById('formSubtitle').textContent = 'Create a new account';
+            setView('signup');
         });
 
         document.getElementById('showLogin').addEventListener('click', function (e) {
             e.preventDefault();
-            clearIdentifierErrors();
-            document.getElementById('signupForm').classList.add('hidden');
-            document.getElementById('loginForm').classList.remove('hidden');
-            document.getElementById('formSubtitle').textContent = 'Sign in to manage class schedules';
+            setView('login');
         });
+
+        document.getElementById('showResend').addEventListener('click', function (e) {
+            e.preventDefault();
+            setView('resend');
+        });
+
+        var showResendFromSignup = document.getElementById('showResendFromSignup');
+        if (showResendFromSignup) {
+            showResendFromSignup.addEventListener('click', function (e) {
+                e.preventDefault();
+                setView('resend');
+            });
+        }
+
+        document.getElementById('backToLoginFromResend').addEventListener('click', function (e) {
+            e.preventDefault();
+            setView('login');
+        });
+
+        // Cooldown timer handler for resend
+        var initialCooldown = parseInt("{{ cooldown or 0 }}", 10);
+        if (initialCooldown > 0) {
+            startCooldownTimer(initialCooldown);
+        }
+
+        function startCooldownTimer(seconds) {
+            var btn = document.getElementById('resendBtn');
+            if (!btn) return;
+            btn.disabled = true;
+            var count = seconds;
+            btn.innerHTML = '<i class="bx bx-time me-2"></i> Resend in ' + count + 's';
+            var interval = setInterval(function() {
+                count--;
+                if (count <= 0) {
+                    clearInterval(interval);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bx bx-envelope me-2"></i> Send Verification Link';
+                } else {
+                    btn.innerHTML = '<i class="bx bx-time me-2"></i> Resend in ' + count + 's';
+                }
+            }, 1000);
+        }
 
         document.getElementById('signupForm').addEventListener('submit', function (e) {
             var email = emailInput ? emailInput.value.trim() : '';

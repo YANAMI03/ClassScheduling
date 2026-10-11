@@ -122,6 +122,16 @@
         background: #0d6efd;
         color: white;
     }
+
+    .badge-viewer {
+        background: #6c757d;
+        color: white;
+    }
+
+    .badge-unknown {
+        background: #6c757d;
+        color: white;
+    }
     
     .btn-action {
         padding: 0.375rem 0.75rem;
@@ -248,19 +258,24 @@
                     {% if user.role and user.role.lower() in ['admin', 'super_admin'] %}
                     <span class="text-muted fst-italic">Global / All Programs</span>
                     {% else %}
-                    {{ user.program or '—' }}
+                    {{ user.program or 'No program' }}
                     {% endif %}
                 </td>
                 <td>
-                    <span class="badge-custom badge-{{ (user.role or 'scheduler').lower() }}">
-                        {% if (user.role or '').lower() in ['dean', 'chair'] %}
+                    {% set role_lower = (user.role or 'viewer') | lower %}
+                    <span class="badge-custom badge-{{ role_lower if role_lower in ['admin', 'super_admin', 'dean', 'chair', 'scheduler', 'viewer'] else 'unknown' }}">
+                        {% if role_lower in ['dean', 'chair'] %}
                             Scheduler
-                        {% elif (user.role or '').lower() == 'super_admin' %}
+                        {% elif role_lower == 'super_admin' %}
                             Super Admin
-                        {% elif (user.role or '').lower() == 'admin' %}
+                        {% elif role_lower == 'admin' %}
                             Admin
+                        {% elif role_lower == 'viewer' %}
+                            Viewer
+                        {% elif role_lower == 'scheduler' %}
+                            Scheduler
                         {% else %}
-                            {{ user.role or 'Scheduler' }}
+                            {{ user.role or 'Viewer' }}
                         {% endif %}
                     </span>
                 </td>
@@ -318,7 +333,9 @@
                     <div class="mb-3">
                         <label for="createRole" class="form-label">Role</label>
                         <select class="form-control" id="createRole" onchange="toggleProgramRole('createRole', 'createProgram')" required>
+                            <option value="viewer" selected>Viewer</option>
                             <option value="scheduler">Scheduler</option>
+                            <option value="admin">Academic Admin</option>
                             <option value="super_admin">Super Admin</option>
                         </select>
                     </div>
@@ -335,7 +352,7 @@
                                 <option value="BSBA">BSBA</option>
                             {% endif %}
                         </select>
-                        <small class="text-muted d-none" id="createProgramHelp">Super Admin has global access across all programs.</small>
+                        <small class="text-muted d-none" id="createProgramHelp">Admin and Viewer have global access across all programs.</small>
                     </div>
                 </form>
             </div>
@@ -373,9 +390,10 @@
                     <div class="mb-3">
                         <label for="editRole" class="form-label">Role</label>
                         <select class="form-control" id="editRole" onchange="toggleProgramRole('editRole', 'editProgram')" required>
+                            <option value="viewer">Viewer</option>
                             <option value="scheduler">Scheduler</option>
+                            <option value="admin">Academic Admin</option>
                             <option value="super_admin">Super Admin</option>
-                            <option value="admin">Admin (Legacy)</option>
                         </select>
                     </div>
                     <div class="mb-3" id="editProgramGroup">
@@ -391,7 +409,7 @@
                                 <option value="BSBA">BSBA</option>
                             {% endif %}
                         </select>
-                        <small class="text-muted d-none" id="editProgramHelp">Super Admin has global access across all programs.</small>
+                        <small class="text-muted d-none" id="editProgramHelp">Admin and Viewer have global access across all programs.</small>
                     </div>
                 </form>
             </div>
@@ -413,9 +431,9 @@ function toggleProgramRole(roleSelectId, programSelectId) {
     const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
     const progSelect = document.getElementById(programSelectId);
     const helpText = document.getElementById(roleSelectId === 'createRole' ? 'createProgramHelp' : 'editProgramHelp');
-    const isGlobal = ['admin', 'super_admin'].includes(roleVal);
+    const isScheduler = roleVal === 'scheduler';
     
-    if (isGlobal) {
+    if (!isScheduler) {
         progSelect.value = '';
         progSelect.disabled = true;
         progSelect.required = false;
@@ -450,7 +468,7 @@ function openCreateModal() {
     document.getElementById('createEmail').value = '';
     document.getElementById('createPassword').value = '';
     document.getElementById('createProgram').value = '';
-    document.getElementById('createRole').value = 'scheduler';
+    document.getElementById('createRole').value = 'viewer';
     toggleProgramRole('createRole', 'createProgram');
     
     const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
@@ -464,14 +482,14 @@ function createUser() {
     const password = document.getElementById('createPassword').value;
     const role = document.getElementById('createRole').value;
     const program = document.getElementById('createProgram').value;
-    const isGlobal = ['admin', 'super_admin'].includes((role || '').toLowerCase());
+    const isScheduler = (role || '').toLowerCase() === 'scheduler';
     
     if (!firstName || !lastName || !email || !password || !role) {
         alert('Please fill in all required fields.');
         return;
     }
     
-    if (!isGlobal && !program) {
+    if (isScheduler && !program) {
         alert('Please select a program for Scheduler.');
         return;
     }
@@ -481,7 +499,7 @@ function createUser() {
     formData.append('last_name', lastName);
     formData.append('email', email);
     formData.append('password', password);
-    formData.append('program', isGlobal ? '' : program);
+    formData.append('program', isScheduler ? program : '');
     formData.append('role', role);
     
     const createBtn = document.getElementById('btnSubmitCreateUser');
@@ -544,14 +562,14 @@ function saveUser() {
     const email = document.getElementById('editEmail').value.trim();
     const role = document.getElementById('editRole').value;
     const program = document.getElementById('editProgram').value;
-    const isGlobal = ['admin', 'super_admin'].includes((role || '').toLowerCase());
+    const isScheduler = (role || '').toLowerCase() === 'scheduler';
     
     if (!firstName || !lastName || !email || !role) {
         showToast('Please fill in all required fields.', 'warning');
         return;
     }
     
-    if (!isGlobal && !program) {
+    if (isScheduler && !program) {
         showToast('Please select a program for Scheduler.', 'warning');
         return;
     }
@@ -560,7 +578,7 @@ function saveUser() {
     formData.append('first_name', firstName);
     formData.append('last_name', lastName);
     formData.append('email', email);
-    formData.append('program', isGlobal ? '' : program);
+    formData.append('program', isScheduler ? program : '');
     formData.append('role', role);
     
     const saveBtn = document.getElementById('btnSubmitSaveUser');

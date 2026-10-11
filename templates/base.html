@@ -55,7 +55,8 @@
             {% endblock %}
         </div>
         <div class="header__user d-flex align-items-center gap-3">
-            {% if session.get('role', '') | lower == 'admin' %}
+            {% set header_role_norm = (session.get('role', '') or '') | lower %}
+            {% if header_role_norm in ['admin', 'super_admin', 'super admin'] %}
             <a href="#" class="btn-notif-bell text-secondary position-relative me-2 d-inline-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#adminDeleteRequestsModal" title="Delete Requests" style="width: 38px; height: 38px; border-radius: 50%; background: rgba(0,0,0,0.04); font-size: 1.25rem;">
                 <i class="bx bx-bell"></i>
                 {% if pending_delete_requests_count and pending_delete_requests_count > 0 %}
@@ -64,7 +65,7 @@
                 </span>
                 {% endif %}
             </a>
-            {% else %}
+            {% elif header_role_norm in ['scheduler', 'dean', 'chair', 'dean/chair'] %}
             <a href="#" class="btn-notif-bell text-secondary position-relative me-2 d-inline-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#schedulerNotificationsModal" id="btnSchedulerNotif" title="Notifications" style="width: 38px; height: 38px; border-radius: 50%; background: rgba(0,0,0,0.04); font-size: 1.25rem;">
                 <i class="bx bx-bell"></i>
                 {% if unread_notifications_count and unread_notifications_count > 0 %}
@@ -130,7 +131,7 @@
         <nav class="sidebar__nav">
             {# ── SCHEDULER ROLE ── #}
             {% if user_role_norm == 'scheduler' %}
-            <a href="/" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Generate Schedule">
+            <a href="{{ url_for('home') }}" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Generate Schedule">
                 <i class="bx bx-calendar-plus sidebar__icon"></i>
                 <span class="sidebar__label">Generate Schedule</span>
             </a>
@@ -223,28 +224,14 @@
 
             {# ── VIEWER ROLE / DEFAULT ── #}
             {% else %}
-            <!-- Schedules Dropdown for Viewer -->
-            <div class="sidebar__dropdown" id="schedules-dropdown">
-                <a href="#" class="sidebar__link sidebar__link--parent {% if active_page in ['schedules', 'professor_schedule', 'room_schedule'] %}sidebar__link--active{% endif %}" title="Schedules" id="schedules-toggle">
-                    <i class="bx bx-grid-alt sidebar__icon"></i>
-                    <span class="sidebar__label">Schedules</span>
-                    <i class="bx bx-chevron-down sidebar__chevron {% if active_page in ['schedules', 'professor_schedule', 'room_schedule'] %}sidebar__chevron--expanded{% endif %}"></i>
-                </a>
-                <div class="sidebar__submenu {% if active_page in ['schedules', 'professor_schedule', 'room_schedule'] %}sidebar__submenu--expanded{% endif %}" id="schedules-submenu">
-                    <a href="/schedules" class="sidebar__link sidebar__link--submenu {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
-                        <i class="bx bx-grid-alt sidebar__icon"></i>
-                        <span class="sidebar__label">Section Schedule</span>
-                    </a>
-                    <a href="/professor_schedule" class="sidebar__link sidebar__link--submenu {% if active_page == 'professor_schedule' %}sidebar__link--active{% endif %}" title="Professor Schedule">
-                        <i class="bx bx-user sidebar__icon"></i>
-                        <span class="sidebar__label">Professor Schedule</span>
-                    </a>
-                    <a href="/room_schedule" class="sidebar__link sidebar__link--submenu {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
-                        <i class="bx bx-building sidebar__icon"></i>
-                        <span class="sidebar__label">Room Schedule</span>
-                    </a>
-                </div>
-            </div>
+            <a href="/schedules" class="sidebar__link {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
+                <i class="bx bx-grid-alt sidebar__icon"></i>
+                <span class="sidebar__label">Section Schedule</span>
+            </a>
+            <a href="/room_schedule" class="sidebar__link {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
+                <i class="bx bx-building sidebar__icon"></i>
+                <span class="sidebar__label">Room Schedule</span>
+            </a>
             {% endif %}
         </nav>
         <div class="sidebar__footer">
@@ -416,6 +403,7 @@
     </div>
     {% endif %}
 
+    {% if session.get('role', '') | lower in ['scheduler', 'dean', 'chair', 'dean/chair'] %}
     <!-- Scheduler Notifications Modal -->
     <div class="modal fade" id="schedulerNotificationsModal" tabindex="-1" aria-labelledby="schedulerNotificationsModalTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
@@ -459,6 +447,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Global Confirmation Modal -->
     <div class="modal fade" id="globalConfirmModal" tabindex="-1" aria-labelledby="globalConfirmModalTitle" aria-hidden="true">
