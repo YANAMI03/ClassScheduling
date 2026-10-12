@@ -11,7 +11,7 @@
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
 {% set is_admin = user_role_lower in ['super_admin', 'admin'] %}
-{% set is_scheduler = user_role_lower in ['scheduler', 'chair', 'dean'] %}
+{% set is_scheduler = user_role_lower in ['chair', 'dean'] %}
 {% set user_prog = session.get('program', '') %}
 <div class="page-header d-flex justify-content-between align-items-center mb-4">
     <div>

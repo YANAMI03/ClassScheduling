@@ -10,6 +10,8 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+import schedule_colors
+
 
 # ---------------------------------------------------------------------------
 # Font Registration (Windows TTF fonts with graceful Helvetica fallback)
@@ -51,8 +53,8 @@ LOGO_FOOTER_BANNER  = os.path.join(_STATIC, 'pdf_footer_banner.png')
 # ---------------------------------------------------------------------------
 COL_LECTURE     = colors.HexColor('#D9D9D9')  # Light gray fill for lecture classes
 COL_LAB         = colors.HexColor('#FFE699')  # Light orange / soft amber fill for laboratory classes
-COL_TIME_BG     = colors.HexColor('#F2F2F2')  # Neutral light gray for time column
-COL_HDR_BG      = colors.HexColor('#D9D9D9')  # Light gray for table header
+COL_TIME_BG     = colors.HexColor('#EEF2F7')  # Very light blue-gray (not neutral gray) for time column
+COL_HDR_BG      = colors.HexColor('#DCE6F1')  # Light blue for table header
 COL_UNIV_BLUE   = colors.HexColor('#001F5F')  # Deep navy for university header text
 COL_BAR_BLUE    = colors.HexColor('#003366')  # Deep blue for full-width CICT banner
 COL_FOOTER_LINE = colors.HexColor('#7E7E7E')  # Thin gray divider above footer banner
@@ -232,14 +234,10 @@ def _format_instructor_name(name):
     return f"{initials}{surname}{suffix}"
 
 
-def _cell_color(session_type):
-    """Map session type string to ReportLab Color object.
-    Laboratory -> Light Orange, Lecture / other -> Light Gray.
-    """
-    st = (session_type or '').strip().lower()
-    if 'lab' in st:
-        return COL_LAB
-    return COL_LECTURE
+def _cell_color(course_code, session_type, color_map=None):
+    """Per-course fill: same course -> same hue, session type -> shade
+    (Lecture = base, Laboratory = lighter tint, HomeRoom = deeper tint)."""
+    return colors.HexColor(schedule_colors.course_fill_hex(course_code, session_type, color_map))
 
 
 def _cell_text(entry, mode='room'):
@@ -374,6 +372,7 @@ def _build_timetable_grid(entries, mode='room', hours=None, col_w=None, row_h=No
     # 1. Clean & normalize incoming entries
     seen = set()
     cleaned = []
+    _color_map = schedule_colors.build_course_color_map([e.get('course_code') for e in entries])
     for e in entries:
         day = _safe_str(e.get('day')).strip().title()
         if day not in _DAYS:
@@ -385,7 +384,7 @@ def _build_timetable_grid(entries, mode='room', hours=None, col_w=None, row_h=No
         if st is None or et is None or et <= st:
             continue
         txt = _cell_text(e, norm_mode)
-        clr = _cell_color(e.get('session_type'))
+        clr = _cell_color(e.get('course_code'), e.get('session_type'), _color_map)
         clr_key = clr.hexval() if hasattr(clr, 'hexval') else str(clr)
         key = (day, st, et, txt, clr_key)
         if key not in seen:
@@ -613,7 +612,7 @@ class SignatureAreaFlowable(Flowable):
     """
     def __init__(self, preparers=None, pw=PAGE_WIDTH, max_w=145.0):
         super().__init__()
-        self.preparers = preparers or [{'name': None, 'title': 'Program Scheduler - BSIT'}]
+        self.preparers = preparers or [{'name': None, 'title': 'Chair - BSIT'}]
         self.pw = pw
         self.lw = max_w
         self.width = 540.0
@@ -805,22 +804,41 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
                 break
         
         if not title:
-            title = f"Program Scheduler - {prog}"
+            title = f"Chair - {prog}"
         
         return [{'name': name, 'title': title, 'program': prog}]
 
+    if norm_type == 'professor':
+        # A professor belongs to a single program -> a single preparer block.
+        prog = (filter_metadata.get('program')
+                or (entity_info.get('program_name') if isinstance(entity_info, dict) else None)
+                or (entity_info.get('program') if isinstance(entity_info, dict) else None)
+                or 'BSIT')
+        name = filter_metadata.get('preparer_name') or None
+        title = filter_metadata.get('preparer_title') or None
+        if not name or not title:
+            for e in entries:
+                if not name and e.get('preparer_name'):
+                    name = e.get('preparer_name')
+                if not title and e.get('preparer_title'):
+                    title = e.get('preparer_title')
+                if name and title:
+                    break
+        if not title:
+            title = f"Chair - {prog}"
+        return [{'name': name, 'title': title, 'program': prog}]
+
     else:
-        # Multi-program views: Room or Professor
+        # Multi-program views: Room (rooms are shared across programs).
+        # NOTE: never derive a "program" from a section name (e.g. '3E-Networking').
         prog_order = []
         entries_by_prog = {}
         for e in entries:
-            p = e.get('program')
+            p = e.get('program') or e.get('program_name')
             if not p:
-                sec = str(e.get('section') or '').strip()
-                if sec:
-                    p = sec.split()[0].split('-')[0]
+                p = filter_metadata.get('program')
             if not p:
-                p = filter_metadata.get('program') or 'BSIT'
+                p = 'BSIT'
             p = str(p).strip().upper()
             if p not in entries_by_prog:
                 entries_by_prog[p] = []
@@ -829,9 +847,10 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
 
         if not prog_order:
             default_p = filter_metadata.get('program') or 'BSIT'
-            return [{'name': None, 'title': f"Program Scheduler - {default_p}", 'program': default_p}]
+            return [{'name': None, 'title': f"Chair - {default_p}", 'program': default_p}]
 
         preparers = []
+        seen_keys = set()
         for p_code in prog_order:
             p_entries = entries_by_prog[p_code]
             p_name = None
@@ -843,16 +862,20 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
                     p_title = e.get('preparer_title')
                 if p_name or p_title:
                     break
-            
-            if not p_title:
-                p_title = f"Program Scheduler - {p_code}"
-            
-            preparers.append({
-                'name': p_name,
-                'title': p_title,
-                'program': p_code,
-            })
 
+            if not p_title:
+                p_title = f"Chair - {p_code}"
+
+            block = {'name': p_name, 'title': p_title, 'program': p_code}
+            dedup_key = ((p_name or '').strip().lower(), (p_title or '').strip().lower())
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
+            preparers.append(block)
+
+        if not preparers:
+            default_p = filter_metadata.get('program') or 'BSIT'
+            return [{'name': None, 'title': f"Chair - {default_p}", 'program': default_p}]
         return preparers
 
 

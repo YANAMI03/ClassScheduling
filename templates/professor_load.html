@@ -173,7 +173,7 @@
         <p class="page-subtitle">Assign courses, set section counts, and monitor real-time weekly hours & unit workload capacities</p>
     </div>
     {% set user_role_lower = (session.get('role', '') or '') | lower %}
-    {% if user_role_lower not in ['viewer', 'guest'] and user_role_lower in ['super admin', 'super_admin', 'admin', 'scheduler'] %}
+    {% if user_role_lower not in ['viewer', 'guest'] and user_role_lower in ['super admin', 'super_admin', 'admin', 'chair'] %}
     <div>
         <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2 shadow-sm" id="btn-open-import-modal" data-bs-toggle="modal" data-bs-target="#importLoadModal">
             <i class="bx bx-upload fs-5"></i>
@@ -183,106 +183,93 @@
     {% endif %}
 </div>
 
-<!-- Dashboard Stats Row -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary" style="width: 44px; height: 44px; font-size: 1.3rem;">
-                <i class="bx bx-user-check"></i>
-            </div>
-            <div>
-                <div class="text-muted small">Total Faculty</div>
-                <div class="fw-bold fs-5">{{ professors|length }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success" style="width: 44px; height: 44px; font-size: 1.3rem;">
-                <i class="bx bx-book-reader"></i>
-            </div>
-            <div>
-                <div class="text-muted small">With Assignments</div>
-                <div class="fw-bold fs-5">{{ professor_loads|groupby('professor_key')|list|length }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info" style="width: 44px; height: 44px; font-size: 1.3rem;">
-                <i class="bx bx-book"></i>
-            </div>
-            <div>
-                <div class="text-muted small">Course Catalog</div>
-                <div class="fw-bold fs-5">{{ courses|length }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card-custom py-3 px-3 d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center bg-warning bg-opacity-10 text-warning" style="width: 44px; height: 44px; font-size: 1.3rem;">
-                <i class="bx bx-layer"></i>
-            </div>
-            <div>
-                <div class="text-muted small">Total Sections</div>
-                <div class="fw-bold fs-5">
-                    {% set total_assigned_secs = professor_loads|map(attribute='sections')|sum if professor_loads else 0 %}
-                    {{ total_assigned_secs }}
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Top section: Load Tracker (left) + Overview stats (right) -->
+<div class="row g-4 mb-4 align-items-stretch">
 
-<!-- 40-Hour Teaching Load Tracker -->
-<div class="card-custom mb-4" id="teaching-load-tracker-card">
-    <div class="card-custom__header d-flex justify-content-between align-items-center">
-        <div>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <h5 class="card-custom__title mb-0"><i class="bx bx-tachometer me-2 text-primary"></i>40-Hour Teaching Load Tracker</h5>
-                <span id="tracker-prof-name-badge" class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold" style="display: none; font-size: 0.85rem;"></span>
+    <!-- LEFT: 40-Hour Teaching Load Tracker -->
+    <div class="col-12 col-lg-8 d-flex">
+        <div class="card-custom w-100" id="teaching-load-tracker-card">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-start gap-3">
+                <div class="flex-grow-1" style="min-width: 0;">
+                    <h5 class="card-custom__title mb-1 d-flex align-items-center gap-2">
+                        <i class="bx bx-tachometer fs-5 text-secondary"></i>
+                        <span>Teaching Load Tracker</span>
+                    </h5>
+                    <div id="tracker-prof-name-badge" class="small text-muted text-truncate" style="display: none;"></div>
+                </div>
+                <div class="flex-shrink-0 text-end">
+                    <span id="load-status-badge" class="badge bg-secondary-subtle text-secondary border px-3 py-1 rounded-pill" aria-live="polite">Awaiting Selection</span>
+                </div>
             </div>
-            <span class="text-muted small">Visual workload monitor against university standard 40 hours</span>
-        </div>
-        <span class="badge bg-secondary-subtle text-secondary border px-3 py-1 rounded-pill" id="load-status-badge" aria-live="polite">Awaiting Selection</span>
-    </div>
-    <div class="card-custom__body p-3">
-        <div class="row g-3">
-            <div class="col-12">
-                <div class="p-2 border rounded bg-light bg-opacity-25 h-100 d-flex flex-column justify-content-between">
-                    <div>
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="small fw-semibold text-muted">Weekly Teaching Hours</span>
-                            <span class="small fw-bold text-dark" id="lbl-total-hours">0 / 40 hrs</span>
-                        </div>
-                        <div class="progress" style="height: 10px; border-radius: 5px; overflow: hidden;" id="hours-progress-container" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="40" aria-label="Weekly Teaching Hours Progress">
-                            <div class="progress-bar bg-primary" id="bar-total-hours" style="width: 0%;"></div>
-                        </div>
+
+            <div class="mt-3">
+                <!-- Hero hours + progress -->
+                <div>
+                    <div class="small text-muted">Weekly Teaching Hours</div>
+                    <div id="lbl-total-hours" class="fw-bold text-primary lh-1" style="font-size: 1.9rem;">0 / 40 hrs</div>
+                    <div class="progress mt-3" style="height: 8px; border-radius: 999px; overflow: hidden;" id="hours-progress-container" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="40" aria-label="Weekly Teaching Hours Progress">
+                        <div class="progress-bar bg-primary" id="bar-total-hours" style="width: 0%;"></div>
                     </div>
-                    <div id="tracker-course-legend" class="d-flex flex-wrap gap-1 mt-2" style="display: none;"></div>
+                </div>
+
+                <!-- Per-course legend (updated by JS) -->
+                <div id="tracker-course-legend" class="d-flex flex-wrap gap-1 mt-2" style="display: none;"></div>
+
+                <!-- Selected courses / sections -->
+                <div class="d-flex border-top mt-3 pt-3">
+                    <div class="flex-fill pe-3">
+                        <div class="small text-muted">Selected Courses</div>
+                        <div id="lbl-selected-courses-count" class="fs-4 fw-bold text-dark">0</div>
+                    </div>
+                    <div class="flex-fill ps-3 border-start">
+                        <div class="small text-muted">Selected Sections</div>
+                        <div id="lbl-selected-sections-count" class="fs-4 fw-bold text-dark">0</div>
+                    </div>
+                </div>
+
+                <!-- Course breakdown (hidden unless populated) -->
+                <div id="selected-courses-breakdown-card" class="mt-3" style="display: none;">
+                    <div class="small text-muted mb-1">Course Breakdown</div>
+                    <div id="breakdown-list" class="small text-muted">No courses selected</div>
+                </div>
+
+                <!-- Hint (toggled by JS) -->
+                <div id="load-feedback-alert" class="small text-muted border-top mt-3 pt-3">
+                    Click any professor row below or search to view their teaching load distribution toward 40 hours.
                 </div>
             </div>
         </div>
-        <div class="row g-2 mt-2">
-            <div class="col-6">
-                <div class="p-2 border rounded text-center bg-white">
-                    <div class="text-muted small" style="font-size: 0.75rem;">Selected Courses</div>
-                    <div class="fw-bold fs-6 text-primary" id="lbl-selected-courses-count">0</div>
+    </div>
+
+    <!-- RIGHT: Overview stats -->
+    <div class="col-12 col-lg-4 d-flex">
+        <div class="card-custom w-100 d-flex flex-column">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h5 class="card-custom__title mb-0">Overview</h5>
+                <i class="bx bx-pie-chart-alt-2 fs-4 text-muted"></i>
+            </div>
+            <div class="row g-0 flex-grow-1">
+                <div class="col-6 p-3 border-end border-bottom">
+                    <div class="fs-3 fw-bold text-dark lh-1">{{ professors|length }}</div>
+                    <div class="small text-muted text-uppercase mt-2" style="letter-spacing:.04em;">Total Faculty</div>
+                </div>
+                <div class="col-6 p-3 border-bottom">
+                    <div class="fs-3 fw-bold text-dark lh-1">{{ professor_loads|groupby('professor_key')|list|length }}</div>
+                    <div class="small text-muted text-uppercase mt-2" style="letter-spacing:.04em;">With Assignments</div>
+                </div>
+                <div class="col-6 p-3 border-end">
+                    <div class="fs-3 fw-bold text-dark lh-1">{{ courses|length }}</div>
+                    <div class="small text-muted text-uppercase mt-2" style="letter-spacing:.04em;">Course Catalog</div>
+                </div>
+                <div class="col-6 p-3">
+                    <div class="fs-3 fw-bold text-dark lh-1">
+                        {% set total_assigned_secs = professor_loads|map(attribute='sections')|sum if professor_loads else 0 %}
+                        {{ total_assigned_secs }}
+                    </div>
+                    <div class="small text-muted text-uppercase mt-2" style="letter-spacing:.04em;">Total Sections</div>
                 </div>
             </div>
-            <div class="col-6">
-                <div class="p-2 border rounded text-center bg-white">
-                    <div class="text-muted small" style="font-size: 0.75rem;">Selected Sections</div>
-                    <div class="fw-bold fs-6 text-primary" id="lbl-selected-sections-count">0</div>
-                </div>
-            </div>
-        </div>
-        <div class="mt-3 p-2 border rounded bg-white" id="selected-courses-breakdown-card" style="display: none;">
-            <div class="small fw-semibold text-muted mb-1">Course Breakdown</div>
-            <div id="breakdown-list" class="small text-muted">No courses selected</div>
-        </div>
-        <div class="alert alert-info py-2 px-3 mt-3 mb-0 small" id="load-feedback-alert">
-            <i class="bx bx-info-circle me-1"></i> Click any professor row below or search to view their teaching load distribution toward 40 hours.
         </div>
     </div>
 </div>
@@ -504,6 +491,14 @@
             <div class="modal-body p-4">
                 <!-- STEP 1: UPLOAD VIEW -->
                 <div id="import-upload-view">
+                    <!-- Required-template notice -->
+                    <div class="alert alert-warning d-flex align-items-start gap-2 mb-3 py-2 px-3 rounded-3">
+                        <i class="bx bx-info-circle fs-5 mt-1"></i>
+                        <div class="small">
+                            <span class="fw-semibold">Required:</span> You must use the official import template. Files in any other format will be rejected.
+                            <div class="mt-1" style="font-size:.72rem;">Do not rename, remove, or reorder columns, and do not edit the header row.</div>
+                        </div>
+                    </div>
                     <!-- Import Notice Banner -->
                     <div class="alert alert-info border d-flex align-items-center gap-2 mb-3 py-2 px-3 rounded-3">
                         <i class="bx bx-info-circle fs-5 text-primary"></i>
@@ -562,9 +557,12 @@
 
                     <!-- Upload / Parsing Error Alert -->
                     <div id="import-upload-error" class="alert alert-danger d-none mb-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="bx bx-error-circle fs-5"></i>
-                            <span id="import-upload-error-msg">An error occurred while uploading.</span>
+                        <div class="d-flex align-items-start gap-2">
+                            <i class="bx bx-error-circle fs-5 mt-1"></i>
+                            <div>
+                                <span id="import-upload-error-msg">An error occurred while uploading.</span>
+                                <ul id="import-upload-error-list" class="mb-0 mt-1 ps-3 d-none"></ul>
+                            </div>
                         </div>
                     </div>
 
@@ -1441,7 +1439,7 @@ $(function(){
         $fileInput.val('');
         $fileSelectedBox.addClass('d-none');
         $dropzone.removeClass('d-none');
-        $uploadError.addClass('d-none');
+        clearUploadError();
         $loadingState.addClass('d-none');
         $uploadView.removeClass('d-none');
         $previewView.addClass('d-none');
@@ -1517,20 +1515,27 @@ $(function(){
         return (bytes / 1048576).toFixed(2) + ' MB';
     }
 
+    function clearUploadError() {
+        $('#import-upload-error-list').addClass('d-none').empty();
+        $uploadError.addClass('d-none');
+    }
+
     function handleFileSelection(file) {
         var ext = file.name.split('.').pop().toLowerCase();
         if (ext !== 'xlsx' && ext !== 'csv') {
-            $uploadErrorMsg.text('Unsupported file type. Please upload an Excel (.xlsx) or CSV (.csv) file.');
+            $('#import-upload-error-list').addClass('d-none').empty();
+            $uploadErrorMsg.text('Unsupported file type. Please use the official import template (.xlsx or .csv).');
             $uploadError.removeClass('d-none');
             return;
         }
         if (file.size > 5 * 1024 * 1024) {
+            $('#import-upload-error-list').addClass('d-none').empty();
             $uploadErrorMsg.text('File size exceeds maximum allowed limit of 5 MB.');
             $uploadError.removeClass('d-none');
             return;
         }
 
-        $uploadError.addClass('d-none');
+        clearUploadError();
         currentImportFile = file;
         $fileName.text(file.name);
         $fileSize.text(formatFileSize(file.size));
@@ -1547,7 +1552,7 @@ $(function(){
         $fileSelectedBox.addClass('d-none');
         $dropzone.removeClass('d-none');
         $btnPreviewAction.prop('disabled', true);
-        $uploadError.addClass('d-none');
+        clearUploadError();
     });
 
     $btnReupload.on('click', function() {
@@ -1576,7 +1581,7 @@ $(function(){
             $btnPreviewAction.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status"></span> Validating...');
         }
         showImportOverlay('Reading and validating file...', 'Parsing rows, verifying faculty codes and checking workload limits...');
-        $uploadError.addClass('d-none');
+        clearUploadError();
 
         var formData = new FormData();
         formData.append('file', currentImportFile);
@@ -1614,6 +1619,13 @@ $(function(){
             if (!isSuccess) {
                 var err = (result.data && (result.data.error || result.data.message)) ? (result.data.error || result.data.message) : ('Server error (' + result.status + '). Check the server log.');
                 $uploadErrorMsg.text(err);
+                var missingCols = (result.data && result.data.missing_columns) || [];
+                var $errList = $('#import-upload-error-list');
+                if (missingCols.length) {
+                    $errList.html(missingCols.map(function (m) { return '<li>' + escapeHtml(m) + '</li>'; }).join('')).removeClass('d-none');
+                } else {
+                    $errList.addClass('d-none').empty();
+                }
                 $uploadError.removeClass('d-none');
                 $fileSelectedBox.removeClass('d-none');
                 $dropzone.addClass('d-none');

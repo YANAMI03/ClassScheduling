@@ -5,6 +5,7 @@ template generation, error reporting, and bulk database persistence.
 """
 
 import io
+import os
 import re
 import csv
 import logging
@@ -341,6 +342,103 @@ def parse_import_file(file_bytes: bytes, filename: str = '') -> Tuple[List[Dict[
         })
 
     return data_rows, dividers, []
+
+
+# ------------------------------------------------------------------------------
+# Strict official-template validation (runs BEFORE any row processing).
+# ------------------------------------------------------------------------------
+# These are the exact header columns produced by generate_import_template_xlsx().
+TEMPLATE_HEADERS = ("NAME", "Course Code", "Number of sections")
+# Optional trailing column(s) the importer understands but the template omits.
+TEMPLATE_OPTIONAL_HEADERS = ("ILP",)
+
+
+def _normalize_header_cell(value: Any) -> str:
+    """Normalize a header cell for comparison (trim, collapse spaces, lowercase)."""
+    return " ".join(str(value if value is not None else "").strip().split()).casefold()
+
+
+def _read_template_rows(file_bytes: bytes, filename: str = "") -> List[List[Any]]:
+    """Read raw rows from .xlsx or .csv for header validation."""
+    filename = filename or ""
+    is_xlsx = filename.lower().endswith(".xlsx") or file_bytes[:4] == b"PK\x03\x04"
+    if is_xlsx:
+        wb = openpyxl.load_workbook(filename=io.BytesIO(file_bytes), data_only=True)
+        sheet = wb.active
+        rows: List[List[Any]] = []
+        if sheet is not None:
+            for r in range(1, sheet.max_row + 1):
+                rows.append([sheet.cell(r, c).value for c in range(1, sheet.max_column + 1)])
+        return rows
+
+    content_str = None
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            content_str = file_bytes.decode(enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if content_str is None:
+        content_str = file_bytes.decode("latin-1", errors="replace")
+    lines = [l for l in content_str.splitlines() if l.strip()]
+    delim = detect_csv_delimiter(lines[:15]) if lines else ","
+    return [row for row in csv.reader(io.StringIO(content_str), delimiter=delim)]
+
+
+def validate_import_template(file_bytes: bytes, filename: str = "") -> Dict[str, Any]:
+    """Strictly validate a file against the official import template.
+
+    Returns {'ok': bool, 'error': str|None, 'missing': [column names]}.
+    Guarantees a bad file is rejected before any row is processed.
+    """
+    if not file_bytes:
+        return {"ok": False, "error": "The uploaded file is empty.", "missing": []}
+
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext not in (".xlsx", ".csv"):
+        return {"ok": False, "error": "Unsupported file type. Please upload the template file (.xlsx).", "missing": []}
+
+    try:
+        rows = _read_template_rows(file_bytes, filename)
+    except Exception as e:
+        return {"ok": False, "error": f"Could not read the file. Please use the official import template. ({e})", "missing": []}
+
+    # Header row = first row that has any non-empty cell.
+    header_idx = -1
+    for i, row in enumerate(rows):
+        if row and any(c is not None and str(c).strip() != "" for c in row):
+            header_idx = i
+            break
+    if header_idx == -1:
+        return {"ok": False, "error": "The file has no data rows.", "missing": []}
+
+    header_cells = [_normalize_header_cell(c) for c in rows[header_idx]]
+    while header_cells and header_cells[-1] == "":
+        header_cells.pop()
+
+    required = [_normalize_header_cell(h) for h in TEMPLATE_HEADERS]
+    missing = [TEMPLATE_HEADERS[i] for i, h in enumerate(required) if h not in header_cells]
+    if missing:
+        return {"ok": False, "error": "Missing required column(s): " + ", ".join(missing) + ".", "missing": missing}
+
+    # Must be exactly the template columns, in order (optional trailing ILP allowed).
+    if header_cells[:len(required)] != required:
+        return {"ok": False, "error": "Invalid file. Please use the official import template.", "missing": []}
+    optional = [_normalize_header_cell(h) for h in TEMPLATE_OPTIONAL_HEADERS]
+    extras = [h for h in header_cells[len(required):] if h]
+    if any(h not in optional for h in extras):
+        return {"ok": False, "error": "Invalid file. Please use the official import template.", "missing": []}
+
+    # At least one data row after the header.
+    has_data = any(
+        row and any(c is not None and str(c).strip() != "" for c in row)
+        for row in rows[header_idx + 1:]
+    )
+    if not has_data:
+        return {"ok": False, "error": "The file has no data rows.", "missing": []}
+
+    return {"ok": True, "error": None, "missing": []}
+
 
 
 def match_professor(name_str: str, professors_list: List[Dict[str, Any]]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:

@@ -724,6 +724,15 @@
 
         var confirmText = deleteEl.getAttribute("data-confirm-text") || "Delete";
         var subtext = deleteEl.getAttribute("data-subtext") || "This action cannot be undone.";
+        var confirmBtnClass = deleteEl.getAttribute("data-confirm-btn-class") || "btn-danger";
+        if (!deleteEl.hasAttribute("data-confirm-btn-class")) {
+            var _ctLower = (confirmText || "").toLowerCase();
+            if (_ctLower === "archive" || _ctLower === "disable") {
+                confirmBtnClass = "btn-warning";
+            } else if (_ctLower === "restore" || _ctLower === "enable") {
+                confirmBtnClass = "btn-success";
+            }
+        }
 
         if (message && typeof window.showConfirmModal === "function") {
             window.showConfirmModal({
@@ -731,7 +740,7 @@
                 message: message,
                 subtext: subtext,
                 confirmText: confirmText,
-                confirmBtnClass: "btn-danger",
+                confirmBtnClass: confirmBtnClass,
                 onConfirm: function () {
                     executeUniversalDelete(deleteEl);
                 }

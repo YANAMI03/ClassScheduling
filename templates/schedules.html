@@ -10,17 +10,17 @@
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_edit_schedule = user_role_lower in ['scheduler'] %}
+{% set can_edit_schedule = user_role_lower in ['chair'] %}
 {% set is_admin = user_role_lower in ['super_admin', 'super admin', 'admin'] %}
 {% set is_viewer = user_role_lower in ['viewer'] %}
-{% set can_view_archive = user_role_lower in ['super_admin', 'super admin', 'admin', 'scheduler', 'dean', 'chair'] %}
+{% set can_view_archive = user_role_lower in ['super_admin', 'super admin', 'admin', 'chair', 'dean', 'chair'] %}
 <div class="page-header d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
         <h1 class="page-title">Section Schedule</h1>
         <p class="page-subtitle">
             View and manage generated class schedules by section
-            {% if (is_admin or is_viewer) and program_filter %}
-            &bull; <span class="badge-custom badge-primary"><i class="bx bx-buildings me-1"></i>{{ program_filter }}</span>
+            {% if program_filter or semester_filter %}
+            &bull; <span class="badge-custom badge-primary"><i class="bx bx-buildings me-1"></i>{{ program_filter or 'All Programs' }}{% if semester_filter %} &middot; {{ semester_filter if semester_filter|lower != 'all' else 'All Semesters' }}{% endif %}</span>
             {% endif %}
         </p>
     </div>
@@ -51,28 +51,25 @@
 <!-- Filter Controls -->
 <div class="card-custom mb-4 p-3 bg-light-subtle">
     <form method="get" class="row g-2 align-items-end" id="sectionScheduleFilterForm" action="{{ url_for('schedules') }}">
-        {% if is_admin or is_viewer %}
-        <!-- Program Filter -->
+        <!-- Program Filter (defaults to the user's program) -->
         <div class="col-md-3 col-lg-2">
             <label class="form-label small fw-bold text-muted mb-1" for="programFilter">
                 <i class="bx bx-buildings me-1"></i>Program
             </label>
             <select id="programFilter" name="program" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="" {% if not program_filter or program_filter|lower == 'all' %}selected{% endif %}>All Programs</option>
+                <option value="all" {% if not program_filter or program_filter|lower == 'all' %}selected{% endif %}>All Programs</option>
                 {% for p in programs %}
                 <option value="{{ p.program_name }}" {% if p.program_name == program_filter %}selected{% endif %}>{{ p.program_name }}</option>
                 {% else %}
-                {% if program_filter %}
+                {% if program_filter and program_filter|lower != 'all' %}
                 <option value="{{ program_filter }}" selected>{{ program_filter }}</option>
                 {% endif %}
                 {% endfor %}
             </select>
         </div>
+
+        <!-- Year Level Filter -->
         <div class="col-md-2 col-lg-2">
-        {% else %}
-        <div class="col-md-3 col-lg-3">
-        {% endif %}
-            <!-- Year Level Filter -->
             <label class="form-label small fw-bold text-muted mb-1" for="yearFilter">Year Level</label>
             <select id="yearFilter" name="year" class="form-select form-select-sm">
                 <option value="">All Years</option>
@@ -87,23 +84,19 @@
             </select>
         </div>
 
-        {% if is_admin %}
+        <!-- Semester Filter (1st / 2nd / All) -->
         <div class="col-md-2 col-lg-2">
-        {% else %}
-        <div class="col-md-3 col-lg-3">
-        {% endif %}
-            <!-- Semester Filter -->
             <label class="form-label small fw-bold text-muted mb-1" for="semesterFilter">Semester</label>
-            <select id="semesterFilter" name="semester" class="form-select form-select-sm">
-                <option value="">All Semesters</option>
+            <select id="semesterFilter" name="semester" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="all" {% if not semester_filter or semester_filter|lower == 'all' %}selected{% endif %}>All Semesters</option>
                 {% for sem in semester_options %}
                 <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
                 {% endfor %}
             </select>
         </div>
 
-        <div class="col-md-3 col-lg-3">
-            <!-- Major Filter -->
+        <!-- Major Filter -->
+        <div class="col-md-2 col-lg-3">
             <label class="form-label small fw-bold text-muted mb-1" for="majorFilter">Major</label>
             <select id="majorFilter" name="major" class="form-select form-select-sm">
                 <option value="">All Majors</option>
@@ -113,12 +106,12 @@
             </select>
         </div>
 
-        <div class="col-md-2 col-lg-3 d-flex gap-2">
+        <div class="col-md-3 col-lg-3 d-flex gap-2">
             <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
                 <i class="bx bx-filter"></i> Apply Filters
             </button>
-            {% if year_filter or semester_filter or major_filter %}
-            <a href="{{ url_for('schedules', program=program_filter) if ((is_admin or is_viewer) and program_filter) else url_for('schedules') }}" class="btn btn-outline-secondary btn-sm" title="Clear filters">
+            {% if year_filter or major_filter %}
+            <a href="{{ url_for('schedules', program=program_filter, semester=semester_filter) if (program_filter or semester_filter) else url_for('schedules') }}" class="btn btn-outline-secondary btn-sm" title="Clear filters">
                 <i class="bx bx-x"></i>
             </a>
             {% endif %}
@@ -140,7 +133,7 @@
 <div class="card-custom">
     <div class="empty-state">
         <div class="empty-state__icon"><i class="bx bx-user-x"></i></div>
-        <div class="empty-state__text">Your account is not linked to a professor profile. Please contact the Scheduler/Admin.</div>
+        <div class="empty-state__text">Your account is not linked to a professor profile. Please contact the Chair/Admin.</div>
     </div>
 </div>
 {% elif sections_with_entries or sections %}
@@ -271,10 +264,17 @@
 <div class="card-custom text-center py-5">
     <div class="empty-state">
         <div class="empty-state__icon text-warning mb-3"><i class="bx bx-archive fs-1"></i></div>
-        <h4 class="fw-bold">No Active Schedule</h4>
-        <p class="text-secondary max-w-md mx-auto mb-4" style="max-width: 480px; margin: 0 auto 1.5rem;">
-            There is currently no active schedule for this program. You can generate a new schedule for either semester or restore an archived schedule version.
+        {% if no_active_schedule %}
+        <h4 class="fw-bold">No Schedule Generated Yet</h4>
+        <p class="text-secondary mx-auto mb-4" style="max-width: 480px; margin: 0 auto 1.5rem;">
+            No schedule generated yet for {{ program_filter or 'this program' }}{% if semester_filter and semester_filter|lower != 'all' %} &middot; {{ semester_filter }}{% endif %}.
         </p>
+        {% else %}
+        <h4 class="fw-bold">No Active Schedule</h4>
+        <p class="text-secondary mx-auto mb-4" style="max-width: 480px; margin: 0 auto 1.5rem;">
+            There is currently no active schedule for the selected program and semester. You can generate a new schedule for either semester or restore an archived schedule version.
+        </p>
+        {% endif %}
         <div class="d-flex justify-content-center gap-2">
             {% if can_edit_schedule %}
             <a href="/" class="btn btn-primary">
