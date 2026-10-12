@@ -70,6 +70,10 @@
             <h5 class="card-custom__title mb-0">Room List</h5>
             <span class="badge-custom badge-primary">{{ rooms|length }} rooms</span>
         </div>
+        <a href="/rooms{% if not show_archived %}?archived=true{% endif %}"
+           class="btn btn-sm {% if show_archived %}btn-warning{% else %}btn-outline-secondary{% endif %}">
+            <i class="bx bx-archive"></i> {% if show_archived %}Back to Active{% else %}Show Archived{% endif %}
+        </a>
     </div>
     <div class="table-responsive">
         <table class="table-custom">
@@ -93,9 +97,29 @@
                         <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{room.room_id}}" data-name="{{room.room_name}}" data-room_type="{{room.room_type}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
-                        <a href="/delete_room/{{room.room_id}}" class="btn btn-danger btn-sm" data-action="delete" data-title="Delete Room" data-confirm="Are you sure you want to delete this room?">
-                            <i class="bx bx-trash"></i> Delete
-                        </a>
+                        {% if show_archived %}
+                        <button type="button" class="btn btn-success btn-sm"
+                                data-action="delete"
+                                data-url="/restore_room/{{ room.room_id }}"
+                                data-method="POST"
+                                data-confirm-text="Restore"
+                                data-title="Restore Room"
+                                data-confirm="Restore this room? It will become active again."
+                                data-subtext="The room will be available for scheduling again.">
+                            <i class="bx bx-reset"></i> Restore
+                        </button>
+                        {% else %}
+                        <button type="button" class="btn btn-warning btn-sm"
+                                data-action="delete"
+                                data-url="/archive_room/{{ room.room_id }}"
+                                data-method="POST"
+                                data-confirm-text="Archive"
+                                data-title="Archive Room"
+                                data-confirm="Archive this room? You can restore it later."
+                                data-subtext="You can restore it later from the archived list.">
+                            <i class="bx bx-archive"></i> Archive
+                        </button>
+                        {% endif %}
                     </td>
                     {% endif %}
                 </tr>
@@ -211,6 +235,7 @@ $(function(){
             .done(function(data) {
                 var rooms = data.rooms || [];
                 var exactMatch = data.exact_match || false;
+                var archivedMatch = data.archived_match || false;
 
                 if (rooms.length === 0) {
                     $dropdown.html(
@@ -236,7 +261,14 @@ $(function(){
 
                 if (exactMatch) {
                     // Duplicate state (Red border, error icon, warning message)
-                    $warning.removeClass('d-none');
+                    $warning.html('<i class="bx bx-error-circle"></i> Room already exists').removeClass('d-none');
+                    $success.addClass('d-none');
+                    $input.addClass('is-invalid').removeClass('is-valid');
+                    $valIcon.removeClass('d-none bx-check-circle text-success').addClass('bx-error-circle text-danger');
+                    $submitBtn.prop('disabled', true);
+                } else if (archivedMatch) {
+                    // Archived match: suggest restoring instead of creating a new room
+                    $warning.html('<i class="bx bx-error-circle"></i> A room with this name is archived. Restore it instead.').removeClass('d-none');
                     $success.addClass('d-none');
                     $input.addClass('is-invalid').removeClass('is-valid');
                     $valIcon.removeClass('d-none bx-check-circle text-success').addClass('bx-error-circle text-danger');

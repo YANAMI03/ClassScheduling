@@ -27,6 +27,8 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+import schedule_colors
+
 # ---------------------------------------------------------------------------
 # Font Registration (Windows TTF fonts with graceful Helvetica fallback)
 # ---------------------------------------------------------------------------
@@ -68,8 +70,8 @@ LOGO_FOOTER_BANNER  = os.path.join(_STATIC, 'pdf_footer_banner.png')
 COL_LECTURE     = colors.HexColor('#B8CCE4')  # Soft gray-blue
 COL_LAB         = colors.HexColor('#FFE699')  # Soft light yellow
 COL_HOMEROOM    = colors.HexColor('#F4CCAC')  # Soft salmon / peach
-COL_TIME_BG     = colors.HexColor('#F2F2F2')  # Neutral light gray for time col
-COL_HDR_BG      = colors.HexColor('#D9D9D9')  # Light gray for table header
+COL_TIME_BG     = colors.HexColor('#EEF2F7')  # Very light blue-gray (not neutral gray) for time col
+COL_HDR_BG      = colors.HexColor('#DCE6F1')  # Light blue for table header
 COL_UNIV_BLUE   = colors.HexColor('#001F5F')  # Deep navy for university header text
 COL_BAR_BLUE    = colors.HexColor('#003366')  # Deep blue for full-width CICT banner
 COL_FOOTER_LINE = colors.HexColor('#7E7E7E')  # Thin gray divider above footer banner
@@ -178,14 +180,9 @@ def _ay_from_sem(sem_str):
     return f"{y}-{y + 1}"
 
 
-def _cell_color(session_type):
-    """Map session type string to ReportLab Color object."""
-    st = (session_type or '').strip().lower()
-    if 'lab' in st:
-        return COL_LAB
-    if 'home' in st or 'advis' in st or 'consult' in st:
-        return COL_HOMEROOM
-    return COL_LECTURE
+def _cell_color(course_code, session_type, color_map=None):
+    """Per-course fill: same course -> same hue, session type -> shade."""
+    return colors.HexColor(schedule_colors.course_fill_hex(course_code, session_type, color_map))
 
 
 def _initials_surname(name):
@@ -325,7 +322,7 @@ def _draw_title(c, pw, top_y, entity_label, sem_str, ay_str, mode='room'):
 # Timetable Grid Builder
 # ---------------------------------------------------------------------------
 
-def _build_table(entries, mode='room', col_w=None, row_h=None):
+def _build_table(entries, mode='room', col_w=None, row_h=None, color_map=None):
     """
     Build the 14-hour-row x 7-column timetable Table.
     Robustly handles:
@@ -340,6 +337,7 @@ def _build_table(entries, mode='room', col_w=None, row_h=None):
     # 1. Clean & normalize incoming entries
     seen = set()
     cleaned = []
+    _color_map = color_map if color_map is not None else schedule_colors.build_course_color_map([e.get('course_code') for e in entries])
     for e in entries:
         day = _safe(e.get('day')).strip().title()
         if day not in _DAYS:
@@ -349,7 +347,7 @@ def _build_table(entries, mode='room', col_w=None, row_h=None):
         if st is None or et is None or et <= st:
             continue
         txt = _cell_text(e, mode)
-        clr = _cell_color(e.get('session_type'))
+        clr = _cell_color(e.get('course_code'), e.get('session_type'), _color_map)
         clr_key = clr.hexval() if hasattr(clr, 'hexval') else str(clr)
         key = (day, st, et, txt, clr_key)
         if key not in seen:
@@ -661,6 +659,13 @@ def generate_room_utilization_pdf(pages, semester=None, academic_year=None,
         normalised.append(d)
     pages = normalised
 
+    # Distinct base color per course across the WHOLE document (consistent across pages)
+    _all_course_codes = []
+    for _p in pages:
+        for _e in (_p.get('entries') or []):
+            _all_course_codes.append(_e.get('course_code'))
+    _color_map = schedule_colors.build_course_color_map(_all_course_codes)
+
     buf = io.BytesIO()
     c = rl_canvas.Canvas(buf, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
 
@@ -693,13 +698,13 @@ def generate_room_utilization_pdf(pages, semester=None, academic_year=None,
         avail_tbl_h = tbl_top - min_tbl_bottom
 
         # 4. Build Table
-        tbl, tbl_w, tbl_h = _build_table(entries, mode)
+        tbl, tbl_w, tbl_h = _build_table(entries, mode, color_map=_color_map)
 
         # If table height exceeds available space, scale row heights proportionally
         if tbl_h > avail_tbl_h and avail_tbl_h > 0:
             scale = avail_tbl_h / tbl_h
             new_rh = [18.0] + [max(14.0, 37.0 * scale)] * len(_HOURS)
-            tbl, tbl_w, tbl_h = _build_table(entries, mode, row_h=new_rh)
+            tbl, tbl_w, tbl_h = _build_table(entries, mode, row_h=new_rh, color_map=_color_map)
 
         tbl_x = 36.0
         tbl_y = tbl_top - tbl_h

@@ -58,8 +58,110 @@ app.secret_key = os.environ.get('SECRET_KEY', 'scheduler-secret-key')
 # Shared Constants
 MAX_TEACHING_HOURS = 40
 SEMESTER_CHOICES = ["1st Semester", "2nd Semester"]
+
+# ── Specialization stage (single source of truth) ──────────────────────────────
+# Specializations apply from 3rd Year 2nd Semester onward. BEFORE the cutoff,
+# every course is General (course.specialization_id IS NULL). This is the ONLY
+# place the stage/years/semesters are defined; backend and frontend both use it.
+SPECIALIZATION_STAGE = [(3, "2nd Semester"), (4, "1st Semester"), (4, "2nd Semester")]
+GENERAL_SPECIALIZATION_LABEL = "General"
+# TEMPORARY compatibility fallback for legacy code paths that still expect a list.
+# It is NOT the source of truth (that is public.specializations); it exists only
+# so unconverted code keeps working until every usage is migrated off it.
 SPECIALIZATION_CHOICES = ["Database Systems", "Web Systems", "Networking", "General"]
-SPECIALIZED_TERMS = [(3, "2nd Semester"), (4, "1st Semester"), (4, "2nd Semester")]
+# Backwards-compatible alias for older code paths.
+SPECIALIZED_TERMS = SPECIALIZATION_STAGE
+
+
+def is_specialization_stage(year_level, semester):
+    """Return True when (year_level, semester) is at/after the specialization stage."""
+    try:
+        yl = int(str(year_level).strip())
+    except (ValueError, TypeError):
+        return False
+    sem = str(semester or '').strip().casefold()
+    return any(yl == y and s.strip().casefold() == sem for y, s in SPECIALIZATION_STAGE)
+
+
+def specialization_stage_payload():
+    """Serializable stage config for the frontend."""
+    return {
+        'stage': [{'year_level': y, 'semester': s} for y, s in SPECIALIZATION_STAGE],
+        'general_label': GENERAL_SPECIALIZATION_LABEL,
+    }
+
+
+def _get_specializations(program_id=None, include_archived=True):
+    """Return specializations from public.specializations.
+
+    include_archived=True keeps archived rows (needed to display existing courses);
+    include_archived=False is for pickers and validation.
+    """
+    try:
+        q = supabase.table('specializations').select('*')
+        if program_id is not None:
+            q = q.eq('program_id', program_id)
+        if not include_archived:
+            q = q.eq('archive', False)
+        return q.order('name').execute().data or []
+    except Exception as err:
+        logging.debug(f"Error fetching specializations: {err}")
+        return []
+
+
+def _specialization_name_by_id(spec_id):
+    """Resolve a specialization_id to its name (works for archived rows too)."""
+    if spec_id is None:
+        return None
+    try:
+        res = supabase.table('specializations').select('name').eq('specialization_id', spec_id).limit(1).execute()
+        row = _first(res.data or [])
+        return (row.get('name') if row else None)
+    except Exception:
+        return None
+
+
+def _resolve_course_specialization_id(raw_spec_id, program_id, year_level, semester):
+    """Validate a submitted specialization for a course.
+
+    Returns (specialization_id_or_None, error_message_or_None).
+    Rules:
+      * Before the specialization stage -> must be General (None).
+      * At/after the stage -> None (General) or an ACTIVE specialization that
+        belongs to the course's program.
+    """
+    blank = raw_spec_id in (None, '', '0', 0)
+    if not is_specialization_stage(year_level, semester):
+        if not blank:
+            return None, 'This course is before the specialization stage; it must be General.'
+        return None, None
+    if blank:
+        return None, None
+    try:
+        spec_id = int(raw_spec_id)
+    except (ValueError, TypeError):
+        # Legacy form compatibility: accept a specialization NAME and resolve it.
+        name = str(raw_spec_id).strip()
+        match = next(
+            (s for s in _get_specializations(program_id=program_id, include_archived=False)
+             if (s.get('name') or '').strip().casefold() == name.casefold()),
+            None,
+        )
+        if not match:
+            return None, f"Unknown specialization '{name}' for this program."
+        return match.get('specialization_id'), None
+    try:
+        row = _first(supabase.table('specializations').select('*').eq('specialization_id', spec_id).limit(1).execute().data or [])
+    except Exception:
+        row = None
+    if not row:
+        return None, 'Selected specialization does not exist.'
+    if row.get('archive'):
+        return None, 'Selected specialization is archived.'
+    if program_id is not None and str(row.get('program_id')) != str(program_id):
+        return None, 'Selected specialization belongs to a different program.'
+    return spec_id, None
+
 
 @app.context_processor
 def inject_global_constants():
@@ -395,7 +497,7 @@ def _ranking_constraints(professor=None):
 def _user_to_dict(user):
     """Convert a database row or user object into the dict shape the templates expect."""
     if isinstance(user, dict):
-        role = user.get('role', 'Scheduler') or 'Scheduler'
+        role = user.get('role', 'Chair') or 'Chair'
         has_no_program = str(role).lower() in ('admin', 'super_admin', 'viewer')
         email = user.get('email') or ''
         username = user.get('username') or (email.split('@')[0] if '@' in email else email)
@@ -433,15 +535,17 @@ def _user_to_dict(user):
             'email': email,
             'username': username,
             'first_name': user.get('first_name', '') or '',
+            'middle_name': user.get('middle_name', '') or '',
             'last_name': user.get('last_name', '') or '',
             'program_id': prog_id,
             'program': str(prog_name or ''),
             'role': role,
             'profile_picture': user.get('profile_picture'),
             'created_at': user.get('created_at'),
+            'disabled': bool(user.get('disabled')),
         }
     metadata = getattr(user, 'user_metadata', None) or {}
-    role = metadata.get('role', 'Scheduler') or 'Scheduler'
+    role = metadata.get('role', 'Chair') or 'Chair'
     has_no_program = str(role).lower() in ('admin', 'super_admin', 'viewer')
     email = getattr(user, 'email', None) or ''
     username = metadata.get('username') or (email.split('@')[0] if '@' in email else email)
@@ -470,12 +574,14 @@ def _user_to_dict(user):
         'email': email,
         'username': username,
         'first_name': metadata.get('first_name', ''),
+        'middle_name': metadata.get('middle_name', ''),
         'last_name': metadata.get('last_name', ''),
         'program_id': meta_prog_id,
         'program': str(meta_prog or ''),
         'role': role,
         'profile_picture': metadata.get('profile_picture'),
         'created_at': getattr(user, 'created_at', None),
+        'disabled': False,
     }
 
 
@@ -664,13 +770,13 @@ def _normalize_role(role_val):
     r = str(role_val).strip().lower().replace(' ', '_').replace('-', '_')
     if r in ('super_admin', 'superadmin', 'administrator', 'admin'):
         return 'admin'
-    if r in ('scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'):
-        return 'scheduler'
+    if r in ('chair', 'dean', 'scheduler', 'dean/chair', 'program_chair', 'department_head'):
+        return 'chair'
     if r in ('viewer', 'instructor', 'guest'):
         return 'viewer'
     return r
 
-VALID_USER_ROLES = {'admin', 'super_admin', 'scheduler', 'viewer', 'dean', 'chair'}
+VALID_USER_ROLES = {'admin', 'super_admin', 'chair', 'viewer', 'dean'}
 _LIVE_USER_ROLE_UPDATES: dict = {}
 _USER_ROLE_CACHE: dict = {}
 _USER_ROLE_CACHE_LOCK = threading.Lock()
@@ -708,41 +814,49 @@ _USER_ROLE_CACHE_LOCK = threading.Lock()
 
 ROUTE_PERMISSIONS = {
     # Generate Schedule
-    'home': {'scheduler', 'viewer'},
-    'legacy_index_html': {'scheduler', 'viewer'},
-    'generate_schedule': {'scheduler'},
-    'confirm_preview': {'scheduler'},
-    'discard_preview': {'scheduler'},
-    'edit_preview_entry': {'scheduler'},
-    'preview_schedule': {'scheduler'},
-    'legacy_generated_schedule_html': {'admin', 'scheduler'},
-    'api_preview_entries': {'scheduler'},
-    'api_semester_section_counts': {'scheduler'},
-    'api_has_professor_loads': {'scheduler'},
-    'registrar_counts': {'scheduler'},
-    'check_schedule_exists': {'scheduler'},
+    'home': {'chair', 'viewer'},
+    'legacy_index_html': {'chair', 'viewer'},
+    'generate_schedule': {'chair'},
+    'confirm_preview': {'chair'},
+    'discard_preview': {'chair'},
+    'edit_preview_entry': {'chair'},
+    'preview_schedule': {'chair'},
+    'legacy_generated_schedule_html': {'admin', 'chair'},
+    'api_preview_entries': {'chair'},
+    'api_semester_section_counts': {'chair'},
+    'api_has_professor_loads': {'chair'},
+    'registrar_counts': {'chair'},
+    'check_schedule_exists': {'chair'},
 
     # Professor Load (Import is only write operation)
-    'professor_load': {'scheduler'},
-    'professor_load_import_template': {'scheduler'},
-    'professor_load_import_preview': {'scheduler'},
-    'professor_load_import_confirm': {'scheduler'},
-    'professor_load_import_error_report': {'scheduler'},
+    'professor_load': {'chair'},
+    'professor_load_import_template': {'chair'},
+    'professor_load_import_preview': {'chair'},
+    'professor_load_import_confirm': {'chair'},
+    'professor_load_import_error_report': {'chair'},
 
     # Programs (Admin full, Schedulers read via api_programs)
     'programs': {'admin'},
     'show_programs': {'admin'},
     'add_program': {'admin'},
     'edit_program': {'admin'},
-    'delete_program': {'admin'},
-    'api_programs': {'admin', 'scheduler'},
+    'archive_program': {'admin'},
+    'restore_program': {'admin'},
+    'api_programs': {'admin', 'chair'},
+    'api_specializations': {'admin'},
+    'api_specialization_config': {'admin', 'chair'},
+    'add_specialization': {'admin'},
+    'edit_specialization': {'admin'},
+    'archive_specialization': {'admin'},
+    'restore_specialization': {'admin'},
 
     # Courses (Admin ONLY - Schedulers have NO access)
     'show_courses': {'admin'},
     'legacy_courses_html': {'admin'},
     'add_course': {'admin'},
     'edit_course': {'admin'},
-    'delete_course': {'admin'},
+    'archive_course': {'admin'},
+    'restore_course': {'admin'},
     'search_courses': {'admin'},
     'api_courses': {'admin'},
 
@@ -751,7 +865,8 @@ ROUTE_PERMISSIONS = {
     'legacy_room_html': {'admin'},
     'add_room': {'admin'},
     'edit_room': {'admin'},
-    'delete_room': {'admin'},
+    'archive_room': {'admin'},
+    'restore_room': {'admin'},
     'search_rooms': {'admin'},
 
     # Working hours (Admin full, Scheduler 403)
@@ -759,47 +874,49 @@ ROUTE_PERMISSIONS = {
     'legacy_working_hours_html': {'admin'},
     'add_working_hours': {'admin'},
     'edit_working_hours': {'admin'},
-    'delete_working_hours': {'admin'},
+    'archive_working_hours': {'admin'},
+    'restore_working_hours': {'admin'},
     'initialize_working_hours': {'admin'},
 
     # Schedules: Section Schedule (Admin READ-ONLY, Scheduler full, Viewer READ-ONLY)
-    'schedules': {'admin', 'scheduler', 'viewer'},
-    'legacy_schedules_html': {'admin', 'scheduler', 'viewer'},
-    'view_schedule': {'admin', 'scheduler', 'viewer'},
-    'legacy_schedule_html': {'admin', 'scheduler', 'viewer'},
-    'legacy_section_html': {'admin', 'scheduler', 'viewer'},
-    'export_section_schedule': {'admin', 'scheduler'},
-    'export_section_schedule_pdf': {'admin', 'scheduler'},
-    'api_section_availability': {'admin', 'scheduler', 'viewer'},
-    'api_section_theme': {'admin', 'scheduler', 'viewer'},
+    'schedules': {'admin', 'chair', 'viewer'},
+    'legacy_schedules_html': {'admin', 'chair', 'viewer'},
+    'view_schedule': {'admin', 'chair', 'viewer'},
+    'legacy_schedule_html': {'admin', 'chair', 'viewer'},
+    'legacy_section_html': {'admin', 'chair', 'viewer'},
+    'export_section_schedule': {'admin', 'chair'},
+    'export_section_schedule_pdf': {'admin', 'chair'},
+    'api_section_availability': {'admin', 'chair', 'viewer'},
+    'api_section_theme': {'admin', 'chair', 'viewer'},
 
     # Schedules: Professor Schedule (Admin and Scheduler only; Viewer 403)
-    'professor_schedule': {'admin', 'scheduler'},
-    'view_professor_schedule': {'admin', 'scheduler'},
-    'export_professor_schedule': {'admin', 'scheduler'},
-    'export_professor_schedule_pdf': {'admin', 'scheduler'},
-    'api_professor_availability': {'admin', 'scheduler'},
-    'api_professor_workload': {'admin', 'scheduler'},
+    'professor_schedule': {'admin', 'chair'},
+    'view_professor_schedule': {'admin', 'chair', 'viewer'},
+    'export_professor_schedule': {'admin', 'chair', 'viewer'},
+    'export_professor_schedule_pdf': {'admin', 'chair', 'viewer'},
+    'api_professor_availability': {'admin', 'chair', 'viewer'},
+    'api_professor_workload': {'admin', 'chair', 'viewer'},
+    'my_schedule': {'admin', 'chair', 'viewer'},
 
     # Schedules: Room Schedule (Admin READ-ONLY, Scheduler full, Viewer READ-ONLY)
-    'room_schedule': {'admin', 'scheduler', 'viewer'},
-    'view_room_schedule': {'admin', 'scheduler', 'viewer'},
-    'export_room_schedule': {'admin', 'scheduler'},
-    'export_room_schedule_pdf': {'admin', 'scheduler'},
-    'api_room_availability': {'admin', 'scheduler', 'viewer'},
+    'room_schedule': {'admin', 'chair', 'viewer'},
+    'view_room_schedule': {'admin', 'chair', 'viewer'},
+    'export_room_schedule': {'admin', 'chair'},
+    'export_room_schedule_pdf': {'admin', 'chair'},
+    'api_room_availability': {'admin', 'chair', 'viewer'},
 
     # Schedules: Schedule Archive VIEW (Admin READ-ONLY view, Scheduler full, Viewer 403)
-    'schedule_archive': {'admin', 'scheduler'},
-    'view_schedule_archive_batch': {'admin', 'scheduler'},
+    'schedule_archive': {'admin', 'chair'},
+    'view_schedule_archive_batch': {'admin', 'chair'},
 
     # Schedules WRITE endpoints (Admin and Viewer have NO write access; Scheduler scoped to own program)
-    'archive_schedule': {'scheduler'},
-    'edit_schedule': {'scheduler'},
-    'edit_schedule_entry': {'scheduler'},
+    'archive_schedule': {'chair'},
+    'edit_schedule': {'chair'},
+    'edit_schedule_entry': {'chair'},
     'delete_schedule': set(),
     'delete_section_schedule': set(),
     'delete_all_schedules': set(),
-    'restore_schedule_archive': {'scheduler'},
+    'restore_schedule_archive': {'chair'},
     'delete_schedule_archive': set(),
 
     # Users (Admin only)
@@ -807,7 +924,8 @@ ROUTE_PERMISSIONS = {
     'search_users': {'admin'},
     'create_user': {'admin'},
     'edit_user': {'admin'},
-    'delete_user': {'admin'},
+    'disable_user': {'admin'},
+    'enable_user': {'admin'},
     'set_admin_role': {'admin'},
     'add_user_columns': {'admin'},
     'create_test_accounts': {'admin'},
@@ -822,9 +940,9 @@ ROUTE_PERMISSIONS = {
     'restore_database': {'admin'},
 
     # Common Authenticated (All logged-in roles)
-    'profile': {'admin', 'scheduler', 'viewer'},
-    'upload_profile_picture': {'admin', 'scheduler', 'viewer'},
-    'mark_notifications_read': {'admin', 'scheduler'},
+    'profile': {'admin', 'chair', 'viewer'},
+    'upload_profile_picture': {'admin', 'chair', 'viewer'},
+    'mark_notifications_read': {'admin', 'chair'},
 
     # Public / Auth
     'landing': None,
@@ -980,10 +1098,12 @@ def enforce_rbac_permissions():
 
     # Synchronize session role/program directly from live updates or short-lived DB cache
     uid = session.get('user_id')
+    account_disabled = False
     if uid:
         uid_str = str(uid)
         if uid_str in _LIVE_USER_ROLE_UPDATES:
             update_info = _LIVE_USER_ROLE_UPDATES[uid_str]
+            account_disabled = bool(update_info.get('disabled'))
             session['role'] = update_info['role']
             norm_r = _normalize_role(update_info['role'])
             if norm_r in ('admin', 'super_admin', 'viewer'):
@@ -1000,7 +1120,7 @@ def enforce_rbac_permissions():
                 cached = _USER_ROLE_CACHE.get(uid_str)
             if not cached or (now - cached.get('time', 0)) >= 5.0:
                 try:
-                    u_res = supabase.table('users').select('id, role, program_id, program:program_id(program_name)').eq('id', uid_str).limit(1).execute()
+                    u_res = supabase.table('users').select('id, role, program_id, disabled, program:program_id(program_name)').eq('id', uid_str).limit(1).execute()
                     matching_row = None
                     if u_res.data and len(u_res.data) > 0:
                         for r_item in u_res.data:
@@ -1016,12 +1136,14 @@ def enforce_rbac_permissions():
                         db_role = u_row.get('role') or 'viewer'
                         p_id = u_row.get('program_id')
                         p_name = (_rel(u_row, 'program') or {}).get('program_name') or ''
+                        account_disabled = bool(u_row.get('disabled'))
                         with _USER_ROLE_CACHE_LOCK:
                             _USER_ROLE_CACHE[uid_str] = {
                                 'time': now,
                                 'role': db_role,
                                 'program_id': p_id,
                                 'program': p_name,
+                                'disabled': account_disabled,
                             }
                         session['role'] = db_role
                         norm_r = _normalize_role(db_role)
@@ -1034,6 +1156,7 @@ def enforce_rbac_permissions():
                 except Exception as e:
                     logging.debug(f"RBAC user sync notice: {e}")
             elif cached:
+                account_disabled = bool(cached.get('disabled'))
                 cached_role = cached.get('role') or 'viewer'
                 session['role'] = cached_role
                 norm_r = _normalize_role(cached_role)
@@ -1043,6 +1166,15 @@ def enforce_rbac_permissions():
                 else:
                     session['program_id'] = cached.get('program_id')
                     session['program'] = cached.get('program') or ''
+
+    # A disabled account is signed out on its very next authenticated request.
+    if account_disabled:
+        logging.info(f"Disabled account access blocked: user_id={uid}")
+        session.clear()
+        if _is_api_request():
+            return jsonify({'ok': False, 'error': 'This account has been disabled. Contact your administrator.'}), 401
+        flash('This account has been disabled. Contact your administrator.', 'error')
+        return redirect(url_for('login'))
 
     raw_role = session.get('role', '')
     user_role = _normalize_role(raw_role)
@@ -1091,40 +1223,80 @@ def super_admin_required(f):
 
 
 def scheduler_required(f):
-    return roles_required('scheduler')(f)
+    return roles_required('chair')(f)
 
 
 def scheduler_only_required(f):
-    return roles_required('scheduler')(f)
+    return roles_required('chair')(f)
 
 
 def dean_required(f):
-    return roles_required('scheduler')(f)
+    return roles_required('chair')(f)
 
 
-def _get_programs():
-    """Return all programs from public.program.
+def _get_programs(include_archived=True, archived_only=False):
+    """Return programs from public.program.
 
-    Result is cached on Flask's request context (g) so at most one DB query
-    is made per HTTP request, even if called many times.
+    Modes:
+      * `include_archived=True` (default) -> every program. Needed so historical
+        records (schedules, professor loads, users) keep resolving archived names.
+      * `include_archived=False` -> active programs only (archive=false).
+      * `archived_only=True` -> archived programs only (archive=true). When set,
+        `include_archived` is ignored.
+
+    Result is cached on Flask's request context (g) so at most one DB query per
+    variant is made per HTTP request, even if called many times.
     """
     from flask import g as _flask_g, has_app_context
+    if archived_only:
+        cache_attr = '_programs_cache_archived'
+    elif include_archived:
+        cache_attr = '_programs_cache'
+    else:
+        cache_attr = '_programs_cache_active'
     if has_app_context():
-        cached = getattr(_flask_g, '_programs_cache', None)
+        cached = getattr(_flask_g, cache_attr, None)
         if cached is not None:
             return cached
     try:
-        res = supabase.table('program').select('*').order('program_name').execute()
+        query = supabase.table('program').select('*').order('program_name')
+        if archived_only:
+            query = query.eq('archive', True)
+        elif not include_archived:
+            query = query.eq('archive', False)
+        res = query.execute()
         programs = res.data or []
     except Exception as err:
         logging.debug(f"Failed to fetch programs: {err}")
         programs = []
     if has_app_context():
         try:
-            _flask_g._programs_cache = programs
+            setattr(_flask_g, cache_attr, programs)
         except Exception:
             pass
     return programs
+
+
+def _find_program_archive_state(program_name, exclude_id=None):
+    """Return 'active', 'archived', or None for a program name (case-insensitive)."""
+    value = str(program_name or '').strip().casefold()
+    if not value:
+        return None
+    active_found = False
+    archived_found = False
+    for program in _get_programs(include_archived=True):
+        if exclude_id is not None and str(program.get('id')) == str(exclude_id):
+            continue
+        if str(program.get('program_name') or '').strip().casefold() == value:
+            if program.get('archive'):
+                archived_found = True
+            else:
+                active_found = True
+    if active_found:
+        return 'active'
+    if archived_found:
+        return 'archived'
+    return None
 
 def _find_program_id_by_name(program_name):
     """Resolve a program name or numeric ID to public.program.id."""
@@ -1268,6 +1440,136 @@ def _is_professor_in_program(prof_identifier, program_id):
         return False
     linked_ids = _get_professor_program_ids(prof_identifier)
     return int(program_id) in linked_ids
+
+
+def _get_session_user_row():
+    """Fetch the current logged-in user's public.users row (cached per request)."""
+    from flask import g as _flask_gx, has_app_context
+    if has_app_context() and getattr(_flask_gx, '_session_user_row', None) is not None:
+        return _flask_gx._session_user_row
+    row = None
+    uid = session.get('user_id') if has_request_context() else None
+    if uid:
+        try:
+            row = _first(supabase.table('users').select('*').eq('id', str(uid)).limit(1).execute().data or [])
+        except Exception as err:
+            logging.debug(f"Could not load session user row: {err}")
+            row = None
+    if has_app_context():
+        try:
+            _flask_gx._session_user_row = row or {}
+        except Exception:
+            pass
+    return row or {}
+
+
+def _viewer_name_variants(user_row):
+    """Candidate full-name strings for matching a user to a professor_load name."""
+    first = (user_row.get('first_name') or '').strip()
+    middle = (user_row.get('middle_name') or '').strip()
+    last = (user_row.get('last_name') or '').strip()
+    variants = []
+    with_middle = ' '.join(p for p in (first, middle, last) if p)
+    if with_middle:
+        variants.append(with_middle)
+    without_middle = ' '.join(p for p in (first, last) if p)
+    if without_middle and without_middle not in variants:
+        variants.append(without_middle)
+    return variants
+
+
+def _all_professor_display_names():
+    """Distinct professor display names from professor_load and the legacy professor table."""
+    names = set()
+    try:
+        rows = supabase.table('professor_load').select('professor_name').execute().data or []
+        for r in rows:
+            n = (r.get('professor_name') or '').strip()
+            if n:
+                names.add(n)
+    except Exception:
+        pass
+    try:
+        rows = supabase.table('professor').select('first_name, last_name').execute().data or []
+        for r in rows:
+            n = f"{r.get('first_name', '')} {r.get('last_name', '')}".strip()
+            if n:
+                names.add(n)
+    except Exception:
+        pass
+    return names
+
+
+def _find_viewer_professor_key(user_row):
+    """Match a user to a professor identity. Returns (professor_key, display_name) or (None, None).
+
+    Exact full-name match first, then a tolerant first+last match that ignores
+    middle initials/names (e.g. "Alexander S. Cochanco" == "Alexander Cochanco").
+    """
+    variants = _viewer_name_variants(user_row or {})
+    if not variants:
+        return None, None
+
+    norm = professor_load_importer.normalize_professor_key
+    names = _all_professor_display_names()
+    if not names:
+        return None, None
+
+    key_by_norm = {norm(n): n for n in names}
+
+    # 1. Exact normalized full-name match (with or without middle name).
+    for v in variants:
+        vk = norm(v)
+        if vk in key_by_norm:
+            return vk, key_by_norm[vk]
+
+    # 2. Tolerant match on first + last tokens only (middle/suffix ignored).
+    def _first_last(s):
+        toks = professor_load_importer.get_name_tokens(s)
+        while len(toks) > 2 and toks[-1] in ('jr', 'sr', 'ii', 'iii', 'iv', 'v'):
+            toks = toks[:-1]
+        if not toks:
+            return None
+        if len(toks) == 1:
+            return (toks[0],)
+        return (toks[0], toks[-1])
+
+    variant_fl = [fl for fl in (_first_last(v) for v in variants) if fl]
+    for n in names:
+        if _first_last(n) in variant_fl:
+            return norm(n), n
+    return None, None
+
+
+def _viewer_own_professor_key():
+    """The professor_key a Viewer account is linked to (or None)."""
+    key, _ = _find_viewer_professor_key(_get_session_user_row())
+    return key
+
+
+def _viewer_can_view_professor(prof_identifier):
+    """True when the current Viewer account may open this professor's schedule."""
+    own_key = _viewer_own_professor_key()
+    if not own_key:
+        return False
+    import urllib.parse
+    req_key = professor_load_importer.normalize_professor_key(
+        urllib.parse.unquote(str(prof_identifier))
+    )
+    return bool(req_key) and req_key == own_key
+
+
+def _enforce_professor_view_scope(prof_identifier):
+    """For Viewer accounts, abort 403 unless the professor is the viewer's own.
+
+    Returns True when the caller is a Viewer (so callers can skip program scoping).
+    """
+    if _normalize_role(session.get('role', '')) != 'viewer':
+        return False
+    if not _viewer_can_view_professor(prof_identifier):
+        abort(403)
+    return True
+
 
 def _get_scoped_professor_ids_for_program(program_id):
     """Return all prof_ids and professor_keys linked to a specific program."""
@@ -1793,7 +2095,7 @@ def inject_pending_requests():
 
 def _request_delete_if_scheduler(item_type, item_id, item_details):
     role = (session.get('role') or '').lower()
-    if role == 'scheduler':
+    if role == 'chair':
         user_prog_id = _get_user_program_id()
         if item_type == 'course' and user_prog_id:
             try:
@@ -2387,13 +2689,13 @@ def _build_preview_context(preview_entries=None):
     rooms = []
     professor_load_assignments = {}
     try:
-        user_role = (session.get('role') or 'scheduler').lower()
+        user_role = (session.get('role') or 'chair').lower()
         is_super_admin = user_role in ('super_admin', 'admin')
         user_prog_id = _get_user_program_id()
         program = session.get('program', '')
 
         # Super Admin sees all courses, Dean and Scheduler see their program's courses
-        c_query = supabase.table('course').select('course_id, course_code').order('course_code')
+        c_query = supabase.table('course').select('course_id, course_code').eq('archive', False).order('course_code')
         if not is_super_admin:
             eff_pid = user_prog_id or _find_program_id_by_name(program)
             if eff_pid:
@@ -2402,7 +2704,7 @@ def _build_preview_context(preview_entries=None):
         courses = courses_res.data or []
 
         # Super Admin sees all rooms, Dean and Scheduler see their program's rooms
-        r_query = supabase.table('room').select('room_id, room_name').order('room_name')
+        r_query = supabase.table('room').select('room_id, room_name').eq('archive', False).order('room_name')
         if not is_super_admin and user_prog_id:
             try:
                 r_query = r_query.eq('program_id', user_prog_id)
@@ -2595,7 +2897,7 @@ def _get_registrar_counts_for_year(year_level=None, semester=None):
 
 
 @app.route('/api/registrar-counts')
-@roles_required('scheduler')
+@roles_required('chair')
 def registrar_counts():
     """Return registrar mock data for year levels as JSON."""
     year_level = request.args.get('year_level', '')
@@ -2626,13 +2928,13 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
     try:
         c_query = supabase.table('course').select(
             'course_id, course_code, year_level, semester, specialization, program_id, lecture_hours, lab_hours, ilp_hours'
-        ).eq('semester', semester)
+        ).eq('semester', semester).eq('archive', False)
         if program_id:
             c_query = c_query.eq('program_id', program_id)
         courses_data = c_query.execute().data or []
     except Exception:
         try:
-            c_query = supabase.table('course').select('*').eq('semester', semester)
+            c_query = supabase.table('course').select('*').eq('semester', semester).eq('archive', False)
             if program_id:
                 c_query = c_query.eq('program_id', program_id)
             courses_data = c_query.execute().data or []
@@ -2641,7 +2943,7 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
 
     if not courses_data and program_id:
         try:
-            fb_c = supabase.table('course').select('*').eq('semester', semester).execute().data or []
+            fb_c = supabase.table('course').select('*').eq('semester', semester).eq('archive', False).execute().data or []
             if fb_c:
                 courses_data = [c for c in fb_c if c.get('program_id') is None or str(c.get('program_id')) == str(program_id)]
         except Exception:
@@ -2690,7 +2992,7 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
                 pl_id = pl.get('id')
                 errors.append(
                     f"Professor load record #{pl_id} for {cname} has a missing or empty professor name. "
-                    "A Scheduler must update or re-assign this on the Professor Load page."
+                    "A Chair must update or re-assign this on the Professor Load page."
                 )
             load_ident = pkey or pname
             if load_ident:
@@ -2699,14 +3001,14 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
                     orig_id = seen_loads[combo]
                     errors.append(
                         f"Duplicate professor load detected for {pname or load_ident} and course {cname} "
-                        f"(records #{orig_id} and #{pl.get('id')}). A Scheduler must remove or merge duplicate loads on the Professor Load page."
+                        f"(records #{orig_id} and #{pl.get('id')}). A Chair must remove or merge duplicate loads on the Professor Load page."
                     )
                 else:
                     seen_loads[combo] = pl.get('id')
 
     # Room availability checks
     try:
-        rooms_check = supabase.table('room').select('room_id, room_type').execute().data or []
+        rooms_check = supabase.table('room').select('room_id, room_type').eq('archive', False).execute().data or []
     except Exception:
         rooms_check = None
 
@@ -2746,7 +3048,7 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
     for yl in sorted(courses_by_year.keys()):
         yl_courses = courses_by_year[yl]
         yl_name = year_names.get(yl, f'{yl}th Year')
-        is_spec_term = (yl, semester) in SPECIALIZED_TERMS
+        is_spec_term = is_specialization_stage(yl, semester)
 
         if not is_spec_term:
             # Regular (non-specialized) term
@@ -2787,20 +3089,29 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
                 'courses': course_details
             })
         else:
-            # Specialized term: courses carry specialization (Database Systems, Web Systems, Networking, General)
-            spec_groups = {'Database Systems': [], 'Web Systems': [], 'Networking': []}
+            # Specialized term: groups come from the specializations table for
+            # this program. A NULL/"General" course fits any group.
+            db_specs = _get_specializations(program_id=program_id, include_archived=True) if program_id else _get_specializations(include_archived=True)
+            spec_groups = {
+                (s.get('name') or '').strip(): []
+                for s in db_specs
+                if (s.get('name') or '').strip()
+                and (s.get('name') or '').strip().casefold() != GENERAL_SPECIALIZATION_LABEL.casefold()
+            }
             general_courses = []
+            allowed_spec_names = sorted(spec_groups.keys())
 
             for c in yl_courses:
-                spec = (c.get('specialization') or c.get('major') or '').strip()
+                raw_spec = (c.get('specialization') or c.get('major') or '')
+                spec = raw_spec.strip() if isinstance(raw_spec, str) else ''
                 if spec in spec_groups:
                     spec_groups[spec].append(c)
-                elif spec == 'General':
+                elif spec == '' or spec.casefold() == GENERAL_SPECIALIZATION_LABEL.casefold():
                     general_courses.append(c)
                 else:
                     errors.append(
                         f"{c['course_code']} in {yl_name} {semester} has invalid or missing specialization ('{spec}'). "
-                        f"Allowed values are {', '.join(SPECIALIZATION_CHOICES[:-1])} (or General). "
+                        f"Allowed values are {', '.join(allowed_spec_names) if allowed_spec_names else '(none declared)'} (or {GENERAL_SPECIALIZATION_LABEL}). "
                         "Please contact an Administrator to correct this course in the Courses tab."
                     )
 
@@ -2975,7 +3286,7 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
 
 
 @app.route('/api/semester-section-counts')
-@roles_required('scheduler')
+@roles_required('chair')
 def api_semester_section_counts():
     """Return calculated section counts and validation status derived strictly from professor_load."""
     semester = request.args.get('semester', '').strip()
@@ -3020,7 +3331,7 @@ def _check_has_professor_loads(program_id=None):
 
 
 @app.route('/api/has_professor_loads', methods=['GET'])
-@roles_required('scheduler')
+@roles_required('chair')
 def api_has_professor_loads():
     """Return whether professor loads exist for dynamic client-side banner refresh."""
     user_prog_id = _get_user_program_id()
@@ -3065,6 +3376,9 @@ def _establish_authenticated_session(session_data):
         u_res = supabase.table('users').select('*, program:program_id(id, program_name)').eq('id', str(auth_user.id)).limit(1).execute()
         if u_res.data and len(u_res.data) > 0:
             u_row = u_res.data[0]
+            if u_row.get('disabled'):
+                session.clear()
+                return 'disabled'
             if u_row.get('role'):
                 session['role'] = u_row['role']
             if u_row.get('program_id'):
@@ -3144,14 +3458,17 @@ def login():
                 if not session_data:
                     error = 'Invalid username/email or password.'
                 else:
-                    _establish_authenticated_session(session_data)
-                    log_activity('login', 'auth', session['username'])
+                    auth_result = _establish_authenticated_session(session_data)
+                    if auth_result == 'disabled':
+                        error = 'This account has been disabled. Contact your administrator.'
+                    else:
+                        log_activity('login', 'auth', session['username'])
 
-                    # Redirect users to appropriate starting page
-                    norm_role = _normalize_role(session.get('role', ''))
-                    if norm_role in ('admin', 'viewer'):
-                        return redirect(url_for('schedules'))
-                    return redirect(url_for('home'))
+                        # Redirect users to appropriate starting page
+                        norm_role = _normalize_role(session.get('role', ''))
+                        if norm_role in ('admin', 'viewer'):
+                            return redirect(url_for('schedules'))
+                        return redirect(url_for('home'))
             except Exception as err:
                 err_str = str(err)
                 logging.error(f"Login error for '{identifier}': {err_str}")
@@ -3286,6 +3603,8 @@ def signup():
                 name_parts = full_name.split(' ', 1)
                 first_name = name_parts[0][:100]
                 last_name = name_parts[1][:100] if len(name_parts) > 1 else ''
+                _tokens = [t for t in full_name.split() if t]
+                middle_name = (' '.join(_tokens[1:-1])[:100] if len(_tokens) >= 3 else '')
 
                 redirect_to = f"{_get_site_url()}/auth/callback"
                 logging.info(f"[signup] Calling supabase.auth.sign_up for '{email}' as viewer")
@@ -3298,6 +3617,7 @@ def signup():
                         'data': {
                             'full_name': full_name,
                             'first_name': first_name,
+                            'middle_name': middle_name,
                             'last_name': last_name,
                         }
                     }
@@ -3445,7 +3765,9 @@ def auth_callback():
                     session_data = auth_res.session if auth_res else None
 
                 if session_data:
-                    _establish_authenticated_session(session_data)
+                    _cb_result = _establish_authenticated_session(session_data)
+                    if _cb_result == 'disabled':
+                        return jsonify({'success': False, 'error': 'This account has been disabled. Contact your administrator.'}), 403
                     log_activity('verify_email', 'auth', session.get('username', ''))
                     flash('Your email has been verified successfully! Welcome to Scheduler.', 'success')
                     return jsonify({'success': True, 'redirect_url': url_for('schedules')})
@@ -3473,7 +3795,10 @@ def auth_callback():
         try:
             auth_res = supabase.auth.exchange_code_for_session({'auth_code': code})
             if auth_res and getattr(auth_res, 'session', None):
-                _establish_authenticated_session(auth_res.session)
+                _cb_result = _establish_authenticated_session(auth_res.session)
+                if _cb_result == 'disabled':
+                    flash('This account has been disabled. Contact your administrator.', 'error')
+                    return redirect(url_for('login'))
                 log_activity('verify_email', 'auth', session.get('username', ''))
                 flash('Your email has been verified successfully! Welcome to Scheduler.', 'success')
                 return redirect(url_for('schedules'))
@@ -3492,7 +3817,10 @@ def auth_callback():
         try:
             auth_res = supabase.auth.verify_otp({'token_hash': token_hash, 'type': otp_type})
             if auth_res and getattr(auth_res, 'session', None):
-                _establish_authenticated_session(auth_res.session)
+                _cb_result = _establish_authenticated_session(auth_res.session)
+                if _cb_result == 'disabled':
+                    flash('This account has been disabled. Contact your administrator.', 'error')
+                    return redirect(url_for('login'))
                 log_activity('verify_email', 'auth', session.get('username', ''))
                 flash('Your email has been verified successfully! Welcome to Scheduler.', 'success')
                 return redirect(url_for('schedules'))
@@ -3522,7 +3850,7 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/profile')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def profile():
     user = None
     try:
@@ -3540,7 +3868,7 @@ def profile():
 ALLOWED_PICTURE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 
 @app.route('/upload_profile_picture', methods=['POST'])
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def upload_profile_picture():
     file = request.files.get('profile_picture')
     if not file or file.filename == '':
@@ -3670,7 +3998,7 @@ def users():
         logging.error(f"Error fetching users: {err}")
         flash(f'Error fetching users: {err}', 'error')
 
-    programs = _get_programs()
+    programs = _get_programs(include_archived=False)
     return render_template('users.html', active_page='users', users=users_list, programs=programs, search_query=search_query)
 
 @app.route('/search_users', methods=['GET'])
@@ -3708,6 +4036,7 @@ def edit_user(user_id):
 
         # Update user
         first_name = request.form.get('first_name', '').strip()
+        middle_name = request.form.get('middle_name', '').strip()
         last_name = request.form.get('last_name', '').strip()
         email = request.form.get('email', '').strip()
         role = request.form.get('role', '').strip()
@@ -3715,20 +4044,20 @@ def edit_user(user_id):
         # Validate role against single source of truth whitelist
         role_lower = role.lower()
         if role_lower not in VALID_USER_ROLES:
-            return jsonify({'success': False, 'message': f"Invalid role '{role}'. Allowed roles are: Admin, Scheduler, Viewer."}), 400
+            return jsonify({'success': False, 'message': f"Invalid role '{role}'. Allowed roles are: Admin, Chair, Viewer."}), 400
 
         # Only a Super Admin can grant Super Admin
         raw_current_user_role = (session.get('role') or '').lower()
         if role_lower == 'super_admin' and raw_current_user_role not in ('super_admin', 'super admin'):
             return jsonify({'success': False, 'message': 'Only a Super Admin can grant the Super Admin role.'}), 403
 
-        is_scheduler = role_lower == 'scheduler'
+        is_scheduler = role_lower == 'chair'
         program_input = request.form.get('program', '').strip() if is_scheduler else None
         program_id_input = request.form.get('program_id', '').strip() if is_scheduler else None
 
         if is_scheduler and not (program_input or program_id_input):
-            flash('Program is required for Scheduler role.', 'error')
-            return jsonify({'success': False, 'message': 'Program is required for Scheduler role.'}), 400
+            flash('Program is required for Chair role.', 'error')
+            return jsonify({'success': False, 'message': 'Program is required for Chair role.'}), 400
 
         # Resolve program and program_id
         program_id = None
@@ -3755,6 +4084,7 @@ def edit_user(user_id):
 
         update_payload = {
             'first_name': first_name,
+            'middle_name': middle_name,
             'last_name': last_name,
             'role': role,
             'program_id': program_id,
@@ -3777,6 +4107,7 @@ def edit_user(user_id):
             'role': role,
             'program_id': program_id,
             'program': new_prog_name if program_id else '',
+            'disabled': bool(old_user.get('disabled')),
             'timestamp': now,
         }
         with _USER_ROLE_CACHE_LOCK:
@@ -3785,6 +4116,7 @@ def edit_user(user_id):
                 'role': role,
                 'program_id': program_id,
                 'program': new_prog_name if program_id else '',
+                'disabled': bool(old_user.get('disabled')),
             }
 
         if str(current_user_id) == str(user_id):
@@ -3805,29 +4137,98 @@ def edit_user(user_id):
     except Exception as err:
         return jsonify({'success': False, 'message': f'Database error: {str(err)}'}), 500
 
-@app.route('/delete_user/<user_id>', methods=['POST'])
+@app.route('/disable_user/<user_id>', methods=['POST'])
 @admin_required
-def delete_user(user_id):
+def disable_user(user_id):
+    """Soft-delete a user by setting disabled=true. Home-rolled DELETE is gone."""
     try:
         current_user_id = session.get('user_id')
 
-        # Prevent admin from deleting themselves
+        # Safety check: an admin cannot disable their own account
         if str(current_user_id) == str(user_id):
-            return jsonify({'success': False, 'message': 'You cannot delete your own account.'}), 403
+            return jsonify({'success': False, 'message': 'You cannot disable your own account.'}), 403
 
-        supabase.table('users').delete().eq('id', user_id).execute()
+        # Load the target account
+        target_res = supabase.table('users').select('id, role, disabled, first_name, last_name, username').eq('id', user_id).limit(1).execute()
+        target = _first(target_res.data or [])
+        if not target:
+            return jsonify({'success': False, 'message': 'User not found.'}), 404
 
-        log_activity('delete', 'user', f'User ID {user_id}')
-        flash('Deleted successfully', 'success')
-        return jsonify({'success': True, 'message': 'User deleted successfully.'})
+        target_role = _normalize_role(target.get('role'))
+        if target.get('disabled'):
+            return jsonify({'success': False, 'message': 'This account is already disabled.'}), 400
+
+        # Safety check: the last active Admin cannot be disabled
+        if target_role == 'admin':
+            try:
+                admins = supabase.table('users').select('id, role, disabled').execute().data or []
+                active_admins = [
+                    a for a in admins
+                    if _normalize_role(a.get('role')) == 'admin' and not a.get('disabled')
+                ]
+            except Exception:
+                active_admins = []
+            if len(active_admins) <= 1:
+                return jsonify({
+                    'success': False,
+                    'message': 'Cannot disable the last active Admin account. Promote another Admin first.'
+                }), 400
+
+        supabase.table('users').update({'disabled': True}).eq('id', user_id).execute()
+
+        # Make the change effective on the target's very next request
+        with _USER_ROLE_CACHE_LOCK:
+            _USER_ROLE_CACHE.pop(str(user_id), None)
+        _LIVE_USER_ROLE_UPDATES[str(user_id)] = {
+            'role': target.get('role') or 'viewer',
+            'program_id': None,
+            'program': '',
+            'disabled': True,
+            'timestamp': time.time(),
+        }
+
+        target_name = f"{target.get('first_name', '')} {target.get('last_name', '')}".strip() or str(user_id)
+        log_activity('disable', 'user', f'{target_name} ({user_id})')
+        return jsonify({'success': True, 'message': 'Account disabled successfully. The user can no longer log in.'})
     except Exception as err:
         return jsonify({'success': False, 'message': f'Database error: {str(err)}'}), 500
+
+
+@app.route('/enable_user/<user_id>', methods=['POST'])
+@admin_required
+def enable_user(user_id):
+    """Re-enable a previously disabled account."""
+    try:
+        target_res = supabase.table('users').select('id, role, disabled, first_name, last_name, username').eq('id', user_id).limit(1).execute()
+        target = _first(target_res.data or [])
+        if not target:
+            return jsonify({'success': False, 'message': 'User not found.'}), 404
+
+        supabase.table('users').update({'disabled': False}).eq('id', user_id).execute()
+
+        with _USER_ROLE_CACHE_LOCK:
+            _USER_ROLE_CACHE.pop(str(user_id), None)
+        _LIVE_USER_ROLE_UPDATES[str(user_id)] = {
+            'role': target.get('role') or 'viewer',
+            'program_id': None,
+            'program': '',
+            'disabled': False,
+            'timestamp': time.time(),
+        }
+
+        target_name = f"{target.get('first_name', '')} {target.get('last_name', '')}".strip() or str(user_id)
+        log_activity('enable', 'user', f'{target_name} ({user_id})')
+        return jsonify({'success': True, 'message': 'Account enabled successfully. The user can log in again.'})
+    except Exception as err:
+        return jsonify({'success': False, 'message': f'Database error: {str(err)}'}), 500
+
 
 @app.route('/create_user', methods=['POST'])
 @admin_required
 def create_user():
     try:
         first_name = request.form.get('first_name', '').strip()
+        middle_name = request.form.get('middle_name', '').strip()
         last_name  = request.form.get('last_name',  '').strip()
         email      = request.form.get('email', '').strip()
         password   = request.form.get('password', '')
@@ -3840,19 +4241,19 @@ def create_user():
         # Validate role against single source of truth whitelist
         role_lower = role.lower()
         if role_lower not in VALID_USER_ROLES:
-            return jsonify({'success': False, 'message': f"Invalid role '{role}'. Allowed roles are: Admin, Scheduler, Viewer."}), 400
+            return jsonify({'success': False, 'message': f"Invalid role '{role}'. Allowed roles are: Admin, Chair, Viewer."}), 400
 
         # Only a Super Admin can grant Super Admin
         raw_current_user_role = (session.get('role') or '').lower()
         if role_lower == 'super_admin' and raw_current_user_role not in ('super_admin', 'super admin'):
             return jsonify({'success': False, 'message': 'Only a Super Admin can grant the Super Admin role.'}), 403
 
-        is_scheduler = role_lower == 'scheduler'
+        is_scheduler = role_lower == 'chair'
         program_input    = request.form.get('program',    '').strip() if is_scheduler else None
         program_id_input = request.form.get('program_id', '').strip() if is_scheduler else None
 
         if is_scheduler and not (program_input or program_id_input):
-            return jsonify({'success': False, 'message': 'Program is required for Scheduler role.'}), 400
+            return jsonify({'success': False, 'message': 'Program is required for Chair role.'}), 400
 
         program_id   = None
         program_name = None
@@ -3904,6 +4305,7 @@ def create_user():
             try:
                 supabase.table('users').update({
                     'first_name': first_name,
+                    'middle_name': middle_name,
                     'last_name':  last_name,
                     'role':       role,
                     'program_id': program_id,
@@ -3921,6 +4323,7 @@ def create_user():
                 'options': {
                     'data': {
                         'first_name': first_name,
+                        'middle_name': middle_name,
                         'last_name':  last_name,
                         'username':   email.split('@')[0],
                         'program_id': program_id,
@@ -3942,6 +4345,7 @@ def create_user():
             'email':      email,
             'username':   email.split('@')[0],
             'first_name': first_name,
+            'middle_name': middle_name,
             'last_name':  last_name,
             'role':       role,
             'program_id': program_id,
@@ -4005,12 +4409,12 @@ def create_test_accounts():
                 'role': 'admin'
             },
             {
-                'first_name': 'Scheduler',
+                'first_name': 'Chair',
                 'last_name': 'User',
                 'email': 'scheduler@example.com',
                 'password': 'Scheduler123!',
                 'program': 'BSIT',
-                'role': 'Scheduler'
+                'role': 'Chair'
             }
         ]
 
@@ -4096,7 +4500,7 @@ def landing():
 
 
 @app.route('/home')
-@roles_required('scheduler', 'viewer')
+@roles_required('chair', 'viewer')
 def home():
     norm_role = _normalize_role(session.get('role', ''))
     if norm_role == 'viewer':
@@ -4108,7 +4512,7 @@ def home():
 
 
 @app.route('/index.html')
-@roles_required('scheduler', 'viewer')
+@roles_required('chair', 'viewer')
 def legacy_index_html():
     return redirect(url_for('home'))
 
@@ -4119,25 +4523,26 @@ def legacy_index_html():
 @roles_required('admin')
 def show_programs():
     user_role = (session.get('role') or '').lower()
-    programs_list = _get_programs()
+    show_archived = (request.args.get('archived', '') or '').strip().lower() in ('true', '1', 'yes', 'on')
+    programs_list = _get_programs(include_archived=False, archived_only=show_archived)
 
     # Enrich each program with course_count and scheduler_count
     course_counts = {}
     try:
-        c_res = supabase.table('course').select('program_id').execute()
+        c_res = supabase.table('course').select('program_id, archive').execute()
         for c in (c_res.data or []):
             pid = c.get('program_id')
-            if pid:
+            if pid and bool(c.get('archive')) == show_archived:
                 course_counts[pid] = course_counts.get(pid, 0) + 1
     except Exception as e:
         logging.debug(f"Error fetching course counts for programs: {e}")
 
     scheduler_counts = {}
     try:
-        u_res = supabase.table('users').select('program_id, role').execute()
+        u_res = supabase.table('users').select('program_id, role, disabled').execute()
         for u in (u_res.data or []):
             role_norm = _normalize_role(u.get('role'))
-            if role_norm == 'scheduler':
+            if role_norm == 'chair' and not u.get('disabled'):
                 pid = u.get('program_id')
                 if pid:
                     scheduler_counts[pid] = scheduler_counts.get(pid, 0) + 1
@@ -4149,7 +4554,7 @@ def show_programs():
         p['course_count'] = course_counts.get(pid, 0)
         p['scheduler_count'] = scheduler_counts.get(pid, 0)
 
-    return render_template('programs.html', active_page='programs', programs=programs_list)
+    return render_template('programs.html', active_page='programs', programs=programs_list, show_archived=show_archived)
 
 
 @app.route('/add_program', methods=['POST'])
@@ -4166,10 +4571,16 @@ def add_program():
         flash(msg, 'danger')
         return redirect(url_for('show_programs'))
 
-    # Case-insensitive duplicate check
-    all_progs = _get_programs()
-    if any(str(p.get('program_name') or '').strip().casefold() == program_name.casefold() for p in all_progs):
+    # Case-insensitive duplicate check (active vs archived)
+    state = _find_program_archive_state(program_name)
+    if state == 'active':
         msg = f"Program '{program_name}' already exists."
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+        flash(msg, 'danger')
+        return redirect(url_for('show_programs'))
+    if state == 'archived':
+        msg = f"A program named '{program_name}' is archived. Restore it instead of creating a new one."
         if is_ajax:
             return jsonify({'success': False, 'message': msg, 'error': msg}), 400
         flash(msg, 'danger')
@@ -4189,8 +4600,9 @@ def add_program():
 
         # Clear cached programs on Flask context
         from flask import g as _flask_g
-        if hasattr(_flask_g, '_programs_cache'):
-            delattr(_flask_g, '_programs_cache')
+        for _cache_attr in ('_programs_cache', '_programs_cache_active', '_programs_cache_archived'):
+            if hasattr(_flask_g, _cache_attr):
+                delattr(_flask_g, _cache_attr)
 
         log_activity('create', 'program', program_name)
         msg = f"Program '{program_name}' added successfully."
@@ -4221,10 +4633,16 @@ def edit_program(id):
         flash(msg, 'danger')
         return redirect(url_for('show_programs'))
 
-    # Check duplicate among other programs
-    all_progs = _get_programs()
-    if any(p.get('id') != id and str(p.get('program_name') or '').strip().casefold() == new_name.casefold() for p in all_progs):
+    # Check duplicate among other programs (active vs archived)
+    state = _find_program_archive_state(new_name, exclude_id=id)
+    if state == 'active':
         msg = f"Another program already uses the name '{new_name}'."
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+        flash(msg, 'danger')
+        return redirect(url_for('show_programs'))
+    if state == 'archived':
+        msg = f"A program named '{new_name}' is archived. Restore it instead of renaming to that name."
         if is_ajax:
             return jsonify({'success': False, 'message': msg, 'error': msg}), 400
         flash(msg, 'danger')
@@ -4244,8 +4662,9 @@ def edit_program(id):
 
         # Clear cache
         from flask import g as _flask_g
-        if hasattr(_flask_g, '_programs_cache'):
-            delattr(_flask_g, '_programs_cache')
+        for _cache_attr in ('_programs_cache', '_programs_cache_active', '_programs_cache_archived'):
+            if hasattr(_flask_g, _cache_attr):
+                delattr(_flask_g, _cache_attr)
 
         log_activity('edit', 'program', f"ID {id}: {new_name}")
         msg = f"Program updated to '{new_name}' successfully."
@@ -4262,63 +4681,81 @@ def edit_program(id):
         return redirect(url_for('show_programs'))
 
 
-@app.route('/delete_program/<int:id>', methods=['GET', 'POST'])
+@app.route('/archive_program/<int:id>', methods=['GET', 'POST'])
 @roles_required('admin')
-def delete_program(id):
+def archive_program(id):
+    """Soft-delete a program (archive=true) after safety checks."""
     is_ajax = _is_ajax_request()
 
-    # 1. Reference check: courses
+    # Safety check: only archive when the program has no active courses or rooms
     try:
-        c_check = supabase.table('course').select('course_id').eq('program_id', id).limit(1).execute()
+        c_check = supabase.table('course').select('course_id').eq('program_id', id).eq('archive', False).limit(1).execute()
         if c_check.data and len(c_check.data) > 0:
-            msg = "Cannot delete program: Courses are assigned to this program. Reassign or delete those courses first."
+            msg = "Cannot archive program: it still has active courses. Archive those courses first."
             if is_ajax:
                 return jsonify({'success': False, 'message': msg, 'error': msg}), 400
             flash(msg, 'danger')
             return redirect(url_for('show_programs'))
     except Exception as e:
-        logging.debug(f"Error checking course references for program {id}: {e}")
+        logging.debug(f"Error checking active course references for program {id}: {e}")
 
-    # 2. Reference check: users (schedulers)
     try:
-        u_check = supabase.table('users').select('id').eq('program_id', id).limit(1).execute()
-        if u_check.data and len(u_check.data) > 0:
-            msg = "Cannot delete program: Users/Schedulers are assigned to this program. Reassign their program first."
+        r_check = supabase.table('room').select('room_id').eq('program_id', id).eq('archive', False).limit(1).execute()
+        if r_check.data and len(r_check.data) > 0:
+            msg = "Cannot archive program: it still has active rooms. Archive those rooms first."
             if is_ajax:
                 return jsonify({'success': False, 'message': msg, 'error': msg}), 400
             flash(msg, 'danger')
             return redirect(url_for('show_programs'))
     except Exception as e:
-        logging.debug(f"Error checking user references for program {id}: {e}")
-
-    # 3. Reference check: schedules
-    try:
-        s_check = supabase.table('schedule_with_semester').select('schedule_id').eq('program_id', id).limit(1).execute()
-        if s_check.data and len(s_check.data) > 0:
-            msg = "Cannot delete program: Active or archived schedules exist for this program."
-            if is_ajax:
-                return jsonify({'success': False, 'message': msg, 'error': msg}), 400
-            flash(msg, 'danger')
-            return redirect(url_for('show_programs'))
-    except Exception as e:
-        logging.debug(f"Error checking schedule references for program {id}: {e}")
+        # Rooms are a shared campus-wide pool and may not carry a program_id.
+        logging.debug(f"Program room reference check skipped: {e}")
 
     try:
-        supabase.table('program').delete().eq('id', id).execute()
+        supabase.table('program').update({'archive': True}).eq('id', id).execute()
 
         from flask import g as _flask_g
-        if hasattr(_flask_g, '_programs_cache'):
-            delattr(_flask_g, '_programs_cache')
+        for _cache_attr in ('_programs_cache', '_programs_cache_active', '_programs_cache_archived'):
+            if hasattr(_flask_g, _cache_attr):
+                delattr(_flask_g, _cache_attr)
 
-        log_activity('delete', 'program', f"Program ID {id}")
-        msg = "Program deleted successfully."
+        log_activity('archive', 'program', f"Program ID {id}")
+        msg = "Program archived successfully. You can restore it later."
         if is_ajax:
             return jsonify({'success': True, 'message': msg}), 200
         flash(msg, 'success')
         return redirect(url_for('show_programs'))
     except Exception as err:
-        logging.error(f"Error deleting program {id}: {err}")
-        msg = f"Error deleting program: {err}"
+        logging.error(f"Error archiving program {id}: {err}")
+        msg = f"Error archiving program: {err}"
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg, 'error': str(err)}), 400
+        flash(msg, 'danger')
+        return redirect(url_for('show_programs'))
+
+
+@app.route('/restore_program/<int:id>', methods=['GET', 'POST'])
+@roles_required('admin')
+def restore_program(id):
+    """Restore an archived program (archive=false)."""
+    is_ajax = _is_ajax_request()
+    try:
+        supabase.table('program').update({'archive': False}).eq('id', id).execute()
+
+        from flask import g as _flask_g
+        for _cache_attr in ('_programs_cache', '_programs_cache_active', '_programs_cache_archived'):
+            if hasattr(_flask_g, _cache_attr):
+                delattr(_flask_g, _cache_attr)
+
+        log_activity('restore', 'program', f"Program ID {id}")
+        msg = "Program restored successfully."
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg}), 200
+        flash(msg, 'success')
+        return redirect(url_for('show_programs'))
+    except Exception as err:
+        logging.error(f"Error restoring program {id}: {err}")
+        msg = f"Error restoring program: {err}"
         if is_ajax:
             return jsonify({'success': False, 'message': msg, 'error': str(err)}), 400
         flash(msg, 'danger')
@@ -4326,14 +4763,182 @@ def delete_program(id):
 
 
 @app.route('/api/programs', methods=['GET'])
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def api_programs():
-    progs = _get_programs()
+    progs = _get_programs(include_archived=False)
     return jsonify({
         'ok': True,
         'success': True,
         'programs': [{'id': p['id'], 'program_name': p['program_name'], 'full_name': p.get('full_name')} for p in progs]
     })
+
+
+#-------------------------------------------------------specializations (Admin, managed from Programs)----
+def _specialization_in_use_in_active_schedule(spec_id):
+    """True if any course using this specialization is referenced by an active schedule."""
+    if spec_id is None:
+        return False
+    try:
+        course_rows = supabase.table('course').select('course_id').eq('specialization_id', spec_id).execute().data or []
+    except Exception:
+        return False
+    course_ids = [c.get('course_id') for c in course_rows if c.get('course_id') is not None]
+    if not course_ids:
+        return False
+    # Active schedule rows for teaching loads of those courses.
+    try:
+        loads = supabase.table('professor_load').select('professor_load_id:id').in_('course_id', course_ids).execute().data or []
+    except Exception:
+        try:
+            loads = supabase.table('professor_load').select('id').in_('course_id', course_ids).execute().data or []
+        except Exception:
+            loads = []
+    load_ids = [r.get('professor_load_id') or r.get('id') for r in loads]
+    load_ids = [l for l in load_ids if l is not None]
+    if load_ids:
+        try:
+            sched = supabase.table('schedule').select('schedule_id').in_('professor_load_id', load_ids).eq('archive', False).limit(1).execute()
+            if sched.data:
+                return True
+        except Exception:
+            pass
+    # TBA / direct course_id rows.
+    try:
+        sched = supabase.table('schedule').select('schedule_id').in_('course_id', course_ids).eq('archive', False).limit(1).execute()
+        if sched.data:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _spec_json_rows(specs):
+    return [{
+        'specialization_id': s.get('specialization_id'),
+        'name': s.get('name'),
+        'code': s.get('code'),
+        'program_id': s.get('program_id'),
+        'archive': bool(s.get('archive')),
+    } for s in specs]
+
+
+@app.route('/api/specializations', methods=['GET'])
+@roles_required('admin')
+def api_specializations():
+    program_id = (request.args.get('program_id') or '').strip()
+    include_archived = (request.args.get('archived') or '').strip().lower() in ('true', '1', 'yes', 'on')
+    pid = None
+    if program_id and program_id.lower() != 'all':
+        pid = int(program_id) if program_id.isdigit() else _find_program_id_by_name(program_id)
+    specs = _get_specializations(program_id=pid, include_archived=include_archived)
+    return jsonify({'ok': True, 'success': True, 'specializations': _spec_json_rows(specs)})
+
+
+@app.route('/api/specialization-config', methods=['GET'])
+@roles_required('admin', 'chair')
+def api_specialization_config():
+    return jsonify({'ok': True, 'success': True, **specialization_stage_payload()})
+
+
+def _spec_error(msg, status=400):
+    return jsonify({'success': False, 'message': msg, 'error': msg}), status
+
+
+@app.route('/add_specialization', methods=['POST'])
+@roles_required('admin')
+def add_specialization():
+    is_ajax = _is_ajax_request()
+    name = (request.form.get('name') or '').strip()
+    code = (request.form.get('code') or '').strip().upper() or None
+    program_id = (request.form.get('program_id') or '').strip()
+    if not name or not program_id:
+        return _spec_error('Specialization name and program are required.') if is_ajax else (
+            flash('Specialization name and program are required.', 'danger') or redirect(url_for('show_programs')))
+    if name.casefold() == GENERAL_SPECIALIZATION_LABEL.casefold():
+        return _spec_error('"General" is a built-in rule (no specialization). You cannot add it as a specialization.') if is_ajax else (
+            flash('"General" is built-in.', 'danger') or redirect(url_for('show_programs')))
+    pid = int(program_id) if program_id.isdigit() else _find_program_id_by_name(program_id)
+    if not pid:
+        return _spec_error(f"Unknown program '{program_id}'.") if is_ajax else (
+            flash('Unknown program.', 'danger') or redirect(url_for('show_programs')))
+    for s in _get_specializations(program_id=pid, include_archived=True):
+        if (s.get('name') or '').strip().casefold() == name.casefold():
+            if s.get('archive'):
+                return _spec_error(f"A specialization named '{name}' is archived for this program. Restore it instead.") if is_ajax else (
+                    flash('Archived specialization with that name.', 'danger') or redirect(url_for('show_programs')))
+            return _spec_error(f"Specialization '{name}' already exists for this program.") if is_ajax else (
+                flash('Specialization already exists.', 'danger') or redirect(url_for('show_programs')))
+    try:
+        supabase.table('specializations').insert({'name': name, 'code': code, 'program_id': pid}).execute()
+        log_activity('create', 'specialization', f"{name} ({code or '-'}) program {pid}")
+        msg = f"Specialization '{name}' added."
+        return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
+    except Exception as err:
+        return _spec_error(f'Error adding specialization: {err}', 500) if is_ajax else (
+            flash(f'Error: {err}', 'danger') or redirect(url_for('show_programs')))
+
+
+@app.route('/edit_specialization/<int:spec_id>', methods=['POST'])
+@roles_required('admin')
+def edit_specialization(spec_id):
+    is_ajax = _is_ajax_request()
+    name = (request.form.get('name') or '').strip()
+    code = (request.form.get('code') or '').strip().upper() or None
+    if not name:
+        return _spec_error('Specialization name is required.') if is_ajax else (
+            flash('Specialization name is required.', 'danger') or redirect(url_for('show_programs')))
+    if name.casefold() == GENERAL_SPECIALIZATION_LABEL.casefold():
+        return _spec_error('"General" is a built-in rule and cannot be used as a name.') if is_ajax else (
+            flash('"General" is built-in.', 'danger') or redirect(url_for('show_programs')))
+    current = _first(supabase.table('specializations').select('*').eq('specialization_id', spec_id).limit(1).execute().data or [])
+    if not current:
+        return _spec_error('Specialization not found.', 404) if is_ajax else (
+            flash('Specialization not found.', 'danger') or redirect(url_for('show_programs')))
+    for s in _get_specializations(program_id=current.get('program_id'), include_archived=True):
+        if s.get('specialization_id') != spec_id and (s.get('name') or '').strip().casefold() == name.casefold():
+            return _spec_error(f"Another specialization already uses the name '{name}'.") if is_ajax else (
+                flash('Name already used.', 'danger') or redirect(url_for('show_programs')))
+    try:
+        supabase.table('specializations').update({'name': name, 'code': code}).eq('specialization_id', spec_id).execute()
+        log_activity('edit', 'specialization', f"ID {spec_id}: {name}")
+        msg = 'Specialization updated.'
+        return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
+    except Exception as err:
+        return _spec_error(f'Error updating specialization: {err}', 500) if is_ajax else (
+            flash(f'Error: {err}', 'danger') or redirect(url_for('show_programs')))
+
+
+@app.route('/archive_specialization/<int:spec_id>', methods=['POST'])
+@roles_required('admin')
+def archive_specialization(spec_id):
+    is_ajax = _is_ajax_request()
+    current = _first(supabase.table('specializations').select('*').eq('specialization_id', spec_id).limit(1).execute().data or [])
+    if not current:
+        return _spec_error('Specialization not found.', 404) if is_ajax else (flash('Specialization not found.', 'danger') or redirect(url_for('show_programs')))
+    if _specialization_in_use_in_active_schedule(spec_id):
+        msg = 'Cannot archive: this specialization is used by courses in the active schedule. Archive the schedule first.'
+        return _spec_error(msg) if is_ajax else (flash(msg, 'danger') or redirect(url_for('show_programs')))
+    try:
+        supabase.table('specializations').update({'archive': True}).eq('specialization_id', spec_id).execute()
+        log_activity('archive', 'specialization', f"ID {spec_id}: {current.get('name')}")
+        msg = 'Specialization archived. You can restore it later.'
+        return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
+    except Exception as err:
+        return _spec_error(f'Error archiving specialization: {err}', 500) if is_ajax else (flash(f'Error: {err}', 'danger') or redirect(url_for('show_programs')))
+
+
+@app.route('/restore_specialization/<int:spec_id>', methods=['POST'])
+@roles_required('admin')
+def restore_specialization(spec_id):
+    is_ajax = _is_ajax_request()
+    try:
+        supabase.table('specializations').update({'archive': False}).eq('specialization_id', spec_id).execute()
+        log_activity('restore', 'specialization', f"ID {spec_id}")
+        msg = 'Specialization restored.'
+        return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
+    except Exception as err:
+        return _spec_error(f'Error restoring specialization: {err}', 500) if is_ajax else (flash(f'Error: {err}', 'danger') or redirect(url_for('show_programs')))
+
 
 
 @app.route('/courses.html')
@@ -4344,7 +4949,7 @@ def legacy_courses_html():
 
 
 @app.route('/section.html')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def legacy_section_html():
     return redirect(url_for('schedules'))
 
@@ -4363,31 +4968,70 @@ def legacy_working_hours_html():
 
 
 @app.route('/schedules.html')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def legacy_schedules_html():
     return redirect(url_for('schedules'))
 
 
 @app.route('/generated_schedule.html')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def legacy_generated_schedule_html():
     return redirect(url_for('schedules'))
 
 
 @app.route('/schedule.html')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def legacy_schedule_html():
     return redirect(url_for('schedules'))
 #-------------------------------------------------------add_course----------------------------------------------------------------------------------------------
 #-------------------------------------------------------add_course----------------------------------------------------------------------------------------------
 def _course_code_exists_in_program(course_code, program_id, exclude_course_id=None):
     normalized_code = str(course_code or '').strip().casefold()
-    courses = supabase.table('course').select('course_id, course_code').eq('program_id', program_id).execute().data or []
+    courses = supabase.table('course').select('course_id, course_code, archive').eq('program_id', program_id).execute().data or []
     return any(
         str(course.get('course_code') or '').strip().casefold() == normalized_code
+        and not course.get('archive')
         and str(course.get('course_id')) != str(exclude_course_id)
         for course in courses
     )
+
+
+def _course_code_conflict_in_program(course_code, program_id, exclude_course_id=None):
+    """Return 'active', 'archived', or None for a course code within a program."""
+    normalized_code = str(course_code or '').strip().casefold()
+    if not normalized_code:
+        return None
+    try:
+        courses = supabase.table('course').select('course_id, course_code, archive').eq('program_id', program_id).execute().data or []
+    except Exception:
+        courses = supabase.table('course').select('course_id, course_code').eq('program_id', program_id).execute().data or []
+    active_found = False
+    archived_found = False
+    for course in courses:
+        if str(course.get('course_id')) == str(exclude_course_id):
+            continue
+        if str(course.get('course_code') or '').strip().casefold() != normalized_code:
+            continue
+        if course.get('archive'):
+            archived_found = True
+        else:
+            active_found = True
+    if active_found:
+        return 'active'
+    if archived_found:
+        return 'archived'
+    return None
+
+
+def _course_duplicate_message(course_code, program_id, exclude_course_id=None):
+    """Return an error message when a course code collides, else None."""
+    state = _course_code_conflict_in_program(course_code, program_id, exclude_course_id)
+    if state == 'active':
+        return 'Course already exists in this program.'
+    if state == 'archived':
+        return (f"A course with code '{course_code}' is archived in this program. "
+                f"Restore it instead of creating a new one.")
+    return None
 
 
 @app.route('/add_course', methods=['POST'])
@@ -4463,9 +5107,10 @@ def add_course():
             session.modified = True
             return redirect(url_for('show_courses'))
 
-        # Check duplicate course code within the selected program
-        if _course_code_exists_in_program(course_code, program_id):
-            msg = 'Course already exists in this program.'
+        # Check duplicate course code within the selected program (active or archived)
+        dup_msg = _course_duplicate_message(course_code, program_id)
+        if dup_msg:
+            msg = dup_msg
             if is_ajax:
                 return jsonify({'success': False, 'message': msg, 'error': msg}), 400
             session['course_message'] = msg
@@ -4498,14 +5143,16 @@ def add_course():
                 pass
 
         semester_str = raw_semester or ('1st Semester' if not semester_id else '')
-        specialization = (request.form.get('specialization') or request.form.get('major') or '').strip() or None
-        if specialization and specialization not in SPECIALIZATION_CHOICES:
-            msg = f"Invalid specialization/track '{specialization}'. Allowed values are: {', '.join(SPECIALIZATION_CHOICES)}."
+        raw_spec_id = request.form.get('specialization_id') or request.form.get('specialization')
+        spec_id, spec_err = _resolve_course_specialization_id(raw_spec_id, program_id, year_level, semester_str)
+        if spec_err:
+            msg = spec_err
             if is_ajax:
                 return jsonify({'success': False, 'message': msg, 'error': msg}), 400
             session['course_message'] = msg
             session.modified = True
             return redirect(url_for('show_courses'))
+        spec_name = _specialization_name_by_id(spec_id) if spec_id else None
 
         course_data = {
             'course_code': course_code,
@@ -4515,7 +5162,8 @@ def add_course():
             'lab_hours': int(lab_hours) if str(lab_hours).strip().isdigit() else 0,
             'ilp_hours': int(ilp_val),
             'year_level': year_level,
-            'specialization': specialization,
+            'specialization_id': spec_id,
+            'specialization': spec_name,
             'semester': semester_str,
             'program_id': program_id,
         }
@@ -4526,6 +5174,8 @@ def add_course():
             err_str = str(insert_err)
             if 'course_name' in err_str:
                 course_data.pop('course_name', None)
+            if 'specialization_id' in err_str:
+                course_data.pop('specialization_id', None)
             if 'specialization' in err_str:
                 course_data.pop('specialization', None)
             if 'semester' in err_str:
@@ -4556,9 +5206,10 @@ def show_courses():
     user_role = _normalize_role(session.get('role', ''))
     is_super_admin = (user_role == 'admin')
     program_arg = request.args.get('program', '').strip()
+    show_archived = (request.args.get('archived', '') or '').strip().lower() in ('true', '1', 'yes', 'on')
     _ensure_course_semester_column()
 
-    all_programs = _get_programs()
+    all_programs = _get_programs(include_archived=False)
     programs_map = {p.get('id'): p.get('program_name', '') for p in all_programs if isinstance(p, dict) and p.get('id') is not None}
 
     # Schedulers are strictly locked to their program
@@ -4586,12 +5237,12 @@ def show_courses():
             active_tab_program = 'all'
 
     try:
-        query = supabase.table('course').select('*, program:program_id(id, program_name)')
+        query = supabase.table('course').select('*, program:program_id(id, program_name), spec:specialization_id(specialization_id, name)').eq('archive', show_archived)
         if eff_prog_id:
             query = query.eq('program_id', eff_prog_id)
         all_courses = query.execute().data or []
     except Exception:
-        query = supabase.table('course').select('*')
+        query = supabase.table('course').select('*').eq('archive', show_archived)
         if eff_prog_id:
             query = query.eq('program_id', eff_prog_id)
         all_courses = query.execute().data or []
@@ -4600,6 +5251,12 @@ def show_courses():
         p_rel = _rel(c, 'program') or {}
         c['program_name'] = p_rel.get('program_name') or programs_map.get(c.get('program_id'), user_program or '')
         c['program'] = c['program_name']
+        # Specialization display: FK join first, legacy text fallback, else General.
+        s_rel = _rel(c, 'spec') or {}
+        text_spec = c.get('specialization') if isinstance(c.get('specialization'), str) else None
+        c['specialization_id'] = c.get('specialization_id')
+        c['specialization'] = s_rel.get('name') or text_spec or GENERAL_SPECIALIZATION_LABEL
+        c['major'] = c['specialization']
 
     all_courses.sort(key=lambda c: (str(c.get('year_level') or ''), str(c.get('specialization') or c.get('major') or ''), str(c.get('course_code') or '')))
 
@@ -4614,9 +5271,10 @@ def show_courses():
     # Count courses for each program tab dynamically
     program_counts = {}
     try:
-        raw_courses = supabase.table('course').select('course_id, program_id').execute().data or []
-        program_counts['all'] = len(raw_courses)
-        for rc in raw_courses:
+        raw_courses = supabase.table('course').select('course_id, program_id, archive').execute().data or []
+        visible_courses = [rc for rc in raw_courses if bool(rc.get('archive')) == show_archived]
+        program_counts['all'] = len(visible_courses)
+        for rc in visible_courses:
             pid = rc.get('program_id')
             if pid is not None:
                 program_counts[str(pid)] = program_counts.get(str(pid), 0) + 1
@@ -4627,6 +5285,7 @@ def show_courses():
 
     semesters = _get_semesters(program_id=eff_prog_id or user_prog_id)
     course_message = session.pop('course_message', None)
+    spec_options = _get_specializations(program_id=eff_prog_id, include_archived=False) if eff_prog_id else _get_specializations(include_archived=False)
     return render_template(
         'courses.html',
         active_page='courses',
@@ -4641,7 +5300,10 @@ def show_courses():
         is_admin=is_super_admin,
         course_message=course_message,
         semesters=semesters,
+        specializations=spec_options,
+        specialization_stage=specialization_stage_payload(),
         specialization_choices=SPECIALIZATION_CHOICES,
+        show_archived=show_archived,
     )
 
 #-------------------------------------------------------search_courses----------------------------------------------------------------------------------------------
@@ -4683,7 +5345,7 @@ def search_courses():
             except Exception:
                 cols = 'course_id, course_code, program_id, year_level, specialization, semester, lecture_hours, lab_hours, ilp_hours'
                 query = supabase.table('course').select(cols)
-        matching_courses = query.eq('program_id', eff_prog_id).order('course_code').execute().data or []
+        matching_courses = query.eq('program_id', eff_prog_id).eq('archive', False).order('course_code').execute().data or []
         normalized_query = query_str.strip().casefold()
         exact_match = False
         matching_courses = [
@@ -4714,7 +5376,7 @@ def search_courses():
 @app.route('/api/courses')
 @roles_required('admin')
 def api_courses():
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     user_program = session.get('program', '')
     user_prog_id = _get_user_program_id()
     program_filter = request.args.get('program', '').strip()
@@ -4743,6 +5405,8 @@ def api_courses():
         if eff_prog_id:
             query = query.eq('program_id', eff_prog_id)
 
+        query = query.eq('archive', False)
+
         if year_level and year_level.lower() != 'all':
             query = query.eq('year_level', year_level)
 
@@ -4763,45 +5427,73 @@ def api_courses():
         return jsonify({'error': str(err), 'courses': []}), 500
 
 
-#-------------------------------------------------------delete_course----------------------------------------------------------------------------------------------
-@app.route('/delete_course/<int:course_id>', methods=['GET', 'POST'])
+#-------------------------------------------------------archive_course----------------------------------------------------------------------------------------------
+@app.route('/archive_course/<int:course_id>', methods=['GET', 'POST'])
 @roles_required('admin')
-def delete_course(course_id):
+def archive_course(course_id):
+    """Soft-delete a course (archive=true) after safety checks."""
     is_ajax = _is_ajax_request()
     try:
-        # Data protection: Check if course is assigned in teaching loads
-        try:
-            load_check = supabase.table('professor_load').select('id').eq('course_id', course_id).limit(1).execute()
-            if load_check.data:
-                err_msg = 'Cannot delete course: this course is currently assigned in faculty teaching loads. Please remove the teaching load assignments first.'
-                if is_ajax:
-                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
-                flash(err_msg, 'danger')
-                return redirect(url_for('show_courses'))
-        except Exception as e:
-            logging.debug(f"Error checking course professor_load references: {e}")
-
-        # Data protection: Check if course is assigned in active schedules
+        # Safety check: blocked when a teaching load for this course belongs to
+        # the current active schedule.
+        in_active_schedule = False
         try:
             sched_check = supabase.table('schedule').select('schedule_id').eq('course_id', course_id).eq('archive', False).limit(1).execute()
-            if sched_check.data:
-                err_msg = 'Cannot delete course: this course is assigned to active class schedules. Please remove schedule entries or archive the schedule first.'
-                if is_ajax:
-                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
-                flash(err_msg, 'danger')
-                return redirect(url_for('show_courses'))
-        except Exception as e:
-            logging.debug(f"Error checking course schedule references: {e}")
+            in_active_schedule = bool(sched_check.data)
+        except Exception:
+            in_active_schedule = False
 
-        supabase.table('course').delete().eq('course_id', course_id).execute()
+        if not in_active_schedule:
+            try:
+                load_ids = [
+                    r.get('professor_load_id') or r.get('id')
+                    for r in (supabase.table('professor_load').select('professor_load_id:id').eq('course_id', course_id).execute().data or [])
+                ]
+                load_ids = [lid for lid in load_ids if lid is not None]
+                if load_ids:
+                    sched_check = supabase.table('schedule').select('schedule_id').in_('professor_load_id', load_ids).eq('archive', False).limit(1).execute()
+                    in_active_schedule = bool(sched_check.data)
+            except Exception:
+                pass
+
+        if in_active_schedule:
+            err_msg = 'Cannot archive course: it is used by a faculty teaching load in the current active schedule. Archive the schedule first.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+            flash(err_msg, 'danger')
+            return redirect(url_for('show_courses'))
+
+        supabase.table('course').update({'archive': True}).eq('course_id', course_id).execute()
         try:
             _set_delete_request_status({'item_type': 'course', 'item_id': str(course_id), 'status': 'pending'}, 'approved')
         except Exception:
             pass
-        log_activity('delete', 'course', f'Course ID {course_id}')
+        log_activity('archive', 'course', f'Course ID {course_id}')
+        msg = 'Course archived successfully. You can restore it later.'
         if is_ajax:
-            return jsonify({'success': True, 'message': 'Course deleted successfully.'}), 200
-        flash('Deleted successfully', 'success')
+            return jsonify({'success': True, 'message': msg}), 200
+        flash(msg, 'success')
+        return redirect(url_for('show_courses'))
+    except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
+        flash(f"Error: {err}", 'danger')
+        return redirect(url_for('show_courses'))
+
+
+#-------------------------------------------------------restore_course----------------------------------------------------------------------------------------------
+@app.route('/restore_course/<int:course_id>', methods=['GET', 'POST'])
+@roles_required('admin')
+def restore_course(course_id):
+    """Restore an archived course (archive=false)."""
+    is_ajax = _is_ajax_request()
+    try:
+        supabase.table('course').update({'archive': False}).eq('course_id', course_id).execute()
+        log_activity('restore', 'course', f'Course ID {course_id}')
+        msg = 'Course restored successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg}), 200
+        flash(msg, 'success')
         return redirect(url_for('show_courses'))
     except Exception as err:
         if is_ajax:
@@ -4861,7 +5553,7 @@ def edit_course(course_id):
             program_id = _get_user_program_id()
 
         # Check existing course
-        curr_course = _first(supabase.table('course').select('course_id, course_code, course_name, program_id').eq('course_id', course_id).execute().data or [])
+        curr_course = _first(supabase.table('course').select('course_id, course_code, course_name, program_id, semester, specialization_id').eq('course_id', course_id).execute().data or [])
         old_prog_id = curr_course.get('program_id') if curr_course else None
 
         # Data protection: if program changed, verify no assigned professor loads or schedules exist
@@ -4889,21 +5581,25 @@ def edit_course(course_id):
                 logging.debug(f"Error checking schedule references on course edit: {e}")
 
         # Uniqueness check: no other course in target program has the same course code
-        if program_id and course_code and _course_code_exists_in_program(course_code, program_id, course_id):
-            msg = 'Course already exists in this program.'
+        dup_msg = _course_duplicate_message(course_code, program_id, course_id) if (program_id and course_code) else None
+        if dup_msg:
+            msg = dup_msg
             if is_ajax:
                 return jsonify({'success': False, 'message': msg, 'error': msg}), 400
             flash(msg, 'danger')
             return redirect(url_for('show_courses'))
 
         raw_semester = (data.get('semester') or '').strip()
-        specialization = (data.get('specialization') or data.get('major') or '').strip() or None
-        if specialization and specialization not in SPECIALIZATION_CHOICES:
-            msg = f"Invalid specialization/track '{specialization}'. Allowed values are: {', '.join(SPECIALIZATION_CHOICES)}."
+        effective_semester = raw_semester or ((curr_course or {}).get('semester') or '')
+        raw_spec_id = data.get('specialization_id') if data.get('specialization_id') not in (None, '') else (data.get('specialization') or data.get('major'))
+        spec_id, spec_err = _resolve_course_specialization_id(raw_spec_id, program_id, year_level, effective_semester)
+        if spec_err:
+            msg = spec_err
             if is_ajax:
                 return jsonify({'success': False, 'message': msg, 'error': msg}), 400
             flash(msg, 'danger')
             return redirect(url_for('show_courses'))
+        spec_name = _specialization_name_by_id(spec_id) if spec_id else None
 
         update_data = {
             'course_code': course_code,
@@ -4913,7 +5609,8 @@ def edit_course(course_id):
             'lab_hours': int(lab_hours) if str(lab_hours).strip().isdigit() else 0,
             'ilp_hours': int(ilp_val),
             'year_level': year_level,
-            'specialization': specialization,
+            'specialization_id': spec_id,
+            'specialization': spec_name,
         }
         if program_id:
             update_data['program_id'] = program_id
@@ -4926,6 +5623,8 @@ def edit_course(course_id):
             err_str = str(upd_err)
             if 'course_name' in err_str:
                 update_data.pop('course_name', None)
+            if 'specialization_id' in err_str:
+                update_data.pop('specialization_id', None)
             if 'specialization' in err_str:
                 update_data.pop('specialization', None)
             if 'semester' in err_str:
@@ -4954,9 +5653,10 @@ def edit_course(course_id):
 def rooms():
     user_role = (session.get('role') or '').lower()
     is_super_admin = user_role in ('super_admin', 'admin')
+    show_archived = (request.args.get('archived', '') or '').strip().lower() in ('true', '1', 'yes', 'on')
 
     try:
-        all_rooms = (supabase.table('room').select('*').execute().data) or []
+        all_rooms = (supabase.table('room').select('*').eq('archive', show_archived).execute().data) or []
     except Exception:
         all_rooms = []
 
@@ -4965,7 +5665,8 @@ def rooms():
         'room.html',
         active_page='rooms',
         rooms=all_rooms,
-        is_super_admin=is_super_admin
+        is_super_admin=is_super_admin,
+        show_archived=show_archived
     )
 
 #-------------------------------------------------------search_rooms----------------------------------------------------------------------------------------------
@@ -4975,26 +5676,29 @@ def search_rooms():
     query_str = request.args.get('q', '').strip()
 
     if not query_str:
-        return jsonify({'rooms': [], 'exact_match': False})
+        return jsonify({'rooms': [], 'exact_match': False, 'archived_match': False})
 
     try:
-        cols = 'room_id, room_name, room_type'
-        query = supabase.table('room').select(cols)
-        exact_query = supabase.table('room').select('room_id')
+        normalized = query_str.strip().casefold()
+        cols = 'room_id, room_name, room_type, archive'
+        rows = supabase.table('room').select(cols).ilike('room_name', f'%{query_str}%').order('room_name').execute().data or []
 
-        matching_rooms = query.ilike('room_name', f'%{query_str}%').order('room_name').limit(10).execute().data or []
-        exact = exact_query.ilike('room_name', query_str).limit(1).execute()
-        exact_match_row = _first(exact.data or [])
+        active_rooms = [r for r in rows if not r.get('archive')]
+        exact_match = any(str(r.get('room_name') or '').strip().casefold() == normalized for r in active_rooms)
+        archived_match = any(str(r.get('room_name') or '').strip().casefold() == normalized for r in rows if r.get('archive'))
 
-        for r in matching_rooms:
+        active_rooms = active_rooms[:10]
+        for r in active_rooms:
             r.pop('department', None)
+            r.pop('archive', None)
 
         return jsonify({
-            'rooms': matching_rooms,
-            'exact_match': exact_match_row is not None
+            'rooms': active_rooms,
+            'exact_match': exact_match,
+            'archived_match': archived_match
         })
     except Exception as err:
-        return jsonify({'error': str(err), 'rooms': [], 'exact_match': False}), 500
+        return jsonify({'error': str(err), 'rooms': [], 'exact_match': False, 'archived_match': False}), 500
 
 @app.route('/add_room', methods=['POST'])
 @roles_required('admin')
@@ -5018,6 +5722,22 @@ def add_room():
                 return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
             flash(err_msg, 'warning')
             return redirect(url_for('rooms'))
+
+        # Uniqueness check (active vs archived)
+        try:
+            existing_rooms = supabase.table('room').select('room_id, room_name, archive').execute().data or []
+        except Exception:
+            existing_rooms = []
+        for r in existing_rooms:
+            if str(r.get('room_name') or '').strip().casefold() == room_name.casefold():
+                if r.get('archive'):
+                    err_msg = f"A room named '{room_name}' is archived. Restore it instead of creating a new one."
+                else:
+                    err_msg = f"Room '{room_name}' already exists."
+                if is_ajax:
+                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+                flash(err_msg, 'warning')
+                return redirect(url_for('rooms'))
 
         payload = {
             'room_name': room_name,
@@ -5062,6 +5782,24 @@ def edit_room(room_id):
             flash(err_msg, 'warning')
             return redirect(url_for('rooms'))
 
+        # Uniqueness check against other rooms (active vs archived)
+        try:
+            existing_rooms = supabase.table('room').select('room_id, room_name, archive').execute().data or []
+        except Exception:
+            existing_rooms = []
+        for r in existing_rooms:
+            if str(r.get('room_id')) == str(room_id):
+                continue
+            if str(r.get('room_name') or '').strip().casefold() == room_name.casefold():
+                if r.get('archive'):
+                    err_msg = f"A room named '{room_name}' is archived. Restore it instead of renaming to that name."
+                else:
+                    err_msg = f"Room '{room_name}' already exists."
+                if is_ajax:
+                    return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
+                flash(err_msg, 'warning')
+                return redirect(url_for('rooms'))
+
         update_payload = {
             'room_name': room_name,
             'room_type': room_type,
@@ -5080,10 +5818,11 @@ def edit_room(room_id):
         flash(f"Error: {err}", 'danger')
         return redirect(url_for('rooms'))
 
-#-------------------------------------------------------delete_room----------------------------------------------------------------------------------------------
-@app.route('/delete_room/<int:room_id>', methods=['GET', 'POST'])
+#-------------------------------------------------------archive_room----------------------------------------------------------------------------------------------
+@app.route('/archive_room/<int:room_id>', methods=['GET', 'POST'])
 @roles_required('admin')
-def delete_room(room_id):
+def archive_room(room_id):
+    """Soft-delete a room (archive=true) after safety checks."""
     is_ajax = (
         request.is_json
         or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -5096,28 +5835,49 @@ def delete_room(room_id):
             sched_check = supabase.table('schedule').select('schedule_id').eq('room_id', room_id).eq('archive', False).limit(1).execute()
             in_active_schedule = bool(sched_check.data)
         except Exception:
-            try:
-                sched_check = supabase.table('schedule').select('schedule_id').eq('room_id', room_id).limit(1).execute()
-                in_active_schedule = bool(sched_check.data)
-            except Exception:
-                in_active_schedule = False
+            in_active_schedule = False
 
         if in_active_schedule:
-            err_msg = 'Cannot delete room: this room is currently assigned to one or more active schedules. Please remove the room assignment or archive the schedule first.'
+            err_msg = 'Cannot archive room: this room is used by a session in the active schedule. Remove the room assignment or archive the schedule first.'
             if is_ajax:
                 return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
             flash(err_msg, 'danger')
             return redirect(url_for('rooms'))
 
-        supabase.table('room').delete().eq('room_id', room_id).execute()
+        supabase.table('room').update({'archive': True}).eq('room_id', room_id).execute()
         try:
             _set_delete_request_status({'item_type': 'room', 'item_id': str(room_id), 'status': 'pending'}, 'approved')
         except Exception:
             pass
-        log_activity('delete', 'room', f'Room ID {room_id}')
+        log_activity('archive', 'room', f'Room ID {room_id}')
+        msg = 'Room archived successfully. You can restore it later.'
         if is_ajax:
-            return jsonify({'success': True, 'message': 'Deleted successfully'}), 200
-        flash('Deleted successfully', 'success')
+            return jsonify({'success': True, 'message': msg}), 200
+        flash(msg, 'success')
+        return redirect(url_for('rooms'))
+    except Exception as err:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(err), 'error': str(err)}), 400
+        flash(f"Error: {err}", 'danger')
+        return redirect(url_for('rooms'))
+
+#-------------------------------------------------------restore_room----------------------------------------------------------------------------------------------
+@app.route('/restore_room/<int:room_id>', methods=['GET', 'POST'])
+@roles_required('admin')
+def restore_room(room_id):
+    """Restore an archived room (archive=false)."""
+    is_ajax = (
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or 'application/json' in (request.headers.get('Accept') or '').lower()
+    )
+    try:
+        supabase.table('room').update({'archive': False}).eq('room_id', room_id).execute()
+        log_activity('restore', 'room', f'Room ID {room_id}')
+        msg = 'Room restored successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg}), 200
+        flash(msg, 'success')
         return redirect(url_for('rooms'))
     except Exception as err:
         if is_ajax:
@@ -5127,7 +5887,7 @@ def delete_room(room_id):
 
 #-------------------------------------------------------show_professor_load----------------------------------------------------------------------------------------------
 @app.route('/professor_load')
-@roles_required('scheduler')
+@roles_required('chair')
 def professor_load():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -5145,13 +5905,13 @@ def professor_load():
     # 1. Fetch courses catalog first
     cols_c = 'course_id, course_code, program_id, program:program_id(program_name), year_level, lecture_hours, lab_hours, ilp_hours, semester'
     try:
-        course_query = supabase.table('course').select(cols_c)
+        course_query = supabase.table('course').select(cols_c).eq('archive', False)
         if not is_super_admin and user_prog_id:
             course_query = course_query.eq('program_id', user_prog_id)
         courses = course_query.execute().data or []
     except Exception:
         try:
-            course_query = supabase.table('course').select('*')
+            course_query = supabase.table('course').select('*').eq('archive', False)
             if not is_super_admin and user_prog_id:
                 course_query = course_query.eq('program_id', user_prog_id)
             courses = course_query.execute().data or []
@@ -5340,11 +6100,11 @@ def _fetch_professor_load_import_context():
     # 1. Fetch courses
     cols_c = 'course_id, course_code, program_id, year_level, lecture_hours, lab_hours, ilp_hours, semester'
     try:
-        cq = supabase.table('course').select(cols_c)
+        cq = supabase.table('course').select(cols_c).eq('archive', False)
         all_courses = cq.execute().data or []
     except Exception:
         try:
-            cq = supabase.table('course').select('*')
+            cq = supabase.table('course').select('*').eq('archive', False)
             all_courses = cq.execute().data or []
         except Exception:
             all_courses = []
@@ -5455,12 +6215,12 @@ def _check_import_access():
     if 'user_id' not in session:
         return False, "Authentication required. Please log in."
     role = session.get('role', '')
-    if _normalize_role(role) != 'scheduler':
+    if _normalize_role(role) != 'chair':
         return False, "Access denied. Insufficient permissions to import professor load."
     return True, None
 
 @app.route('/professor_load/import/template', methods=['GET'])
-@roles_required('scheduler')
+@roles_required('chair')
 def professor_load_import_template():
     allowed, msg = _check_import_access()
     if not allowed:
@@ -5475,7 +6235,7 @@ def professor_load_import_template():
     )
 
 @app.route('/professor_load/import/preview', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def professor_load_import_preview():
     try:
         allowed, msg = _check_import_access()
@@ -5499,6 +6259,16 @@ def professor_load_import_preview():
             return jsonify({'ok': False, 'success': False, 'error': 'The uploaded file is empty.'}), 400
         if len(file_bytes) > professor_load_importer.MAX_IMPORT_FILE_SIZE:
             return jsonify({'ok': False, 'success': False, 'error': 'File size exceeds maximum allowed limit of 5 MB.'}), 413
+
+        # Strict template validation (before any row is processed -> no partial import)
+        template_check = professor_load_importer.validate_import_template(file_bytes, filename)
+        if not template_check.get('ok'):
+            return jsonify({
+                'ok': False,
+                'success': False,
+                'error': template_check.get('error') or 'Invalid file. Please use the official import template.',
+                'missing_columns': template_check.get('missing') or [],
+            }), 400
 
         _cleanup_import_cache()
 
@@ -5563,7 +6333,7 @@ def professor_load_import_preview():
         return jsonify({'ok': False, 'success': False, 'error': f"Failed to preview import file: {str(e)}"}), 500
 
 @app.route('/professor_load/import/confirm', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def professor_load_import_confirm():
     try:
         allowed, msg = _check_import_access()
@@ -5647,7 +6417,7 @@ def professor_load_import_confirm():
         return jsonify({'ok': False, 'success': False, 'error': f"Database write failed: {str(e)}"}), 500
 
 @app.route('/professor_load/import/error-report', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def professor_load_import_error_report():
     try:
         allowed, msg = _check_import_access()
@@ -5908,7 +6678,7 @@ def _check_professor_cutoff_conflict(prof_id, day, start_time, end_time, session
         except Exception:
             pass
 
-        ts_res = supabase.table('working_hours').select('professor_cutoff').eq('day', day).execute()
+        ts_res = supabase.table('working_hours').select('professor_cutoff').eq('day', day).eq('archive', False).execute()
         if not ts_res.data:
             return None
 
@@ -6989,15 +7759,31 @@ def _calculate_professor_availability(entries, working_hours=None, professor=Non
 
 
 
+@app.route('/my_schedule')
+@roles_required('viewer', 'admin', 'chair')
+def my_schedule():
+    """Viewer entry point: open the logged-in user's own professor schedule."""
+    norm_role = _normalize_role(session.get('role', ''))
+    if norm_role != 'viewer':
+        # Admins/chairs use the full Professor Schedule tab.
+        return redirect(url_for('professor_schedule'))
+    key, _display_name = _find_viewer_professor_key(_get_session_user_row())
+    if not key:
+        flash('We could not find a class schedule linked to your account. '
+              'Please ask the administrator to set your name (including middle name) to match your teaching load.', 'warning')
+        return redirect(url_for('schedules'))
+    return redirect(url_for('view_professor_schedule', prof_identifier=key))
+
+
 @app.route('/professor_schedule')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def professor_schedule():
     user_prog_id = _get_user_program_id()
     norm_role = _normalize_role(session.get('role', ''))
     is_super_admin = norm_role == 'admin'
     is_viewer = norm_role == 'viewer'
     program = session.get('program', '')
-    programs = _get_programs() if (is_super_admin or is_viewer) else []
+    programs = _get_programs(include_archived=False) if (is_super_admin or is_viewer) else []
     program_filter = request.args.get('program', '').strip()
 
     if program_filter.lower() in ('all', 'all programs', 'none', ''):
@@ -7269,7 +8055,7 @@ def professor_schedule():
 
 
 @app.route('/professor_schedule/<path:prof_identifier>')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair', 'viewer')
 def view_professor_schedule(prof_identifier):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -7278,15 +8064,16 @@ def view_professor_schedule(prof_identifier):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
     program = session.get('program', '')
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     is_admin = user_role in ('admin', 'super_admin')
+    is_viewer = _enforce_professor_view_scope(prof_identifier)
     user_prog_id = _get_user_program_id()
-    if not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
+    if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
         abort(403)
 
     professor, prof_pc_ids, pc_course_codes = _resolve_professor_info(prof_identifier)
     if not professor:
-        return redirect(url_for('professor_schedule'))
+        return redirect(url_for('my_schedule') if is_viewer else url_for('professor_schedule'))
 
     professor_name = professor.get('professor_name') or f"{professor.get('first_name', '')} {professor.get('last_name', '')}".strip()
     max_hours = MAX_TEACHING_HOURS
@@ -7463,7 +8250,7 @@ def view_professor_schedule(prof_identifier):
 
 @app.route('/professor_schedule/<path:prof_identifier>/export')
 @app.route('/export/professor_schedule/<path:prof_identifier>')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair', 'viewer')
 def export_professor_schedule(prof_identifier):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -7473,10 +8260,11 @@ def export_professor_schedule(prof_identifier):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
     program = session.get('program', '')
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     is_admin = user_role in ('admin', 'super_admin')
     user_prog_id = _get_user_program_id()
-    if not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
+    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
         abort(403)
 
     professor, prof_pc_ids, pc_course_codes = _resolve_professor_info(prof_identifier)
@@ -7645,8 +8433,8 @@ def _preparer_display_details(user, program_name):
         role_title = 'Super Admin'
     elif raw_role in ('admin', 'administrator', 'academic_admin'):
         role_title = 'Academic Admin'
-    elif raw_role in ('scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'):
-        role_title = 'Program Scheduler'
+    elif raw_role in ('chair', 'dean', 'scheduler', 'dean/chair', 'program_chair', 'department_head'):
+        role_title = 'Chair'
     elif raw_role:
         role_title = raw_role.replace('_', ' ').title()
     else:
@@ -7657,17 +8445,18 @@ def _preparer_display_details(user, program_name):
 
 @app.route('/professor_schedule/<path:prof_identifier>/export_pdf')
 @app.route('/export/professor_schedule/<path:prof_identifier>/pdf')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair', 'viewer')
 def export_professor_schedule_pdf(prof_identifier):
     year_filter = (request.args.get('year') or '').strip()
     semester_filter = (request.args.get('semester') or '').strip()
     major_filter = (request.args.get('major') or '').strip()
     program_filter = (request.args.get('program') or '').strip()
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     is_admin = user_role in ('admin', 'super_admin')
     user_prog_id = _get_user_program_id()
-    if not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
+    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
         abort(403)
 
     if year_filter.lower() in ('all', 'all years', 'none', ''):
@@ -7870,12 +8659,13 @@ def export_professor_schedule_pdf(prof_identifier):
 
 
 @app.route('/api/professor_availability/<path:prof_identifier>', methods=['GET'])
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair', 'viewer')
 def api_professor_availability(prof_identifier):
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     is_admin = user_role in ('admin', 'super_admin')
     user_prog_id = _get_user_program_id()
-    if not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
+    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
         abort(403)
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
@@ -7966,12 +8756,13 @@ def api_professor_availability(prof_identifier):
 
 
 @app.route('/api/professor_workload/<path:prof_identifier>', methods=['GET'])
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair', 'viewer')
 def api_professor_workload(prof_identifier):
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     is_admin = user_role in ('admin', 'super_admin')
     user_prog_id = _get_user_program_id()
-    if not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
+    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
         abort(403)
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
@@ -8019,7 +8810,7 @@ def api_professor_workload(prof_identifier):
 
 
 @app.route('/room_schedule')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def room_schedule():
     user_prog_id = _get_user_program_id()
     user_role = (session.get('role') or '').lower()
@@ -8027,7 +8818,7 @@ def room_schedule():
     is_super_admin = norm_role == 'admin'
     is_viewer = norm_role == 'viewer'
     program = session.get('program', '')
-    programs = _get_programs() if (is_super_admin or is_viewer) else []
+    programs = _get_programs(include_archived=False) if (is_super_admin or is_viewer) else []
     program_filter = request.args.get('program', '').strip()
 
     if program_filter.lower() in ('all', 'all programs', 'none', ''):
@@ -8044,9 +8835,9 @@ def room_schedule():
     if not semester_filter and active_semester:
         semester_filter = active_semester.get('term') or ''
 
-    # Fetch all rooms for filter dropdown and display (rooms are institution-wide)
+    # Fetch active rooms for filter dropdown and display (archived rooms are hidden)
     try:
-        r_query = supabase.table('room').select('room_id, room_name, room_type')
+        r_query = supabase.table('room').select('room_id, room_name, room_type').eq('archive', False)
         all_room_options = r_query.execute().data or []
         all_room_options.sort(key=lambda r: str(r.get('room_name') or ''))
     except Exception:
@@ -8176,7 +8967,7 @@ def room_schedule():
 
 
 @app.route('/room_schedule/<room_id>')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def view_room_schedule(room_id):
     day_filter = request.args.get('day', '').strip()
     year_filter = request.args.get('year', '')
@@ -8368,7 +9159,7 @@ def view_room_schedule(room_id):
 
 @app.route('/room_schedule/<room_id>/export')
 @app.route('/export/room_schedule/<room_id>')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def export_room_schedule(room_id):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -8522,7 +9313,7 @@ def export_room_schedule(room_id):
 
 @app.route('/room_schedule/<room_id>/export_pdf')
 @app.route('/export/room_schedule/<room_id>/pdf')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def export_room_schedule_pdf(room_id):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -8721,7 +9512,7 @@ def export_room_schedule_pdf(room_id):
 
 
 @app.route('/api/room_availability/<room_id>', methods=['GET'])
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def api_room_availability(room_id):
     try:
         mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
@@ -8799,21 +9590,86 @@ def api_room_availability(room_id):
 
 
 @app.route('/schedules')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def schedules():
     year_filter = (request.args.get('year') or '').strip()
     semester_filter = (request.args.get('semester') or '').strip()
     major_filter = (request.args.get('major') or '').strip()
     program_filter = (request.args.get('program') or '').strip()
+    program_arg_present = 'program' in request.args
+    semester_arg_present = 'semester' in request.args
 
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     norm_role = _normalize_role(session.get('role', ''))
     is_admin = norm_role == 'admin'
     is_viewer = norm_role == 'viewer'
-    programs = _get_programs() if (is_admin or is_viewer) else []
+    can_pick_program = is_admin or is_viewer
+    all_programs = _get_programs(include_archived=False)
     fetch_error = None
+    no_active_schedule = False
+
+    # ------------------------------------------------------------------
+    # DEFAULT PROGRAM
+    #   * Scheduler / Dean / Chair -> their own program (server-scoped).
+    #   * Admin / Viewer -> their program if any, else the first available
+    #     active program. "All" is still selectable.
+    # ------------------------------------------------------------------
+    if not can_pick_program:
+        effective_program_id = user_program_id or _find_program_id_by_name(program)
+        if program_arg_present and program_filter and program_filter.lower() != 'all':
+            target_pid = _find_program_id_by_name(program_filter)
+            if target_pid and effective_program_id and int(target_pid) != int(effective_program_id):
+                abort(403)
+            elif not effective_program_id and program and program_filter.strip().upper() != program.strip().upper():
+                abort(403)
+        program_filter = _find_program_name_by_id(effective_program_id) or program
+        if effective_program_id:
+            programs = [p for p in all_programs if str(p.get('id')) == str(effective_program_id)]
+            if not programs:
+                programs = [{'id': effective_program_id, 'program_name': program_filter}]
+        else:
+            programs = []
+    else:
+        if program_arg_present:
+            if not program_filter or program_filter.lower() == 'all':
+                effective_program_id = None
+            else:
+                effective_program_id = _find_program_id_by_name(program_filter)
+        else:
+            effective_program_id = user_program_id or _find_program_id_by_name(program)
+            if not effective_program_id and all_programs:
+                effective_program_id = all_programs[0].get('id')
+        program_filter = _find_program_name_by_id(effective_program_id) if effective_program_id else ''
+        programs = all_programs
+
+    # ------------------------------------------------------------------
+    # DEFAULT SEMESTER: the semester of the currently active (archive=false)
+    # schedule for the selected program. Only one active schedule exists at
+    # a time, so it is the most recently generated one. If none exists, fall
+    # back to the first semester and flag the empty state.
+    # ------------------------------------------------------------------
+    active_semester = ''
+    try:
+        aq = supabase.table('schedule_with_semester').select('semester').eq('archive', False)
+        if effective_program_id:
+            aq = aq.eq('program_id', effective_program_id)
+        a_rows = aq.limit(1).execute().data or []
+        active_semester = (a_rows[0].get('semester') or '') if a_rows else ''
+    except Exception:
+        try:
+            a_info = get_active_schedule_details(effective_program_id)
+            active_semester = ((a_info.get('sample_row') or {}).get('semester') or '') if a_info else ''
+        except Exception:
+            active_semester = ''
+
+    if not semester_arg_present:
+        if active_semester:
+            semester_filter = active_semester
+        else:
+            semester_filter = '1st Semester'
+            no_active_schedule = True
 
     try:
         # Use outer join on professor_load so unplaced TBA rows (professor_load_id IS NULL) are included
@@ -8824,24 +9680,13 @@ def schedules():
         )
         query = supabase.table('schedule').select(sched_cols).eq('archive', False)
 
-        if not (is_admin or is_viewer):
-            if program_filter and program_filter.lower() != 'all':
-                if user_program_id:
-                    target_pid = _find_program_id_by_name(program_filter)
-                    if target_pid and target_pid != user_program_id:
-                        abort(403)
-                elif program and program_filter.strip().upper() != program.strip().upper():
-                    abort(403)
-            if user_program_id:
-                query = query.eq('professor_load.course.program_id', user_program_id)
-        else:
-            # Admin and Viewer can view All Programs by default, or filter by a specific program
-            if program_filter and program_filter.lower() != 'all':
-                target_pid = _find_program_id_by_name(program_filter)
-                if target_pid:
-                    query = query.eq('professor_load.course.program_id', target_pid)
-            else:
-                program_filter = ''
+        # Backend program filter (via the linked course; no new schedule columns)
+        if effective_program_id:
+            query = query.eq('professor_load.course.program_id', effective_program_id)
+
+        # Backend semester filter (skip when viewing All Semesters)
+        if semester_filter and semester_filter.lower() != 'all':
+            query = query.eq('professor_load.course.semester', semester_filter)
 
         # Paginate to fully fetch active schedules even with 5000+ rows (no 1000-row truncation)
         sched_rows = []
@@ -8865,16 +9710,8 @@ def schedules():
                 r['semester'] = c.get('semester') or ''
 
         year_options = sorted({_year_of_section(r.get('section')) for r in sched_rows if _year_of_section(r.get('section'))})
-        semester_options = sorted({r.get('semester') for r in sched_rows if r.get('semester')})
+        semester_options = list(SEMESTER_CHOICES)
         major_options = sorted({r.get('specialization') for r in sched_rows if r.get('specialization')})
-
-        # Default to active semester from session or the latest confirmed semester if not specified
-        if not semester_filter and semester_options:
-            active_sem = session.get('active_semester', '')
-            if active_sem in semester_options:
-                semester_filter = active_sem
-            else:
-                semester_filter = semester_options[-1]
 
         def _matches(r):
             if year_filter and _year_of_section(r.get('section')) != year_filter:
@@ -8991,20 +9828,21 @@ def schedules():
         is_admin=is_admin,
         is_viewer=is_viewer,
         fetch_error=fetch_error,
+        no_active_schedule=no_active_schedule,
         no_professor_match=False,
         theme_options=list(EXCEL_THEMES.keys())
     )
 
 
 @app.route('/schedule/<section_name>')
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def view_schedule(section_name):
     semester_filter = request.args.get('semester', '')
     major_filter = request.args.get('major', '')
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     preview_pool = _get_preview_for_user()
     has_preview = bool(preview_pool)
@@ -9200,7 +10038,7 @@ def view_schedule(section_name):
 
 @app.route('/schedule/<section_name>/export')
 @app.route('/export/section_schedule/<section_name>')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def export_section_schedule(section_name):
     semester_filter = request.args.get('semester', '')
     major_filter = request.args.get('major', '')
@@ -9208,7 +10046,7 @@ def export_section_schedule(section_name):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     if theme_arg:
         selected_theme = set_section_theme(section_name, theme_arg)
@@ -9345,7 +10183,7 @@ def export_section_schedule(section_name):
 
 @app.route('/schedule/<section_name>/export_pdf')
 @app.route('/export/section_schedule/<section_name>/pdf')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def export_section_schedule_pdf(section_name):
     year_filter = (request.args.get('year') or '').strip()
     semester_filter = (request.args.get('semester') or '').strip()
@@ -9365,7 +10203,7 @@ def export_section_schedule_pdf(section_name):
 
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     preview_pool = _get_preview_for_user()
     has_preview = bool(preview_pool)
@@ -9526,7 +10364,7 @@ def export_section_schedule_pdf(section_name):
 
 
 @app.route('/api/section_theme', methods=['GET', 'POST'])
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def api_section_theme():
     """Get or update section export theme assignment."""
     if request.method == 'POST':
@@ -9556,7 +10394,7 @@ def api_section_theme():
 
 
 @app.route('/api/section_availability/<section_name>', methods=['GET'])
-@roles_required('admin', 'scheduler', 'viewer')
+@roles_required('admin', 'chair', 'viewer')
 def api_section_availability(section_name):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     preview_pool = _get_preview_for_user()
@@ -9653,7 +10491,7 @@ def delete_section_schedule(section_name):
     major = request.args.get('major', '')
     semester = request.args.get('semester', '')
     program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     handled, resp = _request_delete_if_scheduler('section_schedule', section_name, f'Section Schedule {section_name}')
     if handled:
@@ -9694,7 +10532,7 @@ def delete_all_schedules():
     payload = request.get_json(silent=True) or {}
     password = (payload.get('password') or '').strip()
     program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     if not password:
         return jsonify({'success': False, 'message': 'Please enter your password.'}), 400
@@ -9730,7 +10568,7 @@ def delete_all_schedules():
 
 
 @app.route('/edit_schedule/<section_name>', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def edit_schedule(section_name):
     payload = request.get_json(silent=True) or {}
     year_level = (payload.get('year_level') or '').strip()
@@ -9738,7 +10576,7 @@ def edit_schedule(section_name):
     major = (payload.get('major') or '').strip()
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     custom_section = (payload.get('section') or '').strip()
     if not year_level and not custom_section:
@@ -9785,7 +10623,7 @@ def edit_schedule(section_name):
 
 
 @app.route('/edit_schedule_entry/<int:schedule_id>', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def edit_schedule_entry(schedule_id):
     payload = request.get_json(silent=True) or {}
     course_code = (payload.get('course_code') or '').strip()
@@ -9799,7 +10637,7 @@ def edit_schedule_entry(schedule_id):
     end = payload.get('end')
     room_id = payload.get('room_id')
     program = session.get('program', '')
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     if not course_code and not professor_name and not room_name and not timeslot and not session_type and not professor_load_id and not day and not start and not end and not room_id:
         return jsonify({'success': False, 'message': 'Please complete at least one field.'}), 400
@@ -9980,10 +10818,13 @@ def add_working_hours():
         return redirect(url_for('working_hours'))
 
     try:
-        existing = supabase.table('working_hours').select('working_hours_id, day').execute().data or []
+        existing = supabase.table('working_hours').select('working_hours_id, day, archive').execute().data or []
         for ts in existing:
             if (ts.get('day') or '').strip().lower() == day.lower():
-                msg = f'Working hours for {day} already exist.'
+                if ts.get('archive'):
+                    msg = f"Working hours for {day} are archived. Restore them instead of adding a new one."
+                else:
+                    msg = f'Working hours for {day} already exist.'
                 if is_ajax:
                     return jsonify({'success': False, 'message': msg}), 400
                 flash(msg, 'danger')
@@ -10015,10 +10856,11 @@ def add_working_hours():
         flash(msg, 'danger')
         return redirect(url_for('working_hours'))
 
-#-------------------------------------------------------delete_working_hours----------------------------------------------------------------------------------------------
-@app.route('/delete_working_hours/<int:working_hours_id>', methods=['GET', 'POST'])
+#-------------------------------------------------------archive_working_hours----------------------------------------------------------------------------------------------
+@app.route('/archive_working_hours/<int:working_hours_id>', methods=['GET', 'POST'])
 @roles_required('admin')
-def delete_working_hours(working_hours_id):
+def archive_working_hours(working_hours_id):
+    """Soft-delete a working-hours day (archive=true) after safety checks."""
     is_ajax = _is_ajax_request()
     try:
         ts_res = supabase.table('working_hours').select('*').eq('working_hours_id', working_hours_id).execute()
@@ -10033,26 +10875,48 @@ def delete_working_hours(working_hours_id):
         ts_row = ts_rows[0]
         day_name = ts_row.get('day') or ts_row.get('start_day')
 
-        # Keep existing data protections: check if active schedule uses this day
+        # Safety check: block if the active schedule has sessions on this day
         if day_name:
             in_sched = supabase.table('schedule').select('schedule_id').eq('day', day_name).eq('archive', False).limit(1).execute()
             if in_sched.data:
-                msg = f"Cannot delete {day_name} because active classes are scheduled on this day."
+                msg = f"Cannot archive {day_name} because the active schedule has sessions on this day."
                 if is_ajax:
                     return jsonify({'success': False, 'message': msg}), 400
                 flash(msg, 'danger')
                 return redirect(url_for('working_hours'))
 
-        supabase.table('working_hours').delete().eq('working_hours_id', working_hours_id).execute()
+        supabase.table('working_hours').update({'archive': True}).eq('working_hours_id', working_hours_id).execute()
         _set_delete_request_status({'item_type': 'working_hours', 'item_id': str(working_hours_id), 'status': 'pending'}, 'approved')
-        log_activity('delete', 'working_hours', f'Working hours ID {working_hours_id} ({day_name})')
-        msg = f'Operating day {day_name or working_hours_id} deleted successfully.'
+        log_activity('archive', 'working_hours', f'Working hours ID {working_hours_id} ({day_name})')
+        msg = f'Operating day {day_name or working_hours_id} archived successfully. You can restore it later.'
         if is_ajax:
             return jsonify({'success': True, 'message': msg})
         flash(msg, 'success')
         return redirect(url_for('working_hours'))
     except Exception as err:
-        msg = f'Error deleting working hours: {err}'
+        msg = f'Error archiving working hours: {err}'
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 500
+        flash(msg, 'danger')
+        return redirect(url_for('working_hours'))
+
+
+#-------------------------------------------------------restore_working_hours----------------------------------------------------------------------------------------------
+@app.route('/restore_working_hours/<int:working_hours_id>', methods=['GET', 'POST'])
+@roles_required('admin')
+def restore_working_hours(working_hours_id):
+    """Restore an archived working-hours day (archive=false)."""
+    is_ajax = _is_ajax_request()
+    try:
+        supabase.table('working_hours').update({'archive': False}).eq('working_hours_id', working_hours_id).execute()
+        log_activity('restore', 'working_hours', f'Working hours ID {working_hours_id}')
+        msg = 'Working hours restored successfully.'
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg})
+        flash(msg, 'success')
+        return redirect(url_for('working_hours'))
+    except Exception as err:
+        msg = f'Error restoring working hours: {err}'
         if is_ajax:
             return jsonify({'success': False, 'message': msg}), 500
         flash(msg, 'danger')
@@ -10078,23 +10942,14 @@ def approve_delete_request(req_id):
         item_details = req['item_details']
 
         if item_type == 'course':
-            pc_ids = [r['professor_load_id'] for r in (supabase.table('professor_load').select('professor_load_id').eq('course_id', item_id).execute().data or [])]
-            if pc_ids:
-                try:
-                    supabase.table('schedule').delete().in_('professor_load_id', pc_ids).execute()
-                except Exception:
-                    pass
-            try:
-                supabase.table('schedule').delete().eq('course_id', item_id).execute()
-            except Exception:
-                pass
-            supabase.table('professor_load').delete().eq('course_id', item_id).execute()
-            supabase.table('course').delete().eq('course_id', item_id).execute()
+            # Course deletion removed: soft-archive instead.
+            supabase.table('course').update({'archive': True}).eq('course_id', item_id).execute()
         elif item_type == 'room':
-            supabase.table('schedule').delete().eq('room_id', item_id).execute()
-            supabase.table('room').delete().eq('room_id', item_id).execute()
+            # Room deletion removed: soft-archive instead.
+            supabase.table('room').update({'archive': True}).eq('room_id', item_id).execute()
         elif item_type == 'working_hours':
-            supabase.table('working_hours').delete().eq('working_hours_id', item_id).execute()
+            # Working-hours deletion removed: soft-archive instead.
+            supabase.table('working_hours').update({'archive': True}).eq('working_hours_id', item_id).execute()
         elif item_type == 'schedule':
             supabase.table('schedule').update({'archive': True}).eq('schedule_id', item_id).execute()
         elif item_type == 'section_schedule':
@@ -10162,7 +11017,7 @@ def reject_delete_request(req_id):
 
 
 @app.route('/notifications/mark_read', methods=['POST'])
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def mark_notifications_read():
     user_id = session.get('user_id')
     if not user_id:
@@ -10573,18 +11428,19 @@ def working_hours():
         selected_sem = _get_active_semester(user_prog_id)
 
     day_order = {'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7}
+    show_archived = (request.args.get('archived', '') or '').strip().lower() in ('true', '1', 'yes', 'on')
     all_working_hours = []
     if selected_sem:
         sem_id = selected_sem.get('id')
         try:
-            q = supabase.table('working_hours').select('*').eq('semester_id', sem_id)
+            q = supabase.table('working_hours').select('*').eq('semester_id', sem_id).eq('archive', show_archived)
             all_working_hours = q.execute().data or []
         except Exception:
             all_working_hours = []
 
     if not all_working_hours:
         try:
-            all_working_hours = (supabase.table('working_hours').select('*').execute().data) or []
+            all_working_hours = (supabase.table('working_hours').select('*').eq('archive', show_archived).execute().data) or []
         except Exception:
             all_working_hours = []
 
@@ -10597,7 +11453,8 @@ def working_hours():
         semesters=semesters_list,
         working_hours=all_working_hours,
         is_dean_or_admin=is_dean_or_admin,
-        can_edit_working_hours=can_edit_working_hours
+        can_edit_working_hours=can_edit_working_hours,
+        show_archived=show_archived
     )
 
 @app.route('/edit_working_hours/<int:working_hours_id>', methods=['POST'])
@@ -10664,13 +11521,13 @@ def initialize_working_hours():
     return redirect(url_for('working_hours', semester_id=sem_id))
 
 @app.route('/check_schedule_exists')
-@roles_required('scheduler')
+@roles_required('chair')
 def check_schedule_exists():
     year_level = (request.args.get('year_level') or '').strip()
     semester = (request.args.get('semester') or '').strip()
     major = (request.args.get('major') or '').strip()
     program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
 
     if not semester:
         return jsonify({'exists': False})
@@ -10733,7 +11590,7 @@ _active_generations = set()
 _active_generations_lock = threading.Lock()
 
 @app.route('/generate_schedule', methods=['GET', 'POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def generate_schedule():
     generation_warnings = []
     semesters = ['1st Semester', '2nd Semester']
@@ -10753,7 +11610,7 @@ def generate_schedule():
         )
 
     program = session.get('program', '')
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     is_admin = user_role in ('super_admin', 'admin')
     is_viewer = False
     department = _get_department()
@@ -10824,7 +11681,7 @@ def generate_schedule():
             return redirect(url_for('generate_schedule'))
 
         # Fetch curriculum for all four year levels for this semester
-        query = supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester)
+        query = supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester).eq('archive', False)
         if user_prog_id:
             query = query.eq('program_id', user_prog_id)
         elif program:
@@ -10834,7 +11691,7 @@ def generate_schedule():
 
         all_courses = query.order('year_level').order('course_code').execute().data or []
         if not all_courses:
-            all_c = (supabase.table('course').select('*, program:program_id(id, program_name)').execute().data) or []
+            all_c = (supabase.table('course').select('*, program:program_id(id, program_name)').eq('archive', False).execute().data) or []
             if user_prog_id:
                 all_courses = [c for c in all_c if str(c.get('semester') or '').strip().lower() == standard_semester.lower() and c.get('program_id') == user_prog_id]
             else:
@@ -11010,8 +11867,8 @@ def generate_schedule():
                 }
         all_professors_pool = list(unique_profs.values())
 
-        # Fetch rooms (shared common pool across all programs)
-        rooms_res = supabase.table('room').select('*').execute()
+        # Fetch rooms (shared common pool across all programs), ignoring archived rooms
+        rooms_res = supabase.table('room').select('*').eq('archive', False).execute()
         all_rooms = rooms_res.data or []
 
         if not all_rooms:
@@ -11026,9 +11883,9 @@ def generate_schedule():
             generation_warnings.append("No laboratory rooms available: laboratory sessions cannot be scheduled.")
         logging.info(f"[ROOM POOL] Total: {len(all_rooms)} | Lecture Rooms: {len(lecture_rooms)} | Laboratory Rooms: {len(lab_rooms)}")
 
-        # Timeslots & candidate slots
+        # Timeslots & candidate slots (archived working-hours days are ignored)
         try:
-            working_hours = (supabase.table('working_hours').select('*').execute().data) or []
+            working_hours = (supabase.table('working_hours').select('*').eq('archive', False).execute().data) or []
         except Exception as ts_err:
             logging.warning(f"Could not load working_hours from DB: {ts_err}")
             working_hours = []
@@ -11804,7 +12661,7 @@ def generate_schedule():
 
 
 @app.route('/preview_schedule')
-@roles_required('scheduler')
+@roles_required('chair')
 def preview_schedule():
     preview = _get_preview_for_user()
     preview_context = _build_preview_context(preview)
@@ -11817,7 +12674,7 @@ def preview_schedule():
 
 
 @app.route('/edit_preview_entry', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def edit_preview_entry():
     data = request.form or request.get_json(silent=True) or {}
     entry_id = int(data.get('id') or 0)
@@ -12028,7 +12885,7 @@ def edit_preview_entry():
 
 
 @app.route('/api/preview_entries', methods=['GET'])
-@roles_required('scheduler')
+@roles_required('chair')
 def api_preview_entries():
     preview = _get_preview_for_user()
     return jsonify({'success': True, 'entries': preview or []})
@@ -12039,9 +12896,9 @@ _active_confirmations_lock = threading.Lock()
 
 
 @app.route('/confirm_preview', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def confirm_preview():
-    user_key = session.get('user_id') or session.get('username') or 'scheduler'
+    user_key = session.get('user_id') or session.get('username') or 'chair'
     with _active_confirmations_lock:
         if user_key in _active_confirmations:
             logging.warning(f"[confirm_preview] Duplicate confirmation attempt blocked for user {user_key}")
@@ -12190,7 +13047,7 @@ def confirm_preview():
             flash('Failed to confirm schedule: No valid class entries found in preview.', 'error')
             return redirect(url_for('generate_schedule'))
 
-        archived_by = session.get('username') or session.get('first_name') or 'Scheduler'
+        archived_by = session.get('username') or session.get('first_name') or 'Chair'
         if session.get('last_name'):
             archived_by = f"{session.get('first_name', '')} {session.get('last_name', '')}".strip()
 
@@ -12436,7 +13293,7 @@ def confirm_preview():
 
 
 @app.route('/discard_preview', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def discard_preview():
     _clear_preview_for_user()
     return redirect(url_for('home'))
@@ -12471,12 +13328,12 @@ def _get_pht_date_str(raw_ts):
 
 
 @app.route('/archive_schedule', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def archive_schedule():
     """Archive currently active schedule for the program so a new one can be generated."""
     user_prog_id = _get_user_program_id()
     user_program = session.get('program', '')
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     redirect_target = request.form.get('redirect_to') or request.args.get('redirect_to') or url_for('schedules')
 
     req_prog_id = request.form.get('program_id') or request.args.get('program_id')
@@ -12499,7 +13356,7 @@ def archive_schedule():
 
     effective_prog_name = _find_program_name_by_id(effective_prog_id) if effective_prog_id else (user_program or 'All Programs')
 
-    archived_by = session.get('username') or session.get('first_name') or 'Scheduler'
+    archived_by = session.get('username') or session.get('first_name') or 'Chair'
     if session.get('last_name'):
         archived_by = f"{session.get('first_name', '')} {session.get('last_name', '')}".strip()
 
@@ -12594,7 +13451,7 @@ def archive_schedule():
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.route('/schedule_archive')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def schedule_archive():
     semester_filter = (request.args.get('semester') or '').strip()
     program_filter = (request.args.get('program') or '').strip()
@@ -12607,7 +13464,7 @@ def schedule_archive():
     if program_filter.lower() in ('', 'all', 'all programs'):
         program_filter = ''
 
-    user_role = (session.get('role') or 'scheduler').lower()
+    user_role = (session.get('role') or 'chair').lower()
     user_program = session.get('program', '')
 
     effective_program = user_program if (user_role not in ('super_admin', 'admin') and user_program) else program_filter
@@ -12853,7 +13710,7 @@ def schedule_archive():
 
 
 @app.route('/schedule_archive/<batch_id>')
-@roles_required('admin', 'scheduler')
+@roles_required('admin', 'chair')
 def view_schedule_archive_batch(batch_id):
     try:
         rows = []
@@ -13052,15 +13909,15 @@ def view_schedule_archive_batch(batch_id):
 
 @app.route('/restore_schedule_archive/<batch_id>', methods=['POST'])
 @app.route('/restore_schedule/<batch_id>', methods=['POST'])
-@roles_required('scheduler')
+@roles_required('chair')
 def restore_schedule_archive(batch_id):
     user_role = _normalize_role(session.get('role', ''))
-    if user_role not in ('scheduler', 'chair', 'dean'):
+    if user_role not in ('chair', 'chair', 'dean'):
         if _is_ajax_or_write_request():
             return jsonify({'ok': False, 'error': 'Access denied'}), 403
         abort(403)
 
-    restored_by = session.get('username') or session.get('first_name') or 'Scheduler'
+    restored_by = session.get('username') or session.get('first_name') or 'Chair'
     if session.get('last_name'):
         restored_by = f"{session.get('first_name', '')} {session.get('last_name', '')}".strip()
 

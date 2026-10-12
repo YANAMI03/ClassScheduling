@@ -249,7 +249,12 @@
                 <td>
                     <div class="user-info">
                         <img src="{{ url_for('static', filename='profile/' + (user.profile_picture or 'default.png')) }}" alt="Profile" class="user-avatar" onerror="this.onerror=null;this.src='{{ url_for('static', filename='profile/default.png') }}';">
-                        <div class="user-name"><strong>{{ user.first_name or '—' }}</strong></div>
+                        <div class="user-name">
+                            <strong>{{ user.first_name or '—' }}</strong>
+                            {% if user.disabled %}
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1" title="This account is disabled">Disabled</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </td>
                 <td>{{ user.last_name or '—' }}</td>
@@ -263,34 +268,45 @@
                 </td>
                 <td>
                     {% set role_lower = (user.role or 'viewer') | lower %}
-                    <span class="badge-custom badge-{{ role_lower if role_lower in ['admin', 'super_admin', 'dean', 'chair', 'scheduler', 'viewer'] else 'unknown' }}">
+                    <span class="badge-custom badge-{{ role_lower if role_lower in ['admin', 'super_admin', 'dean', 'chair', 'viewer'] else 'unknown' }}">
                         {% if role_lower in ['dean', 'chair'] %}
-                            Scheduler
+                            Chair
                         {% elif role_lower == 'super_admin' %}
                             Super Admin
                         {% elif role_lower == 'admin' %}
                             Admin
                         {% elif role_lower == 'viewer' %}
                             Viewer
-                        {% elif role_lower == 'scheduler' %}
-                            Scheduler
                         {% else %}
                             {{ user.role or 'Viewer' }}
                         {% endif %}
                     </span>
                 </td>
                 <td class="text-end">
-                    <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.last_name }}', '{{ user.email }}', '{{ user.program or '' }}', '{{ user.role }}')">
+                    <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.middle_name or '' }}', '{{ user.last_name }}', '{{ user.email }}', '{{ user.program or '' }}', '{{ user.role }}')">
                         <i class="bx bx-edit"></i> Edit
                     </button>
-                    <button type="button" class="btn btn-danger btn-sm"
+                    {% if user.disabled %}
+                    <button type="button" class="btn btn-success btn-sm"
                             data-action="delete"
-                            data-url="/delete_user/{{ user.id }}"
+                            data-url="/enable_user/{{ user.id }}"
                             data-method="POST"
-                            data-confirm="Are you sure you want to delete user '{{ user.first_name }} {{ user.last_name }}'?"
-                            data-title="Delete User">
-                        <i class="bx bx-trash"></i> Delete
+                            data-confirm-text="Enable"
+                            data-confirm="Enable this account? The user will be able to log in again."
+                            data-title="Enable User">
+                        <i class="bx bx-check-circle"></i> Enable
                     </button>
+                    {% else %}
+                    <button type="button" class="btn btn-warning btn-sm"
+                            data-action="delete"
+                            data-url="/disable_user/{{ user.id }}"
+                            data-method="POST"
+                            data-confirm-text="Disable"
+                            data-confirm="Disable this account? The user will no longer be able to log in. You can enable it again later."
+                            data-title="Disable User">
+                        <i class="bx bx-block"></i> Disable
+                    </button>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -319,6 +335,10 @@
                         <input type="text" class="form-control" id="createFirstName" required>
                     </div>
                     <div class="mb-3">
+                        <label for="createMiddleName" class="form-label">Middle Name / Initial <span class="text-muted small">(optional)</span></label>
+                        <input type="text" class="form-control" id="createMiddleName" placeholder="e.g. S. or Santos">
+                    </div>
+                    <div class="mb-3">
                         <label for="createLastName" class="form-label">Last Name</label>
                         <input type="text" class="form-control" id="createLastName" required>
                     </div>
@@ -334,7 +354,7 @@
                         <label for="createRole" class="form-label">Role</label>
                         <select class="form-control" id="createRole" onchange="toggleProgramRole('createRole', 'createProgram')" required>
                             <option value="viewer" selected>Viewer</option>
-                            <option value="scheduler">Scheduler</option>
+                            <option value="chair">Chair</option>
                             <option value="admin">Academic Admin</option>
                             <option value="super_admin">Super Admin</option>
                         </select>
@@ -380,6 +400,10 @@
                         <input type="text" class="form-control" id="editFirstName" required>
                     </div>
                     <div class="mb-3">
+                        <label for="editMiddleName" class="form-label">Middle Name / Initial <span class="text-muted small">(optional)</span></label>
+                        <input type="text" class="form-control" id="editMiddleName" placeholder="e.g. S. or Santos">
+                    </div>
+                    <div class="mb-3">
                         <label for="editLastName" class="form-label">Last Name</label>
                         <input type="text" class="form-control" id="editLastName" required>
                     </div>
@@ -391,7 +415,7 @@
                         <label for="editRole" class="form-label">Role</label>
                         <select class="form-control" id="editRole" onchange="toggleProgramRole('editRole', 'editProgram')" required>
                             <option value="viewer">Viewer</option>
-                            <option value="scheduler">Scheduler</option>
+                            <option value="chair">Chair</option>
                             <option value="admin">Academic Admin</option>
                             <option value="super_admin">Super Admin</option>
                         </select>
@@ -431,7 +455,7 @@ function toggleProgramRole(roleSelectId, programSelectId) {
     const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
     const progSelect = document.getElementById(programSelectId);
     const helpText = document.getElementById(roleSelectId === 'createRole' ? 'createProgramHelp' : 'editProgramHelp');
-    const isScheduler = roleVal === 'scheduler';
+    const isScheduler = roleVal === 'chair';
     
     if (!isScheduler) {
         progSelect.value = '';
@@ -464,6 +488,7 @@ document.getElementById('searchInput').addEventListener('keypress', function(e) 
 function openCreateModal() {
     // Clear form
     document.getElementById('createFirstName').value = '';
+    document.getElementById('createMiddleName').value = '';
     document.getElementById('createLastName').value = '';
     document.getElementById('createEmail').value = '';
     document.getElementById('createPassword').value = '';
@@ -477,12 +502,13 @@ function openCreateModal() {
 
 function createUser() {
     const firstName = document.getElementById('createFirstName').value.trim();
+    const middleName = document.getElementById('createMiddleName').value.trim();
     const lastName = document.getElementById('createLastName').value.trim();
     const email = document.getElementById('createEmail').value.trim();
     const password = document.getElementById('createPassword').value;
     const role = document.getElementById('createRole').value;
     const program = document.getElementById('createProgram').value;
-    const isScheduler = (role || '').toLowerCase() === 'scheduler';
+    const isScheduler = (role || '').toLowerCase() === 'chair';
     
     if (!firstName || !lastName || !email || !password || !role) {
         alert('Please fill in all required fields.');
@@ -490,12 +516,13 @@ function createUser() {
     }
     
     if (isScheduler && !program) {
-        alert('Please select a program for Scheduler.');
+        alert('Please select a program for Chair.');
         return;
     }
     
     const formData = new FormData();
     formData.append('first_name', firstName);
+    formData.append('middle_name', middleName);
     formData.append('last_name', lastName);
     formData.append('email', email);
     formData.append('password', password);
@@ -529,9 +556,10 @@ function createUser() {
     });
 }
 
-function openEditModal(userId, firstName, lastName, email, program, role) {
+function openEditModal(userId, firstName, middleName, lastName, email, program, role) {
     document.getElementById('editUserId').value = userId;
     document.getElementById('editFirstName').value = firstName;
+    document.getElementById('editMiddleName').value = middleName || '';
     document.getElementById('editLastName').value = lastName;
     document.getElementById('editEmail').value = email;
     
@@ -558,11 +586,12 @@ function openEditModal(userId, firstName, lastName, email, program, role) {
 function saveUser() {
     const userId = document.getElementById('editUserId').value;
     const firstName = document.getElementById('editFirstName').value.trim();
+    const middleName = document.getElementById('editMiddleName').value.trim();
     const lastName = document.getElementById('editLastName').value.trim();
     const email = document.getElementById('editEmail').value.trim();
     const role = document.getElementById('editRole').value;
     const program = document.getElementById('editProgram').value;
-    const isScheduler = (role || '').toLowerCase() === 'scheduler';
+    const isScheduler = (role || '').toLowerCase() === 'chair';
     
     if (!firstName || !lastName || !email || !role) {
         showToast('Please fill in all required fields.', 'warning');
@@ -570,12 +599,13 @@ function saveUser() {
     }
     
     if (isScheduler && !program) {
-        showToast('Please select a program for Scheduler.', 'warning');
+        showToast('Please select a program for Chair.', 'warning');
         return;
     }
     
     const formData = new FormData();
     formData.append('first_name', firstName);
+    formData.append('middle_name', middleName);
     formData.append('last_name', lastName);
     formData.append('email', email);
     formData.append('program', isScheduler ? program : '');
@@ -608,12 +638,6 @@ function saveUser() {
     });
 }
 
-function confirmDelete(userId, displayName) {
-    var btn = document.querySelector('[data-url="/delete_user/' + userId + '"]');
-    if (btn) {
-        btn.click();
-    }
-}
-function deleteUser() {}
+function confirmDelete(userId, displayName) {}
 </script>
 {% endblock %}

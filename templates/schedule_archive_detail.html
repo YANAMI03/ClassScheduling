@@ -11,7 +11,7 @@
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
 {% set is_admin = user_role_lower in ['super_admin', 'admin'] %}
-{% set is_scheduler = user_role_lower in ['scheduler', 'chair', 'dean'] %}
+{% set is_scheduler = user_role_lower in ['chair', 'dean'] %}
 {% set user_prog = session.get('program', '') %}
 {% set can_restore = is_admin or (is_scheduler and (not batch_info.program or batch_info.program == user_prog or user_prog == '')) %}
 <div class="page-header d-flex justify-content-between align-items-center mb-4">
@@ -24,7 +24,7 @@
         </div>
         <h1 class="page-title mb-1">{{ batch_info.semester }} ({{ batch_info.program or 'All Programs' }})</h1>
         <p class="page-subtitle mb-0">
-            Archived on <strong>{{ batch_info.archived_at_fmt }}</strong> by <strong>{{ batch_info.archived_by or 'Scheduler' }}</strong>{% if batch_info.archived_by_title and batch_info.archived_by_title != 'Role/title unavailable' %} <span class="text-muted">({{ batch_info.archived_by_title }})</span>{% endif %}
+            Archived on <strong>{{ batch_info.archived_at_fmt }}</strong> by <strong>{{ batch_info.archived_by or 'Chair' }}</strong>{% if batch_info.archived_by_title and batch_info.archived_by_title != 'Role/title unavailable' %} <span class="text-muted">({{ batch_info.archived_by_title }})</span>{% endif %}
             {% if batch_info.archive_reason %} &bull; <em>{{ batch_info.archive_reason }}</em>{% endif %}
         </p>
     </div>

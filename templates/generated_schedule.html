@@ -10,7 +10,7 @@
 
 {% block content %}
 {% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_edit_schedule = user_role_lower in ['scheduler'] %}
+{% set can_edit_schedule = user_role_lower in ['chair'] %}
 {% set is_admin = user_role_lower in ['super_admin', 'super admin', 'admin'] %}
 <div class="page-header">
     <div>

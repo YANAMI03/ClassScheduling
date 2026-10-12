@@ -65,7 +65,7 @@
                 </span>
                 {% endif %}
             </a>
-            {% elif header_role_norm in ['scheduler', 'dean', 'chair', 'dean/chair'] %}
+            {% elif header_role_norm in ['chair', 'dean', 'chair', 'dean/chair'] %}
             <a href="#" class="btn-notif-bell text-secondary position-relative me-2 d-inline-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#schedulerNotificationsModal" id="btnSchedulerNotif" title="Notifications" style="width: 38px; height: 38px; border-radius: 50%; background: rgba(0,0,0,0.04); font-size: 1.25rem;">
                 <i class="bx bx-bell"></i>
                 {% if unread_notifications_count and unread_notifications_count > 0 %}
@@ -79,7 +79,7 @@
                 <a href="#" class="header__profile-trigger text-decoration-none" data-bs-toggle="dropdown" aria-expanded="false">
                     <img src="{{ url_for('static', filename='profile/' + (session.get('profile_picture') or 'default.png')) }}" alt="Profile" class="header__avatar-img" onerror="this.onerror=null;this.src='{{ url_for('static', filename='profile/default.png') }}';">
                     <span class="header__profile-name">{{ session.get('first_name', '') }} {{ session.get('last_name', '') }}</span>
-                    {% if session.get('program') and (session.get('role', '') or '') | lower == 'scheduler' %}
+                    {% if session.get('program') and (session.get('role', '') or '') | lower == 'chair' %}
                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-2 fw-bold px-2 py-1" style="font-size: 0.78rem;" title="Assigned Program">{{ session.get('program') }}</span>
                     {% endif %}
                     <i class="bx bx-chevron-down header__profile-chevron"></i>
@@ -115,8 +115,8 @@
         {% set raw_role = (session.get('role', '') or '') | lower %}
         {% if raw_role in ['super_admin', 'super admin', 'admin'] %}
             {% set user_role_norm = 'admin' %}
-        {% elif raw_role in ['scheduler', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'] %}
-            {% set user_role_norm = 'scheduler' %}
+        {% elif raw_role in ['chair', 'dean', 'chair', 'dean/chair', 'program_chair', 'department_head'] %}
+            {% set user_role_norm = 'chair' %}
         {% elif raw_role in ['viewer', 'instructor', 'guest'] %}
             {% set user_role_norm = 'viewer' %}
         {% else %}
@@ -130,7 +130,7 @@
         </div>
         <nav class="sidebar__nav">
             {# ── SCHEDULER ROLE ── #}
-            {% if user_role_norm == 'scheduler' %}
+            {% if user_role_norm == 'chair' %}
             <a href="{{ url_for('home') }}" class="sidebar__link {% if active_page == 'home' %}sidebar__link--active{% endif %}" title="Generate Schedule">
                 <i class="bx bx-calendar-plus sidebar__icon"></i>
                 <span class="sidebar__label">Generate Schedule</span>
@@ -224,6 +224,10 @@
 
             {# ── VIEWER ROLE / DEFAULT ── #}
             {% else %}
+            <a href="/my_schedule" class="sidebar__link {% if active_page == 'my_schedule' %}sidebar__link--active{% endif %}" title="My Schedule">
+                <i class="bx bx-calendar-check sidebar__icon"></i>
+                <span class="sidebar__label">My Schedule</span>
+            </a>
             <a href="/schedules" class="sidebar__link {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
                 <i class="bx bx-grid-alt sidebar__icon"></i>
                 <span class="sidebar__label">Section Schedule</span>
@@ -270,7 +274,7 @@
     <script src="{{ url_for('static', filename='index.js') }}"></script>
 
     {# ── Restore Database Modal (only rendered for roles that can use it) ── #}
-    {% if session.get('role', '') | lower in ['admin', 'scheduler'] %}
+    {% if session.get('role', '') | lower in ['admin', 'chair'] %}
     <div class="modal fade" id="restoreDbModal" tabindex="-1" aria-labelledby="restoreDbModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
@@ -348,7 +352,7 @@
                         </div>
                         <div>
                             <h5 class="modal-title fw-bold" id="adminDeleteRequestsModalLabel">Delete Requests</h5>
-                            <p class="text-muted small mb-0">Pending deletion requests submitted by Schedulers</p>
+                            <p class="text-muted small mb-0">Pending deletion requests submitted by Chairs</p>
                         </div>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -365,7 +369,7 @@
                                         Delete {{ req.item_type | replace('_', ' ') | title }}: <span class="text-primary">{{ req.item_details }}</span>
                                     </h6>
                                     <div class="small text-muted">
-                                        <i class="bx bx-user me-1"></i><strong>Scheduler:</strong> {{ req.first_name }} {{ req.last_name }} ({{ req.username }})
+                                        <i class="bx bx-user me-1"></i><strong>Chair:</strong> {{ req.first_name }} {{ req.last_name }} ({{ req.username }})
                                     </div>
                                     <div class="small text-muted">
                                         <i class="bx bx-time-five me-1"></i><strong>Requested:</strong> {{ req.created_at }}
@@ -391,7 +395,7 @@
                     <div class="text-center py-4">
                         <div class="mb-2 text-muted fs-1"><i class="bx bx-check-circle"></i></div>
                         <h6 class="fw-bold text-dark">No Pending Delete Requests</h6>
-                        <p class="text-muted small mb-0">All scheduler delete requests have been processed.</p>
+                        <p class="text-muted small mb-0">All chair delete requests have been processed.</p>
                     </div>
                     {% endif %}
                 </div>
@@ -403,7 +407,7 @@
     </div>
     {% endif %}
 
-    {% if session.get('role', '') | lower in ['scheduler', 'dean', 'chair', 'dean/chair'] %}
+    {% if session.get('role', '') | lower in ['chair', 'dean', 'chair', 'dean/chair'] %}
     <!-- Scheduler Notifications Modal -->
     <div class="modal fade" id="schedulerNotificationsModal" tabindex="-1" aria-labelledby="schedulerNotificationsModalTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
@@ -654,7 +658,7 @@
                                 modalBody.innerHTML = '<div class="text-center py-4">' +
                                     '<div class="mb-2 text-muted fs-1"><i class="bx bx-check-circle"></i></div>' +
                                     '<h6 class="fw-bold text-dark">No Pending Delete Requests</h6>' +
-                                    '<p class="text-muted small mb-0">All scheduler delete requests have been processed.</p>' +
+                                    '<p class="text-muted small mb-0">All chair delete requests have been processed.</p>' +
                                     '</div>';
                             }
                         }
