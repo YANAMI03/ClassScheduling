@@ -73,8 +73,8 @@ _DAYS         = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturd
 # Mode Titles & Labels
 # ---------------------------------------------------------------------------
 _MODE_TITLE = {
-    'professor': 'PROFESSOR SCHEDULE',
-    'teacher':   'PROFESSOR SCHEDULE',
+    'professor': 'FACULTY PROGRAM',
+    'teacher':   'FACULTY PROGRAM',
     'section':   'SECTION SCHEDULE',
     'room':      'ROOM UTILIZATION',
 }
@@ -240,6 +240,35 @@ def _cell_color(course_code, session_type, color_map=None):
     return colors.HexColor(schedule_colors.course_fill_hex(course_code, session_type, color_map))
 
 
+def _format_section_with_program(section_str, program_str=None):
+    """Format section display to include its academic program, e.g. 'BSIT - 4A'."""
+    sec = _safe_str(section_str).strip()
+    if not sec or sec.upper() == 'TBA':
+        return sec or 'TBA'
+
+    prog = _safe_str(program_str).strip()
+    if not prog or prog.lower() in ('all', 'all programs', 'none', 'n/a'):
+        prog = 'BSIT'
+    else:
+        p_upper = prog.upper()
+        if 'BSIT' in p_upper or 'INFORMATION TECHNOLOGY' in p_upper:
+            prog = 'BSIT'
+        elif 'BSBA' in p_upper or 'BUSINESS ADMINISTRATION' in p_upper:
+            prog = 'BSBA'
+        elif 'BSDS' in p_upper or 'DATA SCIENCE' in p_upper:
+            prog = 'BSDS'
+        elif 'BLIS' in p_upper or 'LIBRARY' in p_upper:
+            prog = 'BLIS'
+        else:
+            prog = prog.split()[0].upper() if prog else 'BSIT'
+
+    # Check if section already contains program prefix, e.g. "BSIT - 4A", "BSIT 4A", "BSIT-4A"
+    if sec.upper().startswith(prog.upper()):
+        return sec
+
+    return f"{prog} - {sec}"
+
+
 def _cell_text(entry, mode='room'):
     """
     Build the three-line centered cell text for a schedule entry.
@@ -254,7 +283,9 @@ def _cell_text(entry, mode='room'):
     course_code = code if code else (c_raw or 'TBA')
 
     prof = _format_instructor_name(_safe_str(entry.get('professor') or entry.get('professor_name')))
-    sec = _safe_str(entry.get('section')) or 'TBA'
+    sec_raw = _safe_str(entry.get('section')) or 'TBA'
+    prog = _safe_str(entry.get('program') or entry.get('program_name') or entry.get('program_code'))
+    sec = _format_section_with_program(sec_raw, prog)
     room = _safe_str(entry.get('room_name') or entry.get('room')) or 'TBA'
 
     if mode == 'professor':
@@ -934,10 +965,7 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, working_hours=No
         else:
             sec_name = _safe_str(entity_info) or 'Section'
 
-        if prog and not sec_name.upper().startswith(prog.upper()) and len(sec_name) <= 6:
-            entity_label = f"{prog} {sec_name}"
-        else:
-            entity_label = sec_name
+        entity_label = _format_section_with_program(sec_name, prog)
     else:  # room
         if isinstance(entity_info, dict):
             room_name = _safe_str(entity_info.get('room_name') or entity_info.get('room')) or 'Room'

@@ -95,79 +95,34 @@ EXCEL_THEMES = {
 THEME_NAMES = list(EXCEL_THEMES.keys())
 DEFAULT_THEME = 'Blue'
 
-# Persistent storage file for section themes
-_THEMES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'section_export_themes.json')
 
+def _format_section_with_program(section_str, program_str=None):
+    """Format section display to include its academic program, e.g. 'BSIT - 4A'."""
+    sec = str(section_str or '').strip()
+    if not sec or sec.upper() == 'TBA':
+        return sec or 'TBA'
 
-def _normalize_sec_key(key: str) -> str:
-    """Normalize a section key for robust matching (e.g. 'Section 1A' -> '1a')."""
-    s = str(key or '').strip().lower()
-    if s.startswith('section '):
-        s = s[8:].strip()
-    elif s.startswith('section'):
-        s = s[7:].strip()
-    elif s.startswith('sec '):
-        s = s[4:].strip()
-    return s
+    prog = str(program_str or '').strip()
+    if not prog or prog.lower() in ('all', 'all programs', 'none', 'n/a'):
+        prog = 'BSIT'
+    else:
+        p_upper = prog.upper()
+        if 'BSIT' in p_upper or 'INFORMATION TECHNOLOGY' in p_upper:
+            prog = 'BSIT'
+        elif 'BSBA' in p_upper or 'BUSINESS ADMINISTRATION' in p_upper:
+            prog = 'BSBA'
+        elif 'BSDS' in p_upper or 'DATA SCIENCE' in p_upper:
+            prog = 'BSDS'
+        elif 'BLIS' in p_upper or 'LIBRARY' in p_upper:
+            prog = 'BLIS'
+        else:
+            prog = prog.split()[0].upper() if prog else 'BSIT'
 
+    # Check if section already contains program prefix, e.g. "BSIT - 4A", "BSIT 4A", "BSIT-4A"
+    if sec.upper().startswith(prog.upper()):
+        return sec
 
-def get_all_section_themes():
-    """Retrieve all persisted section theme mappings."""
-    if not os.path.exists(_THEMES_FILE):
-        return {}
-    try:
-        with open(_THEMES_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def get_section_theme(section_name: str) -> str:
-    """Get the assigned Excel export theme for a section, defaulting to 'Blue'.
-    Guarantees deterministic, persistent theme assignment without random changes.
-    """
-    if not section_name:
-        return DEFAULT_THEME
-    themes = get_all_section_themes()
-    sec_key = str(section_name).strip()
-
-    # 1. Exact match
-    val = themes.get(sec_key)
-    if val in EXCEL_THEMES:
-        return val
-
-    # 2. Case-insensitive & normalized match ('Section 1A' vs '1A')
-    norm_target = _normalize_sec_key(sec_key)
-    for k, v in themes.items():
-        if k.strip().lower() == sec_key.lower() and v in EXCEL_THEMES:
-            return v
-        if _normalize_sec_key(k) == norm_target and v in EXCEL_THEMES:
-            return v
-
-    return DEFAULT_THEME
-
-
-def set_section_theme(section_name: str, theme: str) -> str:
-    """Save the assigned Excel export theme for a section to persistent storage."""
-    if not section_name:
-        return DEFAULT_THEME
-    # Normalize theme name to one of the 7 predefined themes
-    selected_theme = DEFAULT_THEME
-    for t_name in EXCEL_THEMES.keys():
-        if t_name.lower() == str(theme).strip().lower():
-            selected_theme = t_name
-            break
-
-    sec_key = str(section_name).strip()
-    themes = get_all_section_themes()
-    themes[sec_key] = selected_theme
-    try:
-        with open(_THEMES_FILE, 'w', encoding='utf-8') as f:
-            json.dump(themes, f, indent=2)
-    except Exception as e:
-        print(f"Warning: Could not save section theme: {e}")
-    return selected_theme
+    return f"{prog} - {sec}"
 
 
 def _parse_time_to_seconds(val):
@@ -329,7 +284,8 @@ def generate_timetable_excel(schedule_type, entity_info, entries, working_hours=
         sec_year = entity_info.get('year_level') if isinstance(entity_info, dict) else year_level
         sec_sem = entity_info.get('semester') if isinstance(entity_info, dict) else semester
         sec_maj = entity_info.get('major') if isinstance(entity_info, dict) else major
-        sub_heading = f"Section: {sec_name}"
+        sec_fmt = _format_section_with_program(sec_name, program)
+        sub_heading = f"Section: {sec_fmt}"
         meta_parts = [
             f"Year Level: {f'Year {sec_year}' if sec_year else (f'Year {year_level}' if year_level else 'N/A')}",
             f"Semester: {sec_sem or semester or 'All Semesters'}",
@@ -338,7 +294,7 @@ def generate_timetable_excel(schedule_type, entity_info, entries, working_hours=
             f"Weekly Classes: {len(entries)} class{'es' if len(entries) != 1 else ''}",
         ]
     elif schedule_type in ('teacher', 'professor'):
-        doc_heading = "TEACHER SCHEDULE"
+        doc_heading = "FACULTY PROGRAM"
         if isinstance(entity_info, dict):
             p_first = entity_info.get('first_name', '')
             p_last = entity_info.get('last_name', '')
@@ -436,7 +392,7 @@ def generate_timetable_excel(schedule_type, entity_info, entries, working_hours=
                 'raw_course': e.get('course_code') or 'TBA',
                 'professor': e.get('professor') or e.get('professor_name') or 'TBA',
                 'room': e.get('room') or e.get('room_name') or 'TBA',
-                'section': e.get('section') or 'TBA',
+                'section': _format_section_with_program(e.get('section'), e.get('program') or program),
                 'session_type': e.get('session_type') or 'Lecture',
             })
 

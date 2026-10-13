@@ -122,7 +122,7 @@ def test_generate_excel_professor_schedule():
     wb = openpyxl.load_workbook(buf)
     ws = wb.active
 
-    assert ws['A2'].value == 'TEACHER SCHEDULE'
+    assert ws['A2'].value == 'FACULTY PROGRAM'
     assert 'Ada Lovelace' in ws['A3'].value
 
     # Wednesday is column D (Col 4)
@@ -131,7 +131,7 @@ def test_generate_excel_professor_schedule():
         cell_val = str(ws.cell(row=r, column=4).value or '')
         if 'CS102' in cell_val:
             found = True
-            assert 'Section: 1B' in cell_val
+            assert 'Section: BSIT - 1B' in cell_val
             assert 'Room 305' in cell_val
             assert '01:00 PM - 03:00 PM' in cell_val
             break
@@ -348,10 +348,10 @@ def test_routes_export_professor_excel(monkeypatch):
     assert resp.status_code == 200
     assert 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' in resp.content_type
     assert 'attachment;' in resp.headers.get('Content-Disposition', '')
-    assert 'Teacher_Schedule_Alan_Turing.xlsx' in resp.headers.get('Content-Disposition', '')
+    assert 'Faculty_Program_Alan_Turing.xlsx' in resp.headers.get('Content-Disposition', '')
 
     wb = openpyxl.load_workbook(io.BytesIO(resp.data))
-    assert wb.active['A2'].value == 'TEACHER SCHEDULE'
+    assert wb.active['A2'].value == 'FACULTY PROGRAM'
 
 
 def test_ui_templates_contain_export_to_excel_buttons(monkeypatch):
@@ -484,80 +484,8 @@ def test_all_7_themes_generation_and_styling():
             assert ws.row_dimensions[r].height >= 65
 
 
-def test_section_theme_persistence_and_normalization(tmp_path, monkeypatch):
-    """Verify that each section remembers its assigned theme and does NOT randomly change."""
-    test_json = tmp_path / "section_export_themes.json"
-    monkeypatch.setattr(excel_export, '_THEMES_FILE', str(test_json))
-
-    # Example assignments from requirement:
-    # Section 1A -> Blue
-    # Section 1B -> Red
-    # Section 1C -> Green
-    # Section 1D -> Purple
-    excel_export.set_section_theme('Section 1A', 'Blue')
-    excel_export.set_section_theme('Section 1B', 'Red')
-    excel_export.set_section_theme('Section 1C', 'Green')
-    excel_export.set_section_theme('Section 1D', 'Purple')
-    excel_export.set_section_theme('Section 2A', 'Orange')
-    excel_export.set_section_theme('Section 2B', 'Teal')
-    excel_export.set_section_theme('Section 3A', 'Pink')
-
-    # Verify assigned themes are remembered
-    assert excel_export.get_section_theme('Section 1A') == 'Blue'
-    assert excel_export.get_section_theme('Section 1B') == 'Red'
-    assert excel_export.get_section_theme('Section 1C') == 'Green'
-    assert excel_export.get_section_theme('Section 1D') == 'Purple'
-    assert excel_export.get_section_theme('Section 2A') == 'Orange'
-    assert excel_export.get_section_theme('Section 2B') == 'Teal'
-    assert excel_export.get_section_theme('Section 3A') == 'Pink'
-
-    # Verify normalized matching (e.g. '1A' matches 'Section 1A', case-insensitive)
-    assert excel_export.get_section_theme('1A') == 'Blue'
-    assert excel_export.get_section_theme('1b') == 'Red'
-    assert excel_export.get_section_theme('1C') == 'Green'
-    assert excel_export.get_section_theme('1d') == 'Purple'
-
-    # Unassigned section defaults deterministically to 'Blue' without random change
-    assert excel_export.get_section_theme('Section 99Z') == 'Blue'
-    assert excel_export.get_section_theme('Section 99Z') == 'Blue'
-
-
-def test_api_section_theme_endpoint(tmp_path, monkeypatch):
-    """Verify AJAX API endpoint /api/section_theme gets and sets section themes."""
-    test_json = tmp_path / "api_section_export_themes.json"
-    monkeypatch.setattr(excel_export, '_THEMES_FILE', str(test_json))
-    monkeypatch.setattr(app_module, 'set_section_theme', lambda sec, th: excel_export.set_section_theme(sec, th))
-    monkeypatch.setattr(app_module, 'get_section_theme', lambda sec: excel_export.get_section_theme(sec))
-    monkeypatch.setattr(app_module, 'get_all_section_themes', lambda: excel_export.get_all_section_themes())
-
-    client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess['user_id'] = 'test-admin'
-        sess['role'] = 'admin'
-
-    # Save theme via POST
-    post_res = client.post('/api/section_theme', json={'section': 'Section 1B', 'theme': 'Red'})
-    assert post_res.status_code == 200
-    data = post_res.get_json()
-    assert data['success'] is True
-    assert data['section'] == 'Section 1B'
-    assert data['theme'] == 'Red'
-
-    # Retrieve theme via GET
-    get_res = client.get('/api/section_theme?section=Section+1B')
-    assert get_res.status_code == 200
-    assert get_res.get_json()['theme'] == 'Red'
-
-    # Retrieve all themes
-    all_res = client.get('/api/section_theme')
-    assert all_res.status_code == 200
-    all_data = all_res.get_json()
-    assert 'themes' in all_data
-    assert len(all_data['allowed_themes']) == 7
-
-
-def test_ui_theme_dropdown_rendered(monkeypatch):
-    """Verify UI templates render the 'Export Theme:' dropdown with all 7 options."""
+def test_ui_theme_dropdown_removed(monkeypatch):
+    """Verify UI templates do NOT render the 'Export Theme:' dropdown."""
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = 'test-admin'
@@ -577,22 +505,13 @@ def test_ui_theme_dropdown_rendered(monkeypatch):
 
     resp_sec = client.get('/schedule/1A')
     assert resp_sec.status_code == 200
-    assert b'Export Theme:' in resp_sec.data
-    for t in ['Blue', 'Red', 'Green', 'Purple', 'Orange', 'Teal', 'Pink']:
-        assert t.encode() in resp_sec.data
+    assert b'Export Theme:' not in resp_sec.data
+    assert b'exportThemeSelect' not in resp_sec.data
+    assert b'Export to Excel' in resp_sec.data
 
 
-def test_export_routes_use_assigned_section_themes(tmp_path, monkeypatch):
-    """Verify GET /schedule/<section>/export uses that section's assigned theme without random change."""
-    test_json = tmp_path / "routes_section_export_themes.json"
-    monkeypatch.setattr(excel_export, '_THEMES_FILE', str(test_json))
-    monkeypatch.setattr(app_module, 'set_section_theme', lambda sec, th: excel_export.set_section_theme(sec, th))
-    monkeypatch.setattr(app_module, 'get_section_theme', lambda sec: excel_export.get_section_theme(sec))
-
-    # Pre-assign themes
-    excel_export.set_section_theme('1A', 'Green')
-    excel_export.set_section_theme('1B', 'Purple')
-
+def test_export_section_schedule_clean_export(monkeypatch):
+    """Verify GET /schedule/<section>/export exports without theme selector."""
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = 'test-admin'
@@ -627,30 +546,32 @@ def test_export_routes_use_assigned_section_themes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(app_module.supabase, 'table', lambda name: FakeQuery(name))
 
-    # Export Section 1A without theme query param -> must use assigned Green theme
-    resp_1a = client.get('/schedule/1A/export')
-    assert resp_1a.status_code == 200
-    wb_1a = openpyxl.load_workbook(io.BytesIO(resp_1a.data))
-    ws_1a = wb_1a.active
-    green_bg = excel_export.EXCEL_THEMES['Green']['header_bg'].upper()
-    assert green_bg in str(ws_1a.cell(row=6, column=1).fill.start_color.rgb or '').upper()
-    assert green_bg in str(ws_1a.sheet_properties.tabColor.rgb or '').upper()
+    resp = client.get('/schedule/1A/export')
+    assert resp.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(resp.data))
+    ws = wb.active
+    assert ws['A2'].value == 'SECTION SCHEDULE'
+    assert '1A' in ws['A3'].value
 
-    # Export Section 1B without theme query param -> must use assigned Purple theme
-    resp_1b = client.get('/schedule/1B/export')
-    assert resp_1b.status_code == 200
-    wb_1b = openpyxl.load_workbook(io.BytesIO(resp_1b.data))
-    ws_1b = wb_1b.active
-    purple_bg = excel_export.EXCEL_THEMES['Purple']['header_bg'].upper()
-    assert purple_bg in str(ws_1b.cell(row=6, column=1).fill.start_color.rgb or '').upper()
-    assert purple_bg in str(ws_1b.sheet_properties.tabColor.rgb or '').upper()
 
-    # Dynamic override with ?theme=Red for 1A -> updates assignment and exports Red
-    resp_1a_red = client.get('/schedule/1A/export?theme=Red')
-    assert resp_1a_red.status_code == 200
-    wb_1a_red = openpyxl.load_workbook(io.BytesIO(resp_1a_red.data))
-    red_bg = excel_export.EXCEL_THEMES['Red']['header_bg'].upper()
-    assert red_bg in str(wb_1a_red.active.cell(row=6, column=1).fill.start_color.rgb or '').upper()
-    assert excel_export.get_section_theme('1A') == 'Red'
+def test_excel_export_faculty_program_title_and_section_format():
+    """Verify that excel export uses 'FACULTY PROGRAM' heading and formats sections with program."""
+    assert excel_export._format_section_with_program('4A', 'BSIT') == 'BSIT - 4A'
+    assert excel_export._format_section_with_program('4A', None) == 'BSIT - 4A'
+    assert excel_export._format_section_with_program('BSIT - 4A', 'BSIT') == 'BSIT - 4A'
+    assert excel_export._format_section_with_program('BSIT 4A', 'BSIT') == 'BSIT 4A'
+    assert excel_export._format_section_with_program('3B', 'BSDS') == 'BSDS - 3B'
+
+    # Professor schedule excel generation heading
+    prof = {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing'}
+    entries = [
+        {'day': 'Monday', 'start_time_raw': '08:00:00', 'end_time_raw': '10:00:00', 'course_code': 'IT101', 'section': '4A', 'program': 'BSIT', 'room': 'Lab 1', 'session_type': 'Lecture'}
+    ]
+    buf = excel_export.generate_timetable_excel('professor', prof, entries)
+    wb = openpyxl.load_workbook(buf)
+    ws = wb.active
+    assert ws['A2'].value == 'FACULTY PROGRAM'
+
+
 
 

@@ -325,6 +325,36 @@
                                              data-year="Year {{ block.year_level }}"
                                              title="Click for full class details">
                                             <div class="calendar-card-body p-2 d-flex flex-column justify-content-between h-100">
+                                                {% set compact_card = ((block.duration_minutes or 0) <= 60) %}
+                                                {% if compact_card %}
+                                                <!-- Compact card (1-hour): time sits beside the course code so section and professor stay visible -->
+                                                <div class="d-flex align-items-center justify-content-between gap-1">
+                                                    <div class="d-flex align-items-baseline gap-1" style="min-width: 0;">
+                                                        <strong class="text-truncate fw-bold text-dark"
+                                                            style="font-size: 0.8rem;"
+                                                            title="{{ block.course_code }}">{{ block.course_code }}</strong>
+                                                        <span class="text-muted font-monospace text-nowrap"
+                                                            style="font-size: 0.66rem; flex-shrink: 0;">{{ block.time_range }}</span>
+                                                    </div>
+                                                    <span class="badge-custom {% if block.session_type == 'Laboratory' %}badge-warning{% else %}badge-primary{% endif %}"
+                                                        style="font-size: 0.65rem; padding: 1px 5px; flex-shrink: 0;">
+                                                        {{ block.session_type }}
+                                                    </span>
+                                                </div>
+                                                <div class="d-flex align-items-center justify-content-between gap-1">
+                                                    {% if block.section %}
+                                                    <span class="text-dark text-truncate fw-semibold"
+                                                        style="min-width: 0; font-size: 0.82rem;"
+                                                        title="{{ block.section }}"><i class="bx bx-group me-1 text-primary"></i>{{ block.section }}</span>
+                                                    {% endif %}
+                                                    {% if block.professor and block.professor != 'TBA' %}
+                                                    <span class="text-secondary text-truncate ms-auto"
+                                                        style="min-width: 0; font-size: 0.82rem; font-weight: 600;"
+                                                        title="{{ block.professor }}"><i class="bx bx-user me-1 text-primary"></i>{{ block.professor }}</span>
+                                                    {% endif %}
+                                                </div>
+                                                {% else %}
+                                                <!-- Default layout (longer sessions) -->
                                                 <div>
                                                     <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
                                                         <strong class="text-truncate d-block fw-bold" style="font-size: 0.8rem; max-width: 145px;" title="{{ block.course_code }}">{{ block.course_code }}</strong>
@@ -341,6 +371,7 @@
                                                 <div class="text-secondary small text-truncate mt-auto pt-1" style="font-size: 0.82rem; font-weight: 600;" title="{{ block.professor }}">
                                                     <i class="bx bx-user me-1 text-primary"></i>{{ block.professor }}
                                                 </div>
+                                                {% endif %}
                                                 {% endif %}
                                             </div>
                                         </div>

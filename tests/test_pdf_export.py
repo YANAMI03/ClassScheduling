@@ -188,7 +188,7 @@ def test_routes_export_professor_pdf(monkeypatch):
     assert resp.status_code == 200
     assert 'application/pdf' in resp.content_type
     assert 'attachment;' in resp.headers.get('Content-Disposition', '')
-    assert 'Teacher_Schedule_Alan_Turing.pdf' in resp.headers.get('Content-Disposition', '')
+    assert 'Faculty_Program_Alan_Turing.pdf' in resp.headers.get('Content-Disposition', '')
     assert resp.data.startswith(b'%PDF-')
 
 
@@ -257,7 +257,7 @@ def test_routes_export_professor_pdf_empty_filters(monkeypatch):
     assert resp.status_code == 200
     assert 'application/pdf' in resp.content_type
     assert 'attachment;' in resp.headers.get('Content-Disposition', '')
-    assert 'Teacher_Schedule_Grace_Hopper.pdf' in resp.headers.get('Content-Disposition', '')
+    assert 'Faculty_Program_Grace_Hopper.pdf' in resp.headers.get('Content-Disposition', '')
     assert resp.data.startswith(b'%PDF-')
 
 
@@ -538,3 +538,27 @@ def test_official_neust_pdf_format_and_single_page():
     assert data_sec.startswith(b'%PDF-')
     page_matches_sec = re.findall(rb'/Type\s*/Page\b', data_sec)
     assert len(page_matches_sec) == 1
+
+
+def test_pdf_export_faculty_program_title_and_section_format():
+    """Verify that professor schedule export uses 'FACULTY PROGRAM' title and formats section as 'BSIT - 4A'."""
+    assert pdf_export._MODE_TITLE['professor'] == 'FACULTY PROGRAM'
+    assert pdf_export._MODE_TITLE['teacher'] == 'FACULTY PROGRAM'
+
+    # Section formatting helper tests
+    assert pdf_export._format_section_with_program('4A', 'BSIT') == 'BSIT - 4A'
+    assert pdf_export._format_section_with_program('4A', None) == 'BSIT - 4A'
+    assert pdf_export._format_section_with_program('BSIT - 4A', 'BSIT') == 'BSIT - 4A'
+    assert pdf_export._format_section_with_program('BSIT 4A', 'BSIT') == 'BSIT 4A'
+    assert pdf_export._format_section_with_program('2B', 'BSDS') == 'BSDS - 2B'
+
+    # Cell text formatting in professor mode
+    entry = {
+        'course_code': 'IT101',
+        'section': '4A',
+        'program': 'BSIT',
+        'room': 'Lab 1',
+    }
+    cell_text = pdf_export._cell_text(entry, mode='professor')
+    assert 'BSIT - 4A' in cell_text
+
