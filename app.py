@@ -2751,6 +2751,9 @@ def _build_preview_context(preview_entries=None):
     if preview:
         usage_counts = {}
         for entry in preview:
+            # ILP sessions never occupy a room; exclude them from room utilization.
+            if _is_ilp_session(entry.get('session_type')):
+                continue
             rid = entry.get('room_id')
             rname = entry.get('room_name') or (f"Room {rid}" if rid else 'Unassigned (TBA)')
             if rid is not None:
@@ -2800,6 +2803,7 @@ def _build_preview_context(preview_entries=None):
         'all_professor_loads': professor_loads,
         'room_utilization': room_utilization,
         'unscheduled_loads': session.get('unscheduled_loads', []),
+        'ilp_placement_errors': session.get('ilp_placement_errors', []),
     }
 
 
@@ -6634,59 +6638,6 @@ def _is_contiguous_block(block_slots):
     return True
 
 
-def _check_professor_cutoff_conflict(prof_id, day, start_time, end_time, session_type=None,
-                                     prof_cutoff_map=None, day_cutoff_map=None):
-    """Check if a professor's end time violates the day cutoff.
-
-    Optimized path: when `prof_cutoff_map` and `day_cutoff_map` are supplied
-    (pre-fetched once per generation run) no DB query is executed.
-    Falls back to live DB queries when called without the cache maps.
-    """
-    if session_type == 'ILP':
-        return None
-    try:
-        # --- Fast path: use pre-fetched maps (used during schedule generation) ---
-        if prof_cutoff_map is not None and day_cutoff_map is not None:
-            if not prof_cutoff_map:
-                return None
-            has_cutoff = prof_cutoff_map.get(prof_id, True)
-            if not has_cutoff:
-                return None
-            cutoff_td = day_cutoff_map.get(day)
-            if cutoff_td is None:
-                return None
-            if _to_seconds(end_time) > _to_seconds(cutoff_td):
-                return {'message': f"Professor has a daily cutoff at {cutoff_td}."}
-            return None
-
-        # --- Slow path: live DB queries (called outside generation, e.g. edit_schedule_entry) ---
-        try:
-            p_res = supabase.table('professor').select('prof_id, academic_ranking(has_cutoff)').eq('prof_id', prof_id).execute()
-            if p_res.data:
-                p_item = p_res.data[0]
-                _rk = p_item.get('academic_ranking') or {}
-                if isinstance(_rk, list):
-                    _rk = _rk[0] if _rk else {}
-                if _rk.get('has_cutoff') is False:
-                    return None
-        except Exception:
-            pass
-
-        ts_res = supabase.table('working_hours').select('professor_cutoff').eq('day', day).eq('archive', False).execute()
-        if not ts_res.data:
-            return None
-
-        end_td = _to_seconds(end_time)
-        for ts in ts_res.data:
-            cutoff = ts.get('professor_cutoff')
-            if cutoff:
-                cutoff_td = _to_seconds(cutoff)
-                if end_td > cutoff_td:
-                    return {'message': f"Professor has a daily cutoff at {cutoff}."}
-    except Exception as e:
-        logging.error(f"Cutoff check error: {e}")
-    return None
-
 def _has_conflict(day, start_time, end_time, bookings):
     # Check whether the given time range conflicts with any existing booking using total seconds comparison
     start_sec = _to_seconds(start_time)
@@ -6812,6 +6763,29 @@ def _room_matches_session(room, session_type):
     if 'lab' in stype or 'laboratory' in stype:
         return _is_lab_room_type(rtype)
     return _is_lecture_room_type(rtype)
+
+
+ILP_NO_ROOM_LABEL = 'No room'
+
+# ILP placement step (c): how many hours past a day's working-hours end time ILP may run.
+# Step (d) covers anything beyond this up to the 8:00 PM cap. Change this one value to adjust.
+MAX_HOURS_PAST_WINDOW_END = 2
+
+
+def _is_ilp_session(session_type):
+    """True when the session is an Individual Learning Process (ILP) block."""
+    return str(session_type or '').strip().upper() == 'ILP'
+
+
+def _display_room_name(room_name, session_type, fallback='TBA'):
+    """Resolve the room label shown for a session.
+
+    ILP sessions never occupy a room, so they always display the
+    "No room" label instead of a room name or a TBA placeholder.
+    """
+    if _is_ilp_session(session_type):
+        return ILP_NO_ROOM_LABEL
+    return room_name or fallback
 
 
 def _validate_schedule_room_types(entries, all_rooms_map=None):
@@ -8122,7 +8096,7 @@ def view_professor_schedule(prof_identifier):
                 'schedule_id': p_entry.get('id'),
                 'professor_load_id': p_cid,
                 'course_code': course_code,
-                'room': p_entry.get('room_name') or 'TBA',
+                'room': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type')),
                 'day': p_entry.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -8204,7 +8178,7 @@ def view_professor_schedule(prof_identifier):
                 'schedule_id': row['schedule_id'],
                 'professor_load_id': row.get('professor_load_id'),
                 'course_code': disp_course,
-                'room': r.get('room_name') or 'TBA',
+                'room': _display_room_name(r.get('room_name'), row.get('session_type')),
                 'day': row.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -8317,7 +8291,7 @@ def export_professor_schedule(prof_identifier):
             entries.append({
                 'schedule_id': p_entry.get('id'),
                 'course_code': course_code,
-                'room': p_entry.get('room_name') or 'TBA',
+                'room': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type')),
                 'day': p_entry.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -8368,7 +8342,7 @@ def export_professor_schedule(prof_identifier):
             entries.append({
                 'schedule_id': row.get('schedule_id'),
                 'course_code': c.get('course_code') or 'TBA',
-                'room': r.get('room_name') or 'TBA',
+                'room': _display_room_name(r.get('room_name'), row.get('session_type')),
                 'day': row.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -8521,7 +8495,7 @@ def export_professor_schedule_pdf(prof_identifier):
             entries.append({
                 'schedule_id': p_entry.get('id'),
                 'course_code': course_code,
-                'room': p_entry.get('room_name') or 'TBA',
+                'room': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type')),
                 'day': p_entry.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -8575,7 +8549,7 @@ def export_professor_schedule_pdf(prof_identifier):
             entries.append({
                 'schedule_id': row.get('schedule_id'),
                 'course_code': c.get('course_code') or 'TBA',
-                'room': r.get('room_name') or 'TBA',
+                'room': _display_room_name(r.get('room_name'), row.get('session_type')),
                 'day': row.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -8696,8 +8670,8 @@ def api_professor_availability(prof_identifier):
                 entries.append({
                     'schedule_id': p_entry.get('id'),
                     'course_code': p_entry.get('course_code') or pc_course_codes.get(p_cid) or 'TBA',
-                    'room': p_entry.get('room_name') or 'TBA',
-                    'room_name': p_entry.get('room_name') or 'TBA',
+                    'room': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type')),
+                    'room_name': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type')),
                     'day': p_entry.get('day'),
                     'start_time': st_fmt,
                     'end_time': et_fmt,
@@ -8729,8 +8703,8 @@ def api_professor_availability(prof_identifier):
             entries.append({
                 'schedule_id': row['schedule_id'],
                 'course_code': c.get('course_code') or 'TBA',
-                'room': r.get('room_name') or 'TBA',
-                'room_name': r.get('room_name') or 'TBA',
+                'room': _display_room_name(r.get('room_name'), row.get('session_type')),
+                'room_name': _display_room_name(r.get('room_name'), row.get('session_type')),
                 'day': row.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -9777,7 +9751,7 @@ def schedules():
                     'course_code': c.get('course_code') or '',
                     'specialization': c.get('specialization') or sections_by_key[key]['section']['major'],
                     'professor_name': prof_name,
-                    'room_name': rm.get('room_name') or '',
+                    'room_name': _display_room_name(rm.get('room_name'), r.get('session_type'), fallback=''),
                     'day': r.get('day') or '',
                     'start': start_fmt,
                     'end': end_fmt,
@@ -9887,7 +9861,7 @@ def view_schedule(section_name):
                 'semester': sem,
                 'major': maj,
                 'course_code': p_entry.get('course_code') or '',
-                'room_name': p_entry.get('room_name') or '',
+                'room_name': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type'), fallback=''),
                 'first_name': '',
                 'last_name': '',
                 'professor': prof_name,
@@ -9942,7 +9916,7 @@ def view_schedule(section_name):
                 'semester': c_sem,
                 'major': c_maj,
                 'course_code': c.get('course_code') or 'TBA',
-                'room_name': r.get('room_name') or 'TBA',
+                'room_name': _display_room_name(r.get('room_name'), row.get('session_type')),
                 'room_id': row.get('room_id'),
                 'first_name': '',
                 'last_name': '',
@@ -10091,8 +10065,8 @@ def export_section_schedule(section_name):
                 'semester': sem,
                 'major': maj,
                 'course_code': p_entry.get('course_code') or '',
-                'room': p_entry.get('room_name') or '',
-                'room_name': p_entry.get('room_name') or '',
+                'room': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type'), fallback=''),
+                'room_name': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type'), fallback=''),
                 'professor': prof_name,
                 'professor_name': prof_name,
                 'section': section_name,
@@ -10136,8 +10110,8 @@ def export_section_schedule(section_name):
                 'semester': c_sem,
                 'major': c_maj,
                 'course_code': c.get('course_code') or '',
-                'room': r.get('room_name') or '',
-                'room_name': r.get('room_name') or '',
+                'room': _display_room_name(r.get('room_name'), row.get('session_type'), fallback=''),
+                'room_name': _display_room_name(r.get('room_name'), row.get('session_type'), fallback=''),
                 'professor': prof_name,
                 'professor_name': prof_name,
                 'section': section_name,
@@ -10244,8 +10218,8 @@ def export_section_schedule_pdf(section_name):
                 'semester': sem,
                 'major': maj,
                 'course_code': p_entry.get('course_code') or '',
-                'room': p_entry.get('room_name') or '',
-                'room_name': p_entry.get('room_name') or '',
+                'room': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type'), fallback=''),
+                'room_name': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type'), fallback=''),
                 'professor': prof_name,
                 'professor_name': prof_name,
                 'section': section_name,
@@ -10303,8 +10277,8 @@ def export_section_schedule_pdf(section_name):
                 'semester': c_sem,
                 'major': c_maj,
                 'course_code': c.get('course_code') or '',
-                'room': r.get('room_name') or '',
-                'room_name': r.get('room_name') or '',
+                'room': _display_room_name(r.get('room_name'), row.get('session_type'), fallback=''),
+                'room_name': _display_room_name(r.get('room_name'), row.get('session_type'), fallback=''),
                 'professor': prof_name,
                 'professor_name': prof_name,
                 'section': section_name,
@@ -10413,7 +10387,7 @@ def api_section_availability(section_name):
                 entries.append({
                     'schedule_id': p_entry.get('id'),
                     'course_code': p_entry.get('course_code') or '',
-                    'room_name': p_entry.get('room_name') or '',
+                    'room_name': _display_room_name(p_entry.get('room_name'), p_entry.get('session_type'), fallback=''),
                     'day': p_entry.get('day'),
                     'start_time': st_fmt,
                     'end_time': et_fmt,
@@ -10440,7 +10414,7 @@ def api_section_availability(section_name):
             entries.append({
                 'schedule_id': row['schedule_id'],
                 'course_code': c.get('course_code') or '',
-                'room_name': r.get('room_name') or '',
+                'room_name': _display_room_name(r.get('room_name'), row.get('session_type'), fallback=''),
                 'day': row.get('day'),
                 'start_time': st_fmt,
                 'end_time': et_fmt,
@@ -10702,8 +10676,12 @@ def edit_schedule_entry(schedule_id):
         else:
             target_professor_load_id = existing.get('professor_load_id')
 
+        effective_session_type = session_type or existing.get('session_type') or 'Lecture'
         target_room_id = existing.get('room_id')
-        if room_id:
+        if _is_ilp_session(effective_session_type):
+            # ILP sessions never occupy a room.
+            target_room_id = None
+        elif room_id:
             try:
                 target_room_id = int(room_id)
             except (ValueError, TypeError):
@@ -11329,7 +11307,7 @@ def view_irregular_student_schedule(student_id):
             'start_time': s_fmt,
             'end_time': e_fmt,
             'time_range': f"{sch.get('day')} | {s_fmt} - {e_fmt}" if sch.get('day') and s_fmt else 'TBA',
-            'room': rm.get('room_name') or 'TBA',
+            'room': _display_room_name(rm.get('room_name'), sch.get('session_type')),
             'professor': prof_name,
             'session_type': sch.get('session_type') or 'Lecture',
         })
@@ -11602,6 +11580,10 @@ _active_generations_lock = threading.Lock()
 @roles_required('chair')
 def generate_schedule():
     generation_warnings = []
+    ilp_placement_errors = []
+    ilp_tasks = []
+    ilp_zone_counts = {'a': 0, 'b': 0, 'c': 0, 'd': 0, 'e': 0}
+    ilp_required = 0
     semesters = ['1st Semester', '2nd Semester']
 
     if request.method == 'GET':
@@ -11901,46 +11883,48 @@ def generate_schedule():
 
         if not working_hours:
             working_hours = [
-                {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '16:00:00'},
-                {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
-                {'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
-                {'day': 'Thursday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
-                {'day': 'Friday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
+                {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00'},
+                {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
+                {'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
+                {'day': 'Thursday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
+                {'day': 'Friday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'},
             ]
 
         working_hours.sort(key=lambda t: str(t.get('start_time') or ''))
         candidate_slots = _build_candidate_slots(working_hours)
 
-        # --- Pre-fetch professor cutoff data (avoids per-slot DB queries in _check_professor_cutoff_conflict) ---
-        # Build day_cutoff_map: {day_name: cutoff_timedelta_or_str} from already-fetched working_hours
-        _day_cutoff_map = {}
-        for _ts in working_hours:
-            _d = (_ts.get('day') or '').strip()
-            _cutoff = _ts.get('professor_cutoff')
-            if _d and _cutoff and _d not in _day_cutoff_map:
-                _day_cutoff_map[_d] = _cutoff
-
-        # Build prof_cutoff_map: {prof_id: has_cutoff (bool)}
-        _prof_cutoff_map = {}
-        try:
-            _p_res = supabase.table('professor').select('prof_id, first_name, last_name, academic_ranking(has_cutoff)').execute()
-            for _pr in (_p_res.data or []):
-                _pid = _pr.get('prof_id')
-                if _pid is None:
-                    continue
-                _rank = _pr.get('academic_ranking') or {}
-                if isinstance(_rank, list):
-                    _rank = _rank[0] if _rank else {}
-                _has_c = _rank.get('has_cutoff', True)
-                _prof_cutoff_map[_pid] = _has_c
-                _prof_cutoff_map[str(_pid)] = _has_c
-                _fn = _pr.get('first_name', '')
-                _ln = _pr.get('last_name', '')
-                _full = f"{_fn} {_ln}".strip()
-                if _full:
-                    _prof_cutoff_map[get_professor_key(_full)] = _has_c
-        except Exception:
-            pass
+        # Per-day working-hours window start/end and lunch (first configured row wins).
+        # Used by the dedicated ILP placement rules. There is no per-professor cutoff
+        # anymore: lecture and lab sessions are limited only by the day's window.
+        _day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        _day_pos = {_d: _i for _i, _d in enumerate(_day_names)}
+        day_window_map = {}
+        day_lunch_map = {}
+        for _row in working_hours:
+            _w_start = _parse_time(_row.get('start_time'))
+            _w_end = _parse_time(_row.get('end_time'))
+            if _w_start is None or _w_end is None or _w_end <= _w_start:
+                continue
+            if _row.get('day'):
+                _row_days = [_row.get('day').strip().title()]
+            else:
+                _sd = (_row.get('start_day') or 'Monday').strip().title()
+                _ed = (_row.get('end_day') or 'Friday').strip().title()
+                _si = _day_pos.get(_sd, 0)
+                _ei = _day_pos.get(_ed, 4)
+                if _ei < _si:
+                    _ei = _si
+                _row_days = [_day_names[_i] for _i in range(_si, _ei + 1)]
+            _w_lunch = _parse_time(_row.get('lunch_time'))
+            for _d in _row_days:
+                _prev = day_window_map.get(_d)
+                if _prev is None:
+                    day_window_map[_d] = (_w_start, _w_end)
+                else:
+                    # Union across rows so per-hour configs still yield the full day window.
+                    day_window_map[_d] = (min(_prev[0], _w_start), max(_prev[1], _w_end))
+                if _w_lunch is not None:
+                    day_lunch_map.setdefault(_d, _w_lunch)
 
         day_order = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6}
         slot_groups = {}
@@ -11961,7 +11945,6 @@ def generate_schedule():
         professor_load_count = {}
         prof_section_count = {}
         preview_entries = []
-
         # Load existing bookings from DB to avoid collision across different programs in the SAME semester
         current_program_id = _get_user_program_id()
         try:
@@ -12099,8 +12082,8 @@ def generate_schedule():
                 generation_warnings.append(f"No valid professor_load row for {section_name} - {course.get('course_code')}: session skipped")
                 return False
 
-            # STRICT room filtering: ILP and Lecture MUST strictly use lecture rooms only!
-            cand_rooms = lecture_rooms if session_type in ('Lecture', 'ILP') else lab_rooms
+            # Lecture sessions use lecture rooms, Laboratory sessions use lab rooms.
+            cand_rooms = lecture_rooms if session_type == 'Lecture' else lab_rooms
 
             passes = [
                 {'strict_rules': True},
@@ -12157,9 +12140,6 @@ def generate_schedule():
                             continue
                         if p_config['strict_rules'] and not _can_prof_teach_on_day(assigned_prof, day):
                             continue
-                        if _check_professor_cutoff_conflict(pk, day, block_start, block_end, session_type,
-                                                             prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is not None:
-                            continue
 
                         assigned_room = _select_least_used_room(
                             cand_rooms, day, block_start, block_end,
@@ -12167,10 +12147,10 @@ def generate_schedule():
                         )
                         if not assigned_room:
                             continue
-
-                        # ASSIGNMENT SUCCESS
                         rk = assigned_room['room_id']
                         room_name = assigned_room.get('room_name') or ''
+
+                        # ASSIGNMENT SUCCESS
                         prof_full_name = f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip() or assigned_prof.get('professor_name', '')
 
                         preview_entries.append({
@@ -12213,6 +12193,185 @@ def generate_schedule():
             generation_warnings.append(
                 f"{session_type} for {course.get('course_code')} (Section {section_name}) could not be scheduled in a matching room without conflict and remains unscheduled"
             )
+            return False
+
+        # Helper to schedule a 1-hour ILP session using the dedicated placement rules.
+        # ILP has no room and may only use three zones:
+        #   (a) the first hour of a day whose working-hours window starts at 07:00 AM,
+        #   (b) the free hour right after a 3-hour class (inside the window, never over lunch),
+        #   (c) up to 2 hours after the day's working-hours window end (never past 8:00 PM).
+        # ILP never starts before its specific day's working-hours start time.
+        # There is NO global ILP limit: overlap is checked only per section and per professor,
+        # so many sections/professors may hold ILP at the same day and hour.
+        def _schedule_ilp_session(course, assigned_prof, section_name, sec_major, sec_key):
+            nonlocal total_sessions_scheduled, generation_warnings, ilp_placement_errors, placement_iterations
+            placement_iterations += 1
+            if time.time() - t_gen_start > MAX_GEN_BUDGET_SECONDS:
+                raise TimeoutError("Schedule generation exceeded the 120-second time budget. Generation stopped.")
+            if placement_iterations > 10000:
+                raise RuntimeError("Generation stopped: no progress detected or maximum iteration limit exceeded.")
+
+            ONE_HOUR = timedelta(hours=1)
+            SEVEN_AM = timedelta(hours=7)
+            ILP_DAY_END_CAP = timedelta(hours=20)     # 8:00 PM hard cap, every day / every professor
+            ILP_MAX_PAST_WINDOW = timedelta(hours=2)  # zone (c): up to 2h past the window end
+
+            course_id = course['course_id']
+            course_code = course.get('course_code') or f"Course #{course_id}"
+
+            prof_full_name = 'Unassigned'
+
+            def _record_failure(reason):
+                generation_warnings.append(
+                    f"ILP not scheduled: {course_code} (Section {section_name}) — {reason}. "
+                    f"No fallback professor or placeholder room was used."
+                )
+                ilp_placement_errors.append({
+                    'course': course_code,
+                    'section': section_name,
+                    'professor': prof_full_name,
+                    'reason': reason,
+                })
+
+            def _as_td(value):
+                return _parse_time(value)
+
+            if not assigned_prof:
+                _record_failure("no professor load is assigned to this course/section")
+                return False
+
+            pk = assigned_prof.get('prof_id') or assigned_prof.get('professor_key')
+            assigned_load_id = assigned_prof.get('professor_load_id') or _resolve_load_id(assigned_prof, course_id)
+            prof_full_name = (
+                assigned_prof.get('professor_name')
+                or f"{assigned_prof.get('first_name', '')} {assigned_prof.get('last_name', '')}".strip()
+                or str(pk or 'Professor')
+            )
+            if not assigned_load_id:
+                _record_failure(f"no valid professor_load row for Professor {prof_full_name}")
+                return False
+
+            def _check(day, start_time, end_time):
+                """Return (is_free, blocked_reason); blocked_reason in {'window','cap','lunch','conflict', None}."""
+                window = day_window_map.get(day)
+                if not window:
+                    return False, 'window'
+                # Never start before THIS day's working-hours start time.
+                if start_time < window[0]:
+                    return False, 'window'
+                if end_time > ILP_DAY_END_CAP:
+                    return False, 'cap'
+                if _is_blocked_by_lunch(start_time, end_time, day_lunch_map.get(day)):
+                    return False, 'lunch'
+                # Overlap is checked ONLY per section and per professor (no global ILP limit).
+                if _has_conflict(day, start_time, end_time, section_bookings.get(sec_key, [])):
+                    return False, 'conflict'
+                if _has_conflict(day, start_time, end_time, professor_bookings.get(pk, [])):
+                    return False, 'conflict'
+                return True, None
+
+            def _commit(day, start_time, zone):
+                nonlocal total_sessions_scheduled
+                end_time = start_time + ONE_HOUR
+                preview_entries.append({
+                    'professor_load_id': assigned_load_id,
+                    'course_id': course_id,
+                    'course_code': course.get('course_code'),
+                    'prof_id': assigned_prof.get('prof_id') or pk,
+                    'professor_key': assigned_prof.get('professor_key') or pk,
+                    'professor_name': assigned_prof.get('professor_name') or prof_full_name,
+                    'section': section_name,
+                    'room_id': None,
+                    'room_name': ILP_NO_ROOM_LABEL,
+                    'day': day,
+                    'start': start_time,
+                    'end': end_time,
+                    'session_type': 'ILP',
+                    'semester': standard_semester,
+                    'major': sec_major or course.get('major'),
+                    'program': course.get('program') or program or session.get('program', ''),
+                })
+                section_bookings.setdefault(sec_key, []).append((day, start_time, end_time))
+                professor_bookings.setdefault(pk, []).append((day, start_time, end_time))
+                professor_hours[pk] = professor_hours.get(pk, 0.0) + 1
+                prof_day_hours[(pk, day)] = prof_day_hours.get((pk, day), 0.0) + 1
+                prof_scheduled_days.setdefault(pk, set()).add(day)
+                total_sessions_scheduled += 1
+                ilp_zone_counts[zone] = ilp_zone_counts.get(zone, 0) + 1
+                return True
+
+            cap_blocked = False
+            taken_blocked = False
+
+            def _attempt(day, start_time):
+                nonlocal cap_blocked, taken_blocked
+                free, why = _check(day, start_time, start_time + ONE_HOUR)
+                if free:
+                    return True
+                if why == 'cap':
+                    cap_blocked = True
+                elif why in ('conflict', 'lunch'):
+                    taken_blocked = True
+                return False
+
+            ordered_days = sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99))
+
+            # (a) First hour of the day, only on days whose working-hours window starts at 07:00 AM.
+            for day in ordered_days:
+                window = day_window_map.get(day)
+                if window and window[0] == SEVEN_AM:
+                    if _attempt(day, window[0]):
+                        return _commit(day, window[0], 'a')
+
+            # (b) Free hour right after a 3-hour class, inside the window, never overlapping lunch.
+            for day in ordered_days:
+                window = day_window_map.get(day)
+                if not window:
+                    continue
+                three_hour_ends = set()
+                for (d, st, en) in section_bookings.get(sec_key, []):
+                    if d != day:
+                        continue
+                    start_td = _as_td(st)
+                    end_td = _as_td(en)
+                    if start_td is None or end_td is None:
+                        continue
+                    if (end_td - start_td) == timedelta(hours=3):
+                        three_hour_ends.add(end_td)
+                for end_time in sorted(three_hour_ends):
+                    if end_time < window[0] or (end_time + ONE_HOUR) > window[1]:
+                        continue
+                    if _attempt(day, end_time):
+                        return _commit(day, end_time, 'b')
+
+            # (c) After the day's working-hours window end, up to 2 hours, never past 8:00 PM.
+            for day in ordered_days:
+                window = day_window_map.get(day)
+                if not window:
+                    continue
+                win_end = window[1]
+                if (win_end + ILP_MAX_PAST_WINDOW) > ILP_DAY_END_CAP:
+                    # The 8:00 PM cap is what bounds this day's post-window zone.
+                    cap_blocked = True
+                ceiling = min(win_end + ILP_MAX_PAST_WINDOW, ILP_DAY_END_CAP)
+                start = win_end
+                while start + ONE_HOUR <= ceiling:
+                    if _attempt(day, start):
+                        return _commit(day, start, 'c')
+                    start = start + ONE_HOUR
+
+            # Failure: report an accurate reason for THIS ILP session.
+            reasons = []
+            if taken_blocked:
+                reasons.append("all allowed ILP hours were taken")
+            if cap_blocked:
+                reasons.append("the remaining post-window hours were past the 8:00 PM cap")
+            if not reasons:
+                reasons.append(
+                    "no allowed ILP zone was available (the first hour of a 7:00 AM day, "
+                    "the hour after a 3-hour class, or the hours after the working-hours end)"
+                )
+            _record_failure("; ".join(reasons))
             return False
 
         # Helper to schedule a paired block (Lecture + Lab)
@@ -12289,9 +12448,6 @@ def generate_schedule():
                         if _has_conflict(day, lec_start, lab_end, professor_bookings.get(pk, [])):
                             continue
                         if p_config['strict_rules'] and not _can_prof_teach_on_day(assigned_prof, day):
-                            continue
-                        if _check_professor_cutoff_conflict(pk, day, lec_start, lab_end, 'Lecture',
-                                                             prof_cutoff_map=_prof_cutoff_map, day_cutoff_map=_day_cutoff_map) is not None:
                             continue
 
                         assigned_lec_room = _select_least_used_room(
@@ -12502,6 +12658,17 @@ def generate_schedule():
                             course, assigned_prof, section_name, yr, sec_major, sec_key,
                             courses_per_day, late_days, days_tried, two_course_day_used
                         )
+                    elif session_item.get('is_ilp') or session_item['session_type'] == 'ILP':
+                        # Two-phase generation: defer every ILP to Phase 2 so it never
+                        # reserves professor or section time before all lectures/labs are placed.
+                        ilp_required += 1
+                        ilp_tasks.append({
+                            'course': course,
+                            'assigned_prof': assigned_prof,
+                            'section_name': section_name,
+                            'sec_major': sec_major,
+                            'sec_key': sec_key,
+                        })
                     else:
                         _schedule_single_session(
                             session_item['session_type'], session_item['duration'],
@@ -12515,7 +12682,25 @@ def generate_schedule():
             )
 
         t_phase3 = time.time()
-        logging.info(f"[GEN TIMING] Phase 3 (Session Placement Across {len(all_sections)} Sections): {t_phase3 - t_phase2:.2f}s")
+        logging.info(f"[GEN TIMING] Phase 3 (Lecture/Lab Placement Across {len(all_sections)} Sections): {t_phase3 - t_phase2:.2f}s")
+
+        # Phase 2 of the two-phase generation: now that every lecture and lab is placed,
+        # put ILP sessions into whatever professor and section time is still free.
+        for _task in ilp_tasks:
+            _schedule_ilp_session(
+                _task['course'], _task['assigned_prof'], _task['section_name'],
+                _task['sec_major'], _task['sec_key']
+            )
+
+        _ilp_placed = sum(ilp_zone_counts.values())
+        logging.info(
+            f"[ILP ZONES] Required: {ilp_required} | Placed: {_ilp_placed} "
+            f"(a first-hour: {ilp_zone_counts.get('a', 0)}, b after-3h-class: {ilp_zone_counts.get('b', 0)}, "
+            f"c after-window: {ilp_zone_counts.get('c', 0)}, d beyond-2h: {ilp_zone_counts.get('d', 0)}, "
+            f"e window-gap: {ilp_zone_counts.get('e', 0)}) | Unscheduled: {len(ilp_placement_errors)}"
+        )
+        t_ilp_done = time.time()
+        logging.info(f"[GEN TIMING] Phase 3.5 (ILP Placement): {t_ilp_done - t_phase3:.2f}s")
 
 
         # Audit & Utilization Metrics Logging
@@ -12554,9 +12739,12 @@ def generate_schedule():
                 logging.error(f"[GENERATION ROOM VALIDATION ERROR] {err}")
             raise ValueError(f"Generated schedule failed room-type validation: {validation_errors[0]}")
 
-        # Comprehensive professor_load audit: compare expected vs placed sessions for every professor_load row
+        # Comprehensive professor_load audit: report lecture/lab and ILP shortfalls separately.
         courses_by_id = {c['course_id']: c for c in all_courses}
-        sched_by_lid = Counter(e.get('professor_load_id') for e in preview_entries if e.get('professor_load_id'))
+        sched_by_lid_type = Counter(
+            (e.get('professor_load_id'), e.get('session_type') or 'Lecture')
+            for e in preview_entries if e.get('professor_load_id')
+        )
 
         unscheduled_loads = []
         for pl_row in pc_data:
@@ -12582,47 +12770,78 @@ def generate_schedule():
             lab_h = int(c_info.get('lab_hours') or 0)
             ilp_h = int(float(c_info.get('ilp_hours') or 0))
 
-            expected_per_sec = (1 if lec_h > 0 else 0) + (1 if lab_h > 0 else 0) + (1 if ilp_h > 0 else 0)
-            total_expected_sessions = expected_per_sec * sec_count
-            actual_sessions = sched_by_lid.get(pcid, 0)
+            # Lecture/lab expectations only; ILP shortfalls are reported separately below.
+            expected_lec_lab = ((1 if lec_h > 0 else 0) + (1 if lab_h > 0 else 0)) * sec_count
+            actual_lec_lab = sum(
+                sched_by_lid_type.get((pcid, stype), 0) for stype in ('Lecture', 'Laboratory')
+            )
 
-            if actual_sessions < total_expected_sessions or (total_expected_sessions == 0 and sec_count > 0):
-                pkey = pl_row.get('professor_key') or get_professor_key(pl_row)
-                assigned_secs = [
-                    sec_name for (sec_name, sec_cid), l_item in section_course_assignment.items()
-                    if sec_cid == cid and (
-                        l_item.get('professor_load_id') == pcid or
-                        (pkey and (l_item.get('professor_key') or get_professor_key(l_item)) == pkey and l_item.get('course_id') == cid) or
-                        (pid is not None and l_item.get('prof_id') == pid and l_item.get('course_id') == cid)
-                    )
-                ]
-                sec_disp = ", ".join(sorted(set(assigned_secs))) if assigned_secs else "Unassigned (No matching section)"
+            zero_hours = (lec_h <= 0 and lab_h <= 0 and ilp_h <= 0 and sec_count > 0)
+            lec_lab_short = (expected_lec_lab > 0 and actual_lec_lab < expected_lec_lab)
+            if not zero_hours and not lec_lab_short:
+                continue
 
-                if total_expected_sessions == 0:
-                    reason_desc = "Course has 0 hours defined in curriculum"
-                elif not assigned_secs:
-                    reason_desc = "No matching section found for curriculum year level or specialization track"
-                elif actual_sessions == 0:
-                    reason_desc = "No free room, professor timeslot conflict, or daily cutoff prevented placement"
-                else:
-                    reason_desc = f"Partial placement: {actual_sessions} placed, {total_expected_sessions - actual_sessions} session(s) blocked by room or faculty conflicts"
+            pkey = pl_row.get('professor_key') or get_professor_key(pl_row)
+            assigned_secs = [
+                sec_name for (sec_name, sec_cid), l_item in section_course_assignment.items()
+                if sec_cid == cid and (
+                    l_item.get('professor_load_id') == pcid or
+                    (pkey and (l_item.get('professor_key') or get_professor_key(l_item)) == pkey and l_item.get('course_id') == cid) or
+                    (pid is not None and l_item.get('prof_id') == pid and l_item.get('course_id') == cid)
+                )
+            ]
+            sec_disp = ", ".join(sorted(set(assigned_secs))) if assigned_secs else "Unassigned (No matching section)"
 
-                unscheduled_loads.append({
-                    'professor_load_id': pcid,
-                    'prof_id': pkey or pid,
-                    'professor_key': pkey,
-                    'professor': prof_name,
-                    'course_id': cid,
-                    'course': c_name,
-                    'section': sec_disp,
-                    'placed': actual_sessions,
-                    'required': total_expected_sessions,
-                    'reason': reason_desc
-                })
+            if zero_hours:
+                reason_desc = "Course has 0 hours defined in curriculum"
+            elif not assigned_secs:
+                reason_desc = "No matching section found for curriculum year level or specialization track"
+            elif actual_lec_lab == 0:
+                reason_desc = "No free room or professor/section slot prevented placement"
+            else:
+                reason_desc = (
+                    f"Partial placement: {actual_lec_lab} placed, "
+                    f"{expected_lec_lab - actual_lec_lab} lecture/lab session(s) blocked by room or "
+                    f"professor/section conflicts"
+                )
+
+            unscheduled_loads.append({
+                'professor_load_id': pcid,
+                'prof_id': pkey or pid,
+                'professor_key': pkey,
+                'professor': prof_name,
+                'course_id': cid,
+                'course': c_name,
+                'section': sec_disp,
+                'session_type': 'Lecture/Lab' if not zero_hours else '—',
+                'placed': actual_lec_lab,
+                'required': expected_lec_lab,
+                'reason': reason_desc,
+            })
+
+        # ILP failures, reported with their own accurate reasons and their own session-type tag.
+        for _err in ilp_placement_errors:
+            unscheduled_loads.append({
+                'professor_load_id': None,
+                'prof_id': None,
+                'professor_key': None,
+                'professor': _err.get('professor') or 'Professor',
+                'course_id': None,
+                'course': _err.get('course') or 'Course',
+                'section': _err.get('section') or '',
+                'session_type': 'ILP',
+                'placed': 0,
+                'required': 1,
+                'reason': _err.get('reason') or 'Could not be placed',
+            })
 
         session['unscheduled_loads'] = unscheduled_loads
+        session['ilp_placement_errors'] = ilp_placement_errors
         if unscheduled_loads:
             for item in unscheduled_loads:
+                # ILP failures already produced their own detailed generation warning.
+                if item.get('session_type') == 'ILP':
+                    continue
                 generation_warnings.append(
                     f"Unscheduled Load: {item['professor']} - {item['course']} ({item['section']}): {item['placed']}/{item['required']} sessions placed. Reason: {item['reason']}"
                 )
@@ -12769,26 +12988,31 @@ def edit_preview_entry():
         formatted_timerange = f"{day} | {formatted_start} - {formatted_end}"
 
         room_id = data.get('room_id')
-        room_name = 'TBA'
-        room_id_int = None
-        if room_id not in (None, '', '0', 0):
-            try:
-                room_id_int = int(room_id)
-            except (ValueError, TypeError):
-                return jsonify({'error': 'Invalid room selection.'}), 400
+        target_session_type = target_entry.get('session_type') or 'Lecture'
+        if _is_ilp_session(target_session_type):
+            # ILP sessions never occupy a room.
+            room_name = ILP_NO_ROOM_LABEL
+            room_id_int = None
+        else:
+            room_name = 'TBA'
+            room_id_int = None
+            if room_id not in (None, '', '0', 0):
+                try:
+                    room_id_int = int(room_id)
+                except (ValueError, TypeError):
+                    return jsonify({'error': 'Invalid room selection.'}), 400
 
-            room_res = supabase.table('room').select('room_id, room_name, room_type').eq('room_id', room_id_int).execute()
-            row = _first(room_res.data or [])
-            if not row:
-                return jsonify({'error': 'Selected room is invalid.'}), 400
+                room_res = supabase.table('room').select('room_id, room_name, room_type').eq('room_id', room_id_int).execute()
+                row = _first(room_res.data or [])
+                if not row:
+                    return jsonify({'error': 'Selected room is invalid.'}), 400
 
-            target_session_type = target_entry.get('session_type') or 'Lecture'
-            if not _room_matches_session(row, target_session_type):
-                return jsonify({
-                    'error': f"Room type mismatch: Cannot assign '{row.get('room_name')}' ({row.get('room_type')}) to a {target_session_type} class."
-                }), 400
+                if not _room_matches_session(row, target_session_type):
+                    return jsonify({
+                        'error': f"Room type mismatch: Cannot assign '{row.get('room_name')}' ({row.get('room_type')}) to a {target_session_type} class."
+                    }), 400
 
-            room_name = row.get('room_name')
+                room_name = row.get('room_name')
 
         # 0. Lunch Break Conflict: ensure class does not overlap system lunch break
         try:
@@ -13007,6 +13231,9 @@ def confirm_preview():
             prof_id = entry.get('prof_id')
             course_id = entry.get('course_id')
             room_id = entry.get('room_id')
+            if _is_ilp_session(entry.get('session_type')):
+                # ILP sessions are always saved without a room.
+                room_id = None
 
             # Resolve synthetic or missing professor_load_id using pre-fetched dicts
             resolved_load_id = None
@@ -13872,7 +14099,7 @@ def view_schedule_archive_batch(batch_id):
                 'course_id': r.get('course_id') or pc.get('course_id'),
                 'course_code': cname,
                 'professor_name': pname,
-                'room_name': rm.get('room_name') or 'TBA',
+                'room_name': _display_room_name(rm.get('room_name'), r.get('session_type')),
                 'day': r.get('day') or '',
                 'start': s_fmt,
                 'end': e_fmt,

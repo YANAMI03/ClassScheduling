@@ -246,13 +246,14 @@
                 </h6>
                 <span class="badge bg-warning text-dark">Incomplete Placement</span>
             </div>
-            <p class="text-muted small mb-2">The following professor load assignments could not be fully scheduled due to room, timeslot, or faculty constraints:</p>
+            <p class="text-muted small mb-2">The following professor load assignments could not be fully scheduled. Lecture/lab failures are due to room or professor/section conflicts; ILP failures are due to the allowed ILP zones being unavailable:</p>
             <div class="table-responsive">
                 <table class="table table-sm table-bordered align-middle mb-0 small">
                     <thead class="table-light">
                         <tr>
                             <th>Professor</th>
                             <th>Course</th>
+                            <th>Session Type</th>
                             <th>Section(s)</th>
                             <th>Sessions Placed / Required</th>
                             <th>Reason</th>
@@ -263,6 +264,15 @@
                         <tr>
                             <td class="fw-semibold">{{ item.professor }}</td>
                             <td><span class="badge bg-light text-dark border">{{ item.course }}</span></td>
+                            <td>
+                                {% if item.session_type == 'ILP' %}
+                                <span class="badge bg-info text-dark">ILP</span>
+                                {% elif item.session_type == 'Lecture/Lab' %}
+                                <span class="badge bg-primary">Lecture/Lab</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ item.session_type or '—' }}</span>
+                                {% endif %}
+                            </td>
                             <td>{{ item.section }}</td>
                             <td><span class="badge bg-danger">{{ item.placed }} / {{ item.required }}</span></td>
                             <td class="text-danger small">{{ item.reason }}</td>
