@@ -91,16 +91,15 @@ def specialization_stage_payload():
     }
 
 
-def _get_specializations(program_id=None, include_archived=True):
-    """Return specializations from public.specializations.
+def _get_specializations(include_archived=True):
+    """Return the global specializations list from public.specializations.
 
+    Specializations are a single institution-wide list (no per-program scoping).
     include_archived=True keeps archived rows (needed to display existing courses);
     include_archived=False is for pickers and validation.
     """
     try:
         q = supabase.table('specializations').select('*')
-        if program_id is not None:
-            q = q.eq('program_id', program_id)
         if not include_archived:
             q = q.eq('archive', False)
         return q.order('name').execute().data or []
@@ -121,14 +120,14 @@ def _specialization_name_by_id(spec_id):
         return None
 
 
-def _resolve_course_specialization_id(raw_spec_id, program_id, year_level, semester):
+def _resolve_course_specialization_id(raw_spec_id, year_level, semester):
     """Validate a submitted specialization for a course.
 
     Returns (specialization_id_or_None, error_message_or_None).
     Rules:
       * Before the specialization stage -> must be General (None).
-      * At/after the stage -> None (General) or an ACTIVE specialization that
-        belongs to the course's program.
+      * At/after the stage -> None (General) or any ACTIVE specialization
+        from the global specializations list.
     """
     blank = raw_spec_id in (None, '', '0', 0)
     if not is_specialization_stage(year_level, semester):
@@ -143,12 +142,12 @@ def _resolve_course_specialization_id(raw_spec_id, program_id, year_level, semes
         # Legacy form compatibility: accept a specialization NAME and resolve it.
         name = str(raw_spec_id).strip()
         match = next(
-            (s for s in _get_specializations(program_id=program_id, include_archived=False)
+            (s for s in _get_specializations(include_archived=False)
              if (s.get('name') or '').strip().casefold() == name.casefold()),
             None,
         )
         if not match:
-            return None, f"Unknown specialization '{name}' for this program."
+            return None, f"Unknown specialization '{name}'."
         return match.get('specialization_id'), None
     try:
         row = _first(supabase.table('specializations').select('*').eq('specialization_id', spec_id).limit(1).execute().data or [])
@@ -158,8 +157,6 @@ def _resolve_course_specialization_id(raw_spec_id, program_id, year_level, semes
         return None, 'Selected specialization does not exist.'
     if row.get('archive'):
         return None, 'Selected specialization is archived.'
-    if program_id is not None and str(row.get('program_id')) != str(program_id):
-        return None, 'Selected specialization belongs to a different program.'
     return spec_id, None
 
 
@@ -3089,9 +3086,9 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
                 'courses': course_details
             })
         else:
-            # Specialized term: groups come from the specializations table for
-            # this program. A NULL/"General" course fits any group.
-            db_specs = _get_specializations(program_id=program_id, include_archived=True) if program_id else _get_specializations(include_archived=True)
+            # Specialized term: groups come from the global specializations
+            # table. A NULL/"General" course fits any group.
+            db_specs = _get_specializations(include_archived=True)
             spec_groups = {
                 (s.get('name') or '').strip(): []
                 for s in db_specs
@@ -4226,6 +4223,13 @@ def enable_user(user_id):
 @app.route('/create_user', methods=['POST'])
 @admin_required
 def create_user():
+    # Manual user creation from the Users tab is disabled.
+    # New accounts must be provisioned through the sign-up flow.
+    return jsonify({
+        'success': False,
+        'message': 'User creation is disabled. New accounts must sign up from the sign-up page.'
+    }), 403
+
     try:
         first_name = request.form.get('first_name', '').strip()
         middle_name = request.form.get('middle_name', '').strip()
@@ -4817,7 +4821,6 @@ def _spec_json_rows(specs):
         'specialization_id': s.get('specialization_id'),
         'name': s.get('name'),
         'code': s.get('code'),
-        'program_id': s.get('program_id'),
         'archive': bool(s.get('archive')),
     } for s in specs]
 
@@ -4825,12 +4828,8 @@ def _spec_json_rows(specs):
 @app.route('/api/specializations', methods=['GET'])
 @roles_required('admin')
 def api_specializations():
-    program_id = (request.args.get('program_id') or '').strip()
     include_archived = (request.args.get('archived') or '').strip().lower() in ('true', '1', 'yes', 'on')
-    pid = None
-    if program_id and program_id.lower() != 'all':
-        pid = int(program_id) if program_id.isdigit() else _find_program_id_by_name(program_id)
-    specs = _get_specializations(program_id=pid, include_archived=include_archived)
+    specs = _get_specializations(include_archived=include_archived)
     return jsonify({'ok': True, 'success': True, 'specializations': _spec_json_rows(specs)})
 
 
@@ -4850,27 +4849,22 @@ def add_specialization():
     is_ajax = _is_ajax_request()
     name = (request.form.get('name') or '').strip()
     code = (request.form.get('code') or '').strip().upper() or None
-    program_id = (request.form.get('program_id') or '').strip()
-    if not name or not program_id:
-        return _spec_error('Specialization name and program are required.') if is_ajax else (
-            flash('Specialization name and program are required.', 'danger') or redirect(url_for('show_programs')))
+    if not name:
+        return _spec_error('Specialization name is required.') if is_ajax else (
+            flash('Specialization name is required.', 'danger') or redirect(url_for('show_programs')))
     if name.casefold() == GENERAL_SPECIALIZATION_LABEL.casefold():
         return _spec_error('"General" is a built-in rule (no specialization). You cannot add it as a specialization.') if is_ajax else (
             flash('"General" is built-in.', 'danger') or redirect(url_for('show_programs')))
-    pid = int(program_id) if program_id.isdigit() else _find_program_id_by_name(program_id)
-    if not pid:
-        return _spec_error(f"Unknown program '{program_id}'.") if is_ajax else (
-            flash('Unknown program.', 'danger') or redirect(url_for('show_programs')))
-    for s in _get_specializations(program_id=pid, include_archived=True):
+    for s in _get_specializations(include_archived=True):
         if (s.get('name') or '').strip().casefold() == name.casefold():
             if s.get('archive'):
-                return _spec_error(f"A specialization named '{name}' is archived for this program. Restore it instead.") if is_ajax else (
+                return _spec_error(f"A specialization named '{name}' is archived. Restore it instead.") if is_ajax else (
                     flash('Archived specialization with that name.', 'danger') or redirect(url_for('show_programs')))
-            return _spec_error(f"Specialization '{name}' already exists for this program.") if is_ajax else (
+            return _spec_error(f"Specialization '{name}' already exists.") if is_ajax else (
                 flash('Specialization already exists.', 'danger') or redirect(url_for('show_programs')))
     try:
-        supabase.table('specializations').insert({'name': name, 'code': code, 'program_id': pid}).execute()
-        log_activity('create', 'specialization', f"{name} ({code or '-'}) program {pid}")
+        supabase.table('specializations').insert({'name': name, 'code': code}).execute()
+        log_activity('create', 'specialization', f"{name} ({code or '-'})")
         msg = f"Specialization '{name}' added."
         return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
     except Exception as err:
@@ -4894,7 +4888,7 @@ def edit_specialization(spec_id):
     if not current:
         return _spec_error('Specialization not found.', 404) if is_ajax else (
             flash('Specialization not found.', 'danger') or redirect(url_for('show_programs')))
-    for s in _get_specializations(program_id=current.get('program_id'), include_archived=True):
+    for s in _get_specializations(include_archived=True):
         if s.get('specialization_id') != spec_id and (s.get('name') or '').strip().casefold() == name.casefold():
             return _spec_error(f"Another specialization already uses the name '{name}'.") if is_ajax else (
                 flash('Name already used.', 'danger') or redirect(url_for('show_programs')))
@@ -5144,7 +5138,7 @@ def add_course():
 
         semester_str = raw_semester or ('1st Semester' if not semester_id else '')
         raw_spec_id = request.form.get('specialization_id') or request.form.get('specialization')
-        spec_id, spec_err = _resolve_course_specialization_id(raw_spec_id, program_id, year_level, semester_str)
+        spec_id, spec_err = _resolve_course_specialization_id(raw_spec_id, year_level, semester_str)
         if spec_err:
             msg = spec_err
             if is_ajax:
@@ -5285,7 +5279,7 @@ def show_courses():
 
     semesters = _get_semesters(program_id=eff_prog_id or user_prog_id)
     course_message = session.pop('course_message', None)
-    spec_options = _get_specializations(program_id=eff_prog_id, include_archived=False) if eff_prog_id else _get_specializations(include_archived=False)
+    spec_options = _get_specializations(include_archived=False)
     return render_template(
         'courses.html',
         active_page='courses',
@@ -5592,7 +5586,7 @@ def edit_course(course_id):
         raw_semester = (data.get('semester') or '').strip()
         effective_semester = raw_semester or ((curr_course or {}).get('semester') or '')
         raw_spec_id = data.get('specialization_id') if data.get('specialization_id') not in (None, '') else (data.get('specialization') or data.get('major'))
-        spec_id, spec_err = _resolve_course_specialization_id(raw_spec_id, program_id, year_level, effective_semester)
+        spec_id, spec_err = _resolve_course_specialization_id(raw_spec_id, year_level, effective_semester)
         if spec_err:
             msg = spec_err
             if is_ajax:
@@ -8408,6 +8402,7 @@ def export_professor_schedule(prof_identifier):
         theme=theme_arg
     )
     excel_buffer.seek(0)
+    log_activity('export', 'schedule', f"Professor schedule (Excel) exported for {professor_name}" + (f" | {semester_filter}" if semester_filter else ""))
     return send_file(
         excel_buffer,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -8650,6 +8645,7 @@ def export_professor_schedule_pdf(prof_identifier):
     )
 
     pdf_buffer.seek(0)
+    log_activity('export', 'schedule', f"Professor schedule (PDF) exported for {professor_name}" + (f" | {semester_filter}" if semester_filter else ""))
     return send_file(
         pdf_buffer,
         mimetype='application/pdf',
@@ -9303,6 +9299,7 @@ def export_room_schedule(room_id):
         theme=theme_arg
     )
 
+    log_activity('export', 'schedule', f"Room schedule (Excel) exported for {room.get('room_name')}" + (f" | {semester_filter}" if semester_filter else ""))
     return send_file(
         excel_buffer,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -9501,6 +9498,7 @@ def export_room_schedule_pdf(room_id):
     )
 
     pdf_buffer.seek(0)
+    log_activity('export', 'schedule', f"Room schedule (PDF) exported for {room.get('room_name')}" + (f" | {semester_filter}" if semester_filter else ""))
     return send_file(
         pdf_buffer,
         mimetype='application/pdf',
@@ -9638,9 +9636,11 @@ def schedules():
             else:
                 effective_program_id = _find_program_id_by_name(program_filter)
         else:
-            effective_program_id = user_program_id or _find_program_id_by_name(program)
-            if not effective_program_id and all_programs:
-                effective_program_id = all_programs[0].get('id')
+            # Admin / Viewer: default to "All Programs" so an active schedule
+            # is never hidden just because it belongs to another program.
+            # Only scope to a single program when explicitly requested via
+            # ?program=<name>. "All" is the default and remains selectable.
+            effective_program_id = None
         program_filter = _find_program_name_by_id(effective_program_id) if effective_program_id else ''
         programs = all_programs
 
@@ -10173,6 +10173,7 @@ def export_section_schedule(section_name):
         theme=selected_theme
     )
 
+    log_activity('export', 'schedule', f"Section schedule (Excel) exported for {section_name}" + (f" | {semester_filter}" if semester_filter else "") + (f" | {major_filter}" if major_filter else ""))
     return send_file(
         excel_buffer,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -10353,6 +10354,7 @@ def export_section_schedule_pdf(section_name):
     )
 
     pdf_buffer.seek(0)
+    log_activity('export', 'schedule', f"Section schedule (PDF) exported for {section_name}" + (f" | {semester_filter}" if semester_filter else "") + (f" | {major_filter}" if major_filter else ""))
     return send_file(
         pdf_buffer,
         mimetype='application/pdf',
@@ -11445,6 +11447,13 @@ def working_hours():
             all_working_hours = []
 
     all_working_hours.sort(key=lambda t: day_order.get(t.get('day') or t.get('start_day') or '', 99))
+
+    # Human-readable 12-hour display values for the table.
+    # Raw HH:MM strings are kept intact for the <input type="time"> edit fields.
+    for ts in all_working_hours:
+        ts['start_time_display'] = _format_time(ts.get('start_time'))
+        ts['end_time_display'] = _format_time(ts.get('end_time'))
+        ts['lunch_time_display'] = _format_time(ts.get('lunch_time')) if ts.get('lunch_time') else ''
 
     return render_template(
         'working_hours.html',

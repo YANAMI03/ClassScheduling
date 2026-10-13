@@ -53,6 +53,11 @@
     <div class="card-custom__header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="card-custom__title mb-0"><i class="bx bx-certification me-2"></i>Program Catalog ({{ programs|length }}){% if show_archived %} <span class="badge bg-warning text-dark ms-1">Archived</span>{% endif %}</h5>
         <div class="d-flex align-items-center gap-2">
+            {% if can_edit_programs and not show_archived %}
+            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#specializationsModal">
+                <i class="bx bx-category me-1"></i> Manage Specializations
+            </button>
+            {% endif %}
             <a href="/programs{% if not show_archived %}?archived=true{% endif %}"
                class="btn btn-sm {% if show_archived %}btn-warning{% else %}btn-outline-secondary{% endif %}">
                 <i class="bx bx-archive"></i> {% if show_archived %}Back to Active{% else %}Show Archived{% endif %}
@@ -98,14 +103,6 @@
                         <td class="text-end pe-3">
                             {% if can_edit_programs %}
                             <div class="d-inline-flex gap-1">
-                                {% if not show_archived %}
-                                <button type="button" class="btn btn-outline-primary btn-sm manage-specs-btn"
-                                        data-bs-toggle="modal" data-bs-target="#specializationsModal"
-                                        data-id="{{ p.id }}" data-name="{{ p.program_name }}"
-                                        title="Manage Specializations">
-                                    <i class="bx bx-category"></i>
-                                </button>
-                                {% endif %}
                                 <button type="button" class="btn btn-outline-secondary btn-sm edit-program-btn"
                                         data-bs-toggle="modal" data-bs-target="#editProgramModal"
                                         data-id="{{ p.id }}"
@@ -191,13 +188,12 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="specializationsModalLabel">
-                    <i class="bx bx-category me-2"></i>Specializations &mdash; <span id="specProgramName" class="text-primary"></span>
+                    <i class="bx bx-category me-2"></i>Specializations
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="addSpecForm" class="row g-2 align-items-end mb-3">
-                    <input type="hidden" id="specProgramId" name="program_id">
                     <div class="col-md-5">
                         <label class="form-label small fw-bold mb-1">Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control form-control-sm" id="specName" name="name" placeholder="e.g. Database Systems" maxlength="100" required>
@@ -323,11 +319,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadSpecializations() {
         var body = document.getElementById('specTableBody');
-        var pid = document.getElementById('specProgramId').value;
-        if (!body || !pid) return;
+        if (!body) return;
         var archived = document.getElementById('specShowArchived').checked ? 'true' : 'false';
         body.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Loading&hellip;</td></tr>';
-        fetch('/api/specializations?program_id=' + encodeURIComponent(pid) + '&archived=' + archived,
+        fetch('/api/specializations?archived=' + archived,
               { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -355,11 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (specsModalEl) {
-        specsModalEl.addEventListener('show.bs.modal', function(event) {
-            var btn = event.relatedTarget;
-            if (!btn) return;
-            document.getElementById('specProgramId').value = btn.getAttribute('data-id') || '';
-            document.getElementById('specProgramName').textContent = btn.getAttribute('data-name') || '';
+        specsModalEl.addEventListener('show.bs.modal', function() {
             document.getElementById('specShowArchived').checked = false;
             loadSpecializations();
         });

@@ -63,14 +63,14 @@
                         </span>
                     </td>
                     <td>
-                        <span class="text-dark fw-bold">{{ ts.start_time[:5] if ts.start_time else '08:00' }}</span>
+                        <span class="text-dark fw-bold">{{ ts.start_time_display or '08:00 AM' }}</span>
                         <span class="text-muted mx-2">to</span>
-                        <span class="text-dark fw-bold">{{ ts.end_time[:5] if ts.end_time else '20:00' }}</span>
+                        <span class="text-dark fw-bold">{{ ts.end_time_display or '08:00 PM' }}</span>
                     </td>
                     <td>
                         {% if ts.lunch_time %}
                         <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-2 py-1">
-                            <i class="bx bx-restaurant me-1 text-warning"></i>{{ ts.lunch_time[:5] }} (1 hr break)
+                            <i class="bx bx-restaurant me-1 text-warning"></i>{{ ts.lunch_time_display }} (1 hr break)
                         </span>
                         {% else %}
                         <span class="text-muted fst-italic">No lunch break</span>

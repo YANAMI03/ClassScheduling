@@ -224,9 +224,6 @@
             <i class="bx bx-x"></i> Clear
         </a>
         {% endif %}
-        <button class="btn btn-success ms-auto" onclick="openCreateModal()">
-            <i class="bx bx-plus"></i> Create User
-        </button>
     </div>
 </div>
 
@@ -320,70 +317,6 @@
     {% endif %}
 </div>
 
-<!-- Create User Modal -->
-<div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Create New User</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="createUserForm">
-                    <div class="mb-3">
-                        <label for="createFirstName" class="form-label">First Name</label>
-                        <input type="text" class="form-control" id="createFirstName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="createMiddleName" class="form-label">Middle Name / Initial <span class="text-muted small">(optional)</span></label>
-                        <input type="text" class="form-control" id="createMiddleName" placeholder="e.g. S. or Santos">
-                    </div>
-                    <div class="mb-3">
-                        <label for="createLastName" class="form-label">Last Name</label>
-                        <input type="text" class="form-control" id="createLastName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="createEmail" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="createEmail" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="createPassword" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="createPassword" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="createRole" class="form-label">Role</label>
-                        <select class="form-control" id="createRole" onchange="toggleProgramRole('createRole', 'createProgram')" required>
-                            <option value="viewer" selected>Viewer</option>
-                            <option value="chair">Chair</option>
-                            <option value="admin">Academic Admin</option>
-                            <option value="super_admin">Super Admin</option>
-                        </select>
-                    </div>
-                    <div class="mb-3" id="createProgramGroup">
-                        <label for="createProgram" class="form-label">Program</label>
-                        <select class="form-control" id="createProgram" required>
-                            <option value="">Select Program</option>
-                            {% if programs %}
-                                {% for p in programs %}
-                                <option value="{{ p.program_name }}">{{ p.program_name }}</option>
-                                {% endfor %}
-                            {% else %}
-                                <option value="BSIT">BSIT</option>
-                                <option value="BSBA">BSBA</option>
-                            {% endif %}
-                        </select>
-                        <small class="text-muted d-none" id="createProgramHelp">Admin and Viewer have global access across all programs.</small>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="btnSubmitCreateUser" onclick="createUser()">Create User</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Edit User Modal -->
 <div class="modal fade" id="editUserModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -454,7 +387,7 @@ let deleteUserId = null;
 function toggleProgramRole(roleSelectId, programSelectId) {
     const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
     const progSelect = document.getElementById(programSelectId);
-    const helpText = document.getElementById(roleSelectId === 'createRole' ? 'createProgramHelp' : 'editProgramHelp');
+    const helpText = document.getElementById('editProgramHelp');
     const isScheduler = roleVal === 'chair';
     
     if (!isScheduler) {
@@ -484,77 +417,6 @@ document.getElementById('searchInput').addEventListener('keypress', function(e) 
         searchUsers();
     }
 });
-
-function openCreateModal() {
-    // Clear form
-    document.getElementById('createFirstName').value = '';
-    document.getElementById('createMiddleName').value = '';
-    document.getElementById('createLastName').value = '';
-    document.getElementById('createEmail').value = '';
-    document.getElementById('createPassword').value = '';
-    document.getElementById('createProgram').value = '';
-    document.getElementById('createRole').value = 'viewer';
-    toggleProgramRole('createRole', 'createProgram');
-    
-    const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
-    modal.show();
-}
-
-function createUser() {
-    const firstName = document.getElementById('createFirstName').value.trim();
-    const middleName = document.getElementById('createMiddleName').value.trim();
-    const lastName = document.getElementById('createLastName').value.trim();
-    const email = document.getElementById('createEmail').value.trim();
-    const password = document.getElementById('createPassword').value;
-    const role = document.getElementById('createRole').value;
-    const program = document.getElementById('createProgram').value;
-    const isScheduler = (role || '').toLowerCase() === 'chair';
-    
-    if (!firstName || !lastName || !email || !password || !role) {
-        alert('Please fill in all required fields.');
-        return;
-    }
-    
-    if (isScheduler && !program) {
-        alert('Please select a program for Chair.');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('first_name', firstName);
-    formData.append('middle_name', middleName);
-    formData.append('last_name', lastName);
-    formData.append('email', email);
-    formData.append('password', password);
-    formData.append('program', isScheduler ? program : '');
-    formData.append('role', role);
-    
-    const createBtn = document.getElementById('btnSubmitCreateUser');
-    if (createBtn && typeof window.setButtonLoading === 'function') {
-        window.setButtonLoading(createBtn, true, 'Creating...');
-    }
-
-    fetch('/create_user', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            showToast(data.message, 'error');
-        }
-    })
-    .catch(error => {
-        showToast('An error occurred. Please try again.', 'error');
-    })
-    .finally(() => {
-        if (createBtn && typeof window.setButtonLoading === 'function') {
-            window.setButtonLoading(createBtn, false);
-        }
-    });
-}
 
 function openEditModal(userId, firstName, middleName, lastName, email, program, role) {
     document.getElementById('editUserId').value = userId;
