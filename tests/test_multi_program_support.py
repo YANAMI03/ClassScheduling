@@ -231,7 +231,7 @@ def test_admin_programs_crud(test_client, monkeypatch):
         'schedule': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: mock_db.table('program').data)
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: mock_db.table('program').data)
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 1
@@ -289,7 +289,7 @@ def test_courses_program_scoping_and_duplicate_rules(test_client, monkeypatch):
         'schedule': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: programs_data)
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: programs_data)
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 1
@@ -407,7 +407,7 @@ def test_professor_load_view_cross_program_badge(test_client, monkeypatch):
         'professor_load': pc_data,
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: programs_data)
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: programs_data)
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 2
@@ -436,7 +436,7 @@ def test_scheduler_cannot_tamper_program_in_schedules(test_client, monkeypatch):
         'schedule': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: programs_data)
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: programs_data)
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 2
@@ -500,7 +500,7 @@ def test_room_and_professor_schedule_cross_program_masking(test_client, monkeypa
         'working_hours': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
 
     # Schedulers from BSIT viewing Room 101:
     with test_client.session_transaction() as sess:
@@ -619,7 +619,7 @@ def test_restore_schedule_cross_program_conflict(test_client, monkeypatch):
         'program': [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 2
@@ -702,7 +702,7 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
         'working_hours': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 1
@@ -797,7 +797,7 @@ def test_scheduler_schedule_viewing_isolated_to_program(test_client, monkeypatch
         'working_hours': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 2

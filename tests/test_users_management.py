@@ -410,69 +410,29 @@ def test_admin_cannot_delete_self(mock_db):
     assert data['success'] is False
 
 
-def test_create_user_success(mock_db):
+def test_create_user_endpoint_disabled(mock_db):
+    """Manual user creation from the Users tab is disabled; accounts must sign up."""
     client = app_module.app.test_client()
     with client.session_transaction() as sess:
         sess['user_id'] = 'user-1-admin'
         sess['role'] = 'admin'
         sess['username'] = 'adminuser'
 
+    before = len(mock_db['users'])
     res = client.post('/create_user', data={
         'first_name': 'New',
         'last_name': 'Scheduler',
         'email': 'newsched@example.com',
         'password': 'Password123!',
-        'role': 'Scheduler',
+        'role': 'viewer',
         'program': 'BSIT',
     })
-    assert res.status_code == 200
-    data = json.loads(res.data.decode('utf-8'))
-    assert data['success'] is True
-
-    created = [u for u in mock_db['users'] if u['email'] == 'newsched@example.com']
-    assert len(created) == 1
-    assert created[0]['first_name'] == 'New'
-
-
-def test_create_user_missing_fields(mock_db):
-    client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess['user_id'] = 'user-1-admin'
-        sess['role'] = 'admin'
-        sess['username'] = 'adminuser'
-
-    res = client.post('/create_user', data={
-        'first_name': 'New',
-        'last_name': '',  # missing
-        'email': 'incomplete@example.com',
-        'password': 'Password123!',
-        'role': 'Viewer',
-        'program': 'BSIT',
-    })
-    assert res.status_code == 400
+    assert res.status_code == 403
     data = json.loads(res.data.decode('utf-8'))
     assert data['success'] is False
-
-
-def test_create_user_duplicate_email(mock_db):
-    client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess['user_id'] = 'user-1-admin'
-        sess['role'] = 'admin'
-        sess['username'] = 'adminuser'
-
-    res = client.post('/create_user', data={
-        'first_name': 'Duplicate',
-        'last_name': 'User',
-        'email': 'duplicate@example.com',
-        'password': 'Password123!',
-        'role': 'Viewer',
-        'program': 'BSIT',
-    })
-    assert res.status_code == 400
-    data = json.loads(res.data.decode('utf-8'))
-    assert data['success'] is False
-    assert 'already exists' in data['message'].lower()
+    assert 'disabled' in data['message'].lower()
+    # No user row should have been created
+    assert len(mock_db['users']) == before
 
 
 def test_find_email_by_username_or_email(mock_db):
@@ -684,34 +644,6 @@ def test_signup_duplicate_email(mock_db):
     assert 'Email or username already registered.' in res.data.decode('utf-8')
 
 
-def test_create_scheduler_bsds_sets_program_id_9(mock_db):
-    client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess['user_id'] = 'user-1-admin'
-        sess['role'] = 'admin'
-        sess['username'] = 'adminuser'
-
-    res = client.post('/create_user', data={
-        'first_name': 'Data',
-        'last_name': 'Scientist',
-        'email': 'bsds_sched@example.com',
-        'role': 'Scheduler',
-        'program': 'BSDS',
-        'username': 'bsdssched',
-        'password': 'Password123!',
-        'confirm_password': 'Password123!',
-    })
-    assert res.status_code == 200
-    data = json.loads(res.data.decode('utf-8'))
-    assert data['success'] is True
-
-    created = next(u for u in mock_db['users'] if u.get('email') == 'bsds_sched@example.com')
-    # program_id must be 9 (BSDS)
-    assert created.get('program_id') == 9
-    # Legacy program text column must NOT be written
-    assert 'program' not in created
-
-
 def test_user_to_dict_clean_string_formatting():
     # Test joined dict from Supabase: {'program': {'program_name': 'BSIT'}}
     row1 = {
@@ -745,52 +677,6 @@ def test_user_to_dict_clean_string_formatting():
     d3 = app_module._user_to_dict(row3)
     assert d3['program'] == ''
     assert d3['program_id'] is None
-
-
-def test_create_viewer_user_success(mock_db):
-    client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess['user_id'] = 'user-1-admin'
-        sess['role'] = 'admin'
-        sess['username'] = 'adminuser'
-
-    res = client.post('/create_user', data={
-        'first_name': 'Victor',
-        'last_name': 'Viewer',
-        'email': 'viewer_user@example.com',
-        'password': 'Password123!',
-        'role': 'viewer',
-        'program': '',
-    })
-    assert res.status_code == 200
-    data = json.loads(res.data.decode('utf-8'))
-    assert data['success'] is True
-
-    created = next(u for u in mock_db['users'] if u.get('email') == 'viewer_user@example.com')
-    assert created['role'] == 'viewer'
-    assert created.get('program_id') is None
-
-
-def test_create_user_role_whitelist_validation(mock_db):
-    client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess['user_id'] = 'user-1-admin'
-        sess['role'] = 'admin'
-        sess['username'] = 'adminuser'
-
-    # Unknown role should be rejected by server whitelist
-    res = client.post('/create_user', data={
-        'first_name': 'Bad',
-        'last_name': 'Role',
-        'email': 'bad_role@example.com',
-        'password': 'Password123!',
-        'role': 'hacker_role',
-        'program': 'BSIT',
-    })
-    assert res.status_code == 400
-    data = json.loads(res.data.decode('utf-8'))
-    assert data['success'] is False
-    assert 'Invalid role' in data['message']
 
 
 def test_edit_user_role_to_viewer_clears_program(mock_db):

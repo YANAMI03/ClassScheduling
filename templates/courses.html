@@ -123,9 +123,9 @@
             <div class="col-lg-3 col-md-6">
                 <label class="form-label">Specialization</label>
                 <select name="specialization_id" id="add_specialization" class="form-select">
-                    <option value="" data-program-id="" selected>{{ specialization_stage.general_label }}</option>
+                    <option value="" selected>{{ specialization_stage.general_label }}</option>
                     {% for s in specializations %}
-                    <option value="{{ s.specialization_id }}" data-program-id="{{ s.program_id }}">{{ s.name }}</option>
+                    <option value="{{ s.specialization_id }}">{{ s.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -442,9 +442,9 @@
                         <div class="col-md-4">
                             <label class="form-label">Specialization</label>
                             <select name="specialization_id" id="edit_specialization" class="form-select">
-                                <option value="" data-program-id="">{{ specialization_stage.general_label }}</option>
+                                <option value="">{{ specialization_stage.general_label }}</option>
                                 {% for s in specializations %}
-                                <option value="{{ s.specialization_id }}" data-program-id="{{ s.program_id }}">{{ s.name }}</option>
+                                <option value="{{ s.specialization_id }}">{{ s.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -482,12 +482,11 @@ $(function(){
         var semester = String(semesterSelect.val() || '').trim();
         var required = isSpecializationRequired(year, semester);
         var selectEl = specField.find('select');
+        selectEl.prop('required', false);
         
         if (required) {
             specField.show();
-            selectEl.prop('required', true);
         } else {
-            selectEl.prop('required', false);
             if (preserveValue && selectEl.val()) {
                 specField.show();
             } else if (year === '1' || year === '2') {
@@ -503,30 +502,11 @@ $(function(){
         }
     }
     
-    // Filter a Specialization <select> to the chosen program (General always available).
-    function filterSpecOptions($select, programId) {
-        if (!$select || !$select.length) return;
-        var current = String($select.val() || '');
-        var stillValid = current === '';
-        $select.find('option').each(function () {
-            var optPid = $(this).attr('data-program-id');
-            var matches = (optPid === undefined || optPid === null || optPid === '' || String(optPid) === String(programId || ''));
-            $(this).prop('hidden', !matches).prop('disabled', !matches);
-            if (matches && String($(this).val()) === current) stillValid = true;
-        });
-        if (!stillValid) $select.val('');
-    }
-    function addProgramId() {
-        return $('#add_program_id').val() || $('input[name="program_id"]').val() || '';
-    }
-
     // Add Course form
     var $addYearLevel = $('#add_year_level');
     var $addSemester = $('#add_semester');
     var $addSpecField = $('#add_specialization').closest('.col-lg-3');
-    filterSpecOptions($('#add_specialization'), addProgramId());
     $('#add_program_id').on('change', function () {
-        filterSpecOptions($('#add_specialization'), addProgramId());
         toggleSpecializationField($addYearLevel, $addSemester, $addSpecField, false);
     });
     
@@ -555,7 +535,6 @@ $(function(){
     });
 
     $('#edit_program_id').on('change', function() {
-        filterSpecOptions($('#edit_specialization'), $('#edit_program_id').val() || '');
         toggleSpecializationField($editYearLevel, $editSemester, $editSpecField, false);
     });
     
@@ -596,7 +575,6 @@ $(function(){
         $('#edit_semester').val(semVal);
 
         var specIdVal = $t.data('specialization-id');
-        filterSpecOptions($('#edit_specialization'), $('#edit_program_id').val() || '');
         $('#edit_specialization').val(specIdVal !== undefined && specIdVal !== null && specIdVal !== '' ? String(specIdVal) : '');
 
         $('#editForm').attr('action', '/edit_course/' + $t.data('id'));

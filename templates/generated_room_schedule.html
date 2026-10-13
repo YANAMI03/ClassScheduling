@@ -333,13 +333,13 @@
                                                         </span>
                                                     </div>
                                                     <div class="d-flex align-items-center justify-content-between text-muted small" style="font-size: 0.72rem;">
-                                                        <span><i class="bx bx-group me-1"></i>{{ block.section }}</span>
+                                                        <span class="text-dark" style="font-size: 0.84rem;"><i class="bx bx-group me-1 text-primary"></i>{{ block.section }}</span>
                                                         <span class="fw-semibold text-dark font-monospace">{{ block.time_range }}</span>
                                                     </div>
                                                 </div>
                                                 {% if block.professor and block.professor != 'TBA' %}
-                                                <div class="text-muted small text-truncate mt-auto pt-1" style="font-size: 0.7rem;">
-                                                    <i class="bx bx-user me-1"></i>{{ block.professor }}
+                                                <div class="text-secondary small text-truncate mt-auto pt-1" style="font-size: 0.82rem; font-weight: 600;" title="{{ block.professor }}">
+                                                    <i class="bx bx-user me-1 text-primary"></i>{{ block.professor }}
                                                 </div>
                                                 {% endif %}
                                             </div>

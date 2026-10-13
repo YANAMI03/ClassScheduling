@@ -212,7 +212,7 @@
                                         <!-- Data Mapping for Professor Schedule: Display Subject Code, Class Type, Time Range, and Section Name/Room -->
                                         <div class="d-flex align-items-center justify-content-between text-muted small text-truncate mt-auto pt-1 gap-1" style="font-size: 0.7rem;">
                                             {% if block.section %}
-                                            <span class="text-truncate"><i class="bx bx-group me-1 text-primary"></i>{{ block.section }}</span>
+                                            <span class="text-truncate text-dark fw-semibold" style="font-size: 0.82rem;"><i class="bx bx-group me-1 text-primary"></i>{{ block.section }}</span>
                                             {% endif %}
                                             {% if block.room_name and block.room_name != 'Room' and block.room_name != 'TBA' %}
                                             <span class="badge bg-light text-secondary border font-monospace" style="font-size: 0.66rem;"><i class="bx bx-building me-1"></i>{{ block.room_name }}</span>

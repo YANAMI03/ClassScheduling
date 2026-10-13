@@ -209,6 +209,35 @@
                                 data-year="Year {{ block.year_level or section.year_level or '' }}"
                                 title="Click on class card to inspect details or edit entry">
                                 <div class="calendar-card-body p-2 d-flex flex-column justify-content-between h-100">
+                                    {% set compact_card = ((block.duration_minutes or 0) <= 60) or (block.session_type == 'ILP') %}
+                                    {% if compact_card %}
+                                    <!-- Compact card (1-hour / ILP): time sits beside the course code so the professor stays visible -->
+                                    <div class="d-flex align-items-center justify-content-between gap-1">
+                                        <div class="d-flex align-items-baseline gap-1" style="min-width: 0;">
+                                            <strong class="text-truncate fw-bold text-dark"
+                                                style="font-size: 0.8rem;"
+                                                title="{{ block.course_code }}">{{ block.course_code }}</strong>
+                                            <span class="text-muted font-monospace text-nowrap"
+                                                style="font-size: 0.66rem; flex-shrink: 0;">{{ block.time_range }}</span>
+                                        </div>
+                                        <span class="calendar-pill-badge calendar-pill-badge--type"
+                                            style="font-size: 0.65rem; padding: 1px 6px; flex-shrink: 0;">
+                                            {{ block.session_type }}
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-center justify-content-between gap-1">
+                                        {% if block.professor %}
+                                        <span class="text-dark text-truncate"
+                                            style="min-width: 0; font-size: 0.82rem; font-weight: 600;"
+                                            title="{{ block.professor }}"><i class="bx bx-user me-1 text-primary"></i>{{ block.professor }}</span>
+                                        {% endif %}
+                                        {% if block.room_name and block.room_name != 'Room' and block.room_name != 'TBA' %}
+                                        <span class="badge bg-light text-secondary border ms-auto"
+                                            style="font-size: 0.66rem; flex-shrink: 0;"><i class="bx bx-building me-1"></i>{{ block.room_name }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <!-- Default layout (longer sessions) -->
                                     <div>
                                         <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
                                             <strong class="text-truncate d-block fw-bold text-dark"
@@ -232,11 +261,12 @@
                                         </div>
                                     </div>
                                     {% if block.professor %}
-                                    <div class="text-muted small text-truncate mt-auto pt-1 d-flex align-items-center gap-1"
-                                        style="font-size: 0.7rem;">
-                                        <i class="bx bx-user text-primary"></i><span class="text-truncate">{{
-                                            block.professor }}</span>
+                                    <div class="text-dark small text-truncate mt-auto pt-1 d-flex align-items-center gap-1"
+                                        style="font-size: 0.82rem; font-weight: 600;">
+                                        <i class="bx bx-user text-primary"></i><span class="text-truncate"
+                                            title="{{ block.professor }}">{{ block.professor }}</span>
                                     </div>
+                                    {% endif %}
                                     {% endif %}
                                 </div>
                             </div>
