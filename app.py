@@ -24,13 +24,7 @@ load_dotenv()
 from supabase import create_client, Client
 from postgrest.exceptions import APIError
 from pdf_export import generate_timetable_pdf
-from excel_export import (
-    generate_timetable_excel,
-    EXCEL_THEMES,
-    get_section_theme,
-    set_section_theme,
-    get_all_section_themes
-)
+from excel_export import generate_timetable_excel
 import professor_load_importer
 
 SUPABASE_URL: str = os.environ.get("SUPABASE_URL")
@@ -884,7 +878,6 @@ ROUTE_PERMISSIONS = {
     'export_section_schedule': {'admin', 'chair'},
     'export_section_schedule_pdf': {'admin', 'chair'},
     'api_section_availability': {'admin', 'chair', 'viewer'},
-    'api_section_theme': {'admin', 'chair', 'viewer'},
 
     # Schedules: Professor Schedule (Admin and Scheduler only; Viewer 403)
     'professor_schedule': {'admin', 'chair'},
@@ -2667,7 +2660,6 @@ def _build_preview_context(preview_entries=None):
                     'major': sec_track,
                     'specialization': sec_track,
                     'year_level': _year_of_section(section_name),
-                    'theme': get_section_theme(section_name),
                 },
                 'entries': []
             }
@@ -7034,8 +7026,9 @@ def _calculate_professor_workload(entries, max_hours=MAX_TEACHING_HOURS):
 
     day_intervals = {}
     valid_entries_count = 0
+    distinct_courses = set()
 
-    for entry in (entries or []):
+    for idx, entry in enumerate(entries or []):
         day = (entry.get('day') or '').strip()
         if not day or day.upper() == 'TBA':
             entry['duration_hours'] = 0.0
@@ -7067,6 +7060,19 @@ def _calculate_professor_workload(entries, max_hours=MAX_TEACHING_HOURS):
 
         day_intervals.setdefault(day, []).append((st_sec, et_sec))
         valid_entries_count += 1
+
+        # Track distinct course for the scheduled session
+        c_key = (
+            entry.get('course_code')
+            or (entry.get('course') if isinstance(entry.get('course'), str) else (entry.get('course') or {}).get('course_code'))
+            or entry.get('course_name')
+            or (((entry.get('professor_load') or {}).get('course') or {}).get('course_code'))
+            or entry.get('course_id')
+        )
+        if c_key:
+            distinct_courses.add(str(c_key).strip().upper())
+        else:
+            distinct_courses.add(f"__anon_entry_{idx}")
 
     total_seconds = 0.0
     for day, intervals in day_intervals.items():
@@ -7114,7 +7120,9 @@ def _calculate_professor_workload(entries, max_hours=MAX_TEACHING_HOURS):
         'workload_percentage': workload_pct,
         'assigned_hours_text': assigned_hours_text,
         'remaining_hours_text': remaining_hours_text,
-        'valid_classes_count': valid_entries_count,
+        'valid_classes_count': len(distinct_courses),
+        'distinct_courses_count': len(distinct_courses),
+        'total_sessions_count': valid_entries_count,
     }
 
 
@@ -7985,7 +7993,7 @@ def professor_schedule():
                 'specialization': p.get('specialization') or '',
                 'time_designation': p.get('time_designation') or 5,
                 'ranking_name': '',
-                'class_count': len(entries),
+                'class_count': p_wl['valid_classes_count'],
                 'total_hours': p_wl['total_scheduled_hours_display'],
                 'workload_pct': p_wl['workload_percentage'],
             })
@@ -8211,9 +8219,7 @@ def view_professor_schedule(prof_identifier):
                           workload=workload, availability=availability,
                           is_preview=is_preview, has_preview=has_preview,
                           year_filter=year_filter, semester_filter=semester_filter,
-                          major_filter=major_filter, program=program, sort_day=sort_day,
-                          current_theme=request.args.get('theme', 'Blue'),
-                          theme_options=list(EXCEL_THEMES.keys()))
+                          major_filter=major_filter, program=program, sort_day=sort_day)
 
 
 @app.route('/professor_schedule/<path:prof_identifier>/export')
@@ -8298,6 +8304,7 @@ def export_professor_schedule(prof_identifier):
                 'start_time_raw': st,
                 'end_time_raw': et,
                 'section': sec,
+                'program': prog or program or 'BSIT',
                 'semester': sem,
                 'major': maj,
                 'session_type': p_entry.get('session_type') or 'Lecture',
@@ -8349,6 +8356,7 @@ def export_professor_schedule(prof_identifier):
                 'start_time_raw': st_raw,
                 'end_time_raw': et_raw,
                 'section': row.get('section'),
+                'program': (_rel(row, 'program') or {}).get('program_name') or row.get('program_name') or program_filter or program or 'BSIT',
                 'semester': row.get('semester'),
                 'major': row.get('major'),
                 'session_type': row.get('session_type') or 'Lecture',
@@ -8360,7 +8368,7 @@ def export_professor_schedule(prof_identifier):
         working_hours = []
 
     clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', str(professor_name))
-    filename = f"Teacher_Schedule_{clean_name}.xlsx"
+    filename = f"Faculty_Program_{clean_name}.xlsx"
 
     excel_buffer = generate_timetable_excel(
         schedule_type='professor',
@@ -8376,7 +8384,7 @@ def export_professor_schedule(prof_identifier):
         theme=theme_arg
     )
     excel_buffer.seek(0)
-    log_activity('export', 'schedule', f"Professor schedule (Excel) exported for {professor_name}" + (f" | {semester_filter}" if semester_filter else ""))
+    log_activity('export', 'schedule', f"Faculty program (Excel) exported for {professor_name}" + (f" | {semester_filter}" if semester_filter else ""))
     return send_file(
         excel_buffer,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -8502,6 +8510,7 @@ def export_professor_schedule_pdf(prof_identifier):
                 'start_time_raw': st,
                 'end_time_raw': et,
                 'section': sec,
+                'program': prog or program or 'BSIT',
                 'semester': sem,
                 'major': maj,
                 'session_type': p_entry.get('session_type') or 'Lecture',
@@ -8556,6 +8565,7 @@ def export_professor_schedule_pdf(prof_identifier):
                 'start_time_raw': st_raw,
                 'end_time_raw': et_raw,
                 'section': row.get('section'),
+                'program': (_rel(row, 'program') or {}).get('program_name') or row.get('program_name') or program_filter or program or 'BSIT',
                 'semester': row.get('semester'),
                 'major': row.get('major'),
                 'session_type': row.get('session_type') or 'Lecture',
@@ -8597,7 +8607,7 @@ def export_professor_schedule_pdf(prof_identifier):
 
     clean_prof = re.sub(r'[^a-zA-Z0-9_-]', '_', professor_name)
     sem_suffix = f"_{re.sub(r'[^a-zA-Z0-9_-]', '_', semester_filter)}" if semester_filter else ""
-    filename = f"Teacher_Schedule_{clean_prof}{sem_suffix}.pdf"
+    filename = f"Faculty_Program_{clean_prof}{sem_suffix}.pdf"
 
     active_sem = _get_active_semester(user_prog_id)
     school_year = active_sem.get('school_year') if active_sem and active_sem.get('school_year') else "2026-2027"
@@ -8619,7 +8629,7 @@ def export_professor_schedule_pdf(prof_identifier):
     )
 
     pdf_buffer.seek(0)
-    log_activity('export', 'schedule', f"Professor schedule (PDF) exported for {professor_name}" + (f" | {semester_filter}" if semester_filter else ""))
+    log_activity('export', 'schedule', f"Faculty program (PDF) exported for {professor_name}" + (f" | {semester_filter}" if semester_filter else ""))
     return send_file(
         pdf_buffer,
         mimetype='application/pdf',
@@ -9122,9 +9132,7 @@ def view_room_schedule(room_id):
                           is_preview=is_preview,
                           has_preview=has_preview,
                           year_filter=year_filter, semester_filter=semester_filter,
-                          major_filter=major_filter, program=program, sort_day=sort_day,
-                          current_theme=request.args.get('theme', 'Blue'),
-                          theme_options=list(EXCEL_THEMES.keys()))
+                          major_filter=major_filter, program=program, sort_day=sort_day)
 
 
 @app.route('/room_schedule/<room_id>/export')
@@ -9725,7 +9733,6 @@ def schedules():
                     'major': sec_track,
                     'specialization': sec_track,
                     'year_level': _year_of_section(sec),
-                    'theme': get_section_theme(sec),
                 }
                 sections_by_key[key] = {
                     'section': sec_obj,
@@ -9803,8 +9810,7 @@ def schedules():
         is_viewer=is_viewer,
         fetch_error=fetch_error,
         no_active_schedule=no_active_schedule,
-        no_professor_match=False,
-        theme_options=list(EXCEL_THEMES.keys())
+        no_professor_match=False
     )
 
 
@@ -9987,9 +9993,6 @@ def view_schedule(section_name):
         })
     all_professor_loads.sort(key=lambda x: x['label'])
 
-    current_theme = get_section_theme(section_name)
-    theme_options = list(EXCEL_THEMES.keys())
-
     return render_template(
         'generated_schedule.html',
         active_page='schedules',
@@ -10004,9 +10007,7 @@ def view_schedule(section_name):
         major_filter=major_filter,
         sort_day=sort_day,
         rooms=rooms,
-        all_professor_loads=all_professor_loads,
-        current_theme=current_theme,
-        theme_options=theme_options
+        all_professor_loads=all_professor_loads
     )
 
 
@@ -10016,16 +10017,10 @@ def view_schedule(section_name):
 def export_section_schedule(section_name):
     semester_filter = request.args.get('semester', '')
     major_filter = request.args.get('major', '')
-    theme_arg = request.args.get('theme', '').strip()
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
     user_role = (session.get('role') or 'chair').lower()
-
-    if theme_arg:
-        selected_theme = set_section_theme(section_name, theme_arg)
-    else:
-        selected_theme = get_section_theme(section_name)
 
     preview_pool = _get_preview_for_user()
     has_preview = bool(preview_pool)
@@ -10143,8 +10138,7 @@ def export_section_schedule(section_name):
             'year': section_info['year_level'],
             'major': section_info['major'],
             'program': program,
-        },
-        theme=selected_theme
+        }
     )
 
     log_activity('export', 'schedule', f"Section schedule (Excel) exported for {section_name}" + (f" | {semester_filter}" if semester_filter else "") + (f" | {major_filter}" if major_filter else ""))
@@ -10335,36 +10329,6 @@ def export_section_schedule_pdf(section_name):
         as_attachment=True,
         download_name=filename
     )
-
-
-
-
-@app.route('/api/section_theme', methods=['GET', 'POST'])
-@roles_required('admin', 'chair', 'viewer')
-def api_section_theme():
-    """Get or update section export theme assignment."""
-    if request.method == 'POST':
-        data = request.get_json(silent=True) or request.form.to_dict() or {}
-        section = (data.get('section') or data.get('section_name') or '').strip()
-        theme = (data.get('theme') or '').strip()
-        if not section:
-            return jsonify({'success': False, 'error': 'Section name is required'}), 400
-        # Validate against 7 allowed themes (case-insensitive)
-        matched = None
-        for t_name in EXCEL_THEMES:
-            if t_name.lower() == theme.lower():
-                matched = t_name
-                break
-        if not matched:
-            return jsonify({'success': False, 'error': f'Invalid theme. Allowed: {list(EXCEL_THEMES.keys())}'}), 400
-
-        saved_theme = set_section_theme(section, matched)
-        return jsonify({'success': True, 'section': section, 'theme': saved_theme})
-
-    section = request.args.get('section', '').strip()
-    if section:
-        return jsonify({'section': section, 'theme': get_section_theme(section)})
-    return jsonify({'themes': get_all_section_themes(), 'allowed_themes': list(EXCEL_THEMES.keys())})
 
 
 
@@ -12196,13 +12160,15 @@ def generate_schedule():
             return False
 
         # Helper to schedule a 1-hour ILP session using the dedicated placement rules.
-        # ILP has no room and may only use three zones:
-        #   (a) the first hour of a day whose working-hours window starts at 07:00 AM,
-        #   (b) the free hour right after a 3-hour class (inside the window, never over lunch),
-        #   (c) up to 2 hours after the day's working-hours window end (never past 8:00 PM).
-        # ILP never starts before its specific day's working-hours start time.
-        # There is NO global ILP limit: overlap is checked only per section and per professor,
-        # so many sections/professors may hold ILP at the same day and hour.
+        # Fallback ladder (try in order; stop at first slot free for both professor and section):
+        #   (a) First hour of a day whose working_hours window starts at 07:00 AM (never before window start)
+        #   (b) Free hour right after a 3-hour class that ends where lunch begins, never overlapping lunch
+        #   (c) After window end, up to MAX_HOURS_PAST_WINDOW_END (2h) past it, never ending after 8:00 PM
+        #   (d) After window end, beyond MAX_HOURS_PAST_WINDOW_END hours, up to 8:00 PM cap
+        #   (e) LAST RESORT: any remaining free 1-hour gap inside working_hours window, never overlapping lunch
+        # Within each step, try every day (Monday to Friday) before moving to the next step.
+        # ILP never starts before that day's working-hours start time and never ends after 8:00 PM.
+        # Overlap is checked only per section and per professor (no global ILP limit).
         def _schedule_ilp_session(course, assigned_prof, section_name, sec_major, sec_key):
             nonlocal total_sessions_scheduled, generation_warnings, ilp_placement_errors, placement_iterations
             placement_iterations += 1
@@ -12214,24 +12180,27 @@ def generate_schedule():
             ONE_HOUR = timedelta(hours=1)
             SEVEN_AM = timedelta(hours=7)
             ILP_DAY_END_CAP = timedelta(hours=20)     # 8:00 PM hard cap, every day / every professor
-            ILP_MAX_PAST_WINDOW = timedelta(hours=2)  # zone (c): up to 2h past the window end
+            ILP_MAX_PAST_WINDOW = timedelta(hours=MAX_HOURS_PAST_WINDOW_END)  # zone (c): up to 2h past the window end
 
             course_id = course['course_id']
             course_code = course.get('course_code') or f"Course #{course_id}"
 
             prof_full_name = 'Unassigned'
 
-            def _record_failure(reason):
+            def _record_failure(reason, extra_details=None):
                 generation_warnings.append(
                     f"ILP not scheduled: {course_code} (Section {section_name}) — {reason}. "
                     f"No fallback professor or placeholder room was used."
                 )
-                ilp_placement_errors.append({
+                err_dict = {
                     'course': course_code,
                     'section': section_name,
                     'professor': prof_full_name,
                     'reason': reason,
-                })
+                }
+                if extra_details:
+                    err_dict.update(extra_details)
+                ilp_placement_errors.append(err_dict)
 
             def _as_td(value):
                 return _parse_time(value)
@@ -12300,23 +12269,13 @@ def generate_schedule():
                 ilp_zone_counts[zone] = ilp_zone_counts.get(zone, 0) + 1
                 return True
 
-            cap_blocked = False
-            taken_blocked = False
-
             def _attempt(day, start_time):
-                nonlocal cap_blocked, taken_blocked
-                free, why = _check(day, start_time, start_time + ONE_HOUR)
-                if free:
-                    return True
-                if why == 'cap':
-                    cap_blocked = True
-                elif why in ('conflict', 'lunch'):
-                    taken_blocked = True
-                return False
+                free, _ = _check(day, start_time, start_time + ONE_HOUR)
+                return free
 
-            ordered_days = sorted(slot_groups.keys(), key=lambda d: day_order.get(d, 99))
+            ordered_days = sorted(day_window_map.keys(), key=lambda d: day_order.get(d, 99))
 
-            # (a) First hour of the day, only on days whose working-hours window starts at 07:00 AM.
+            # (a) First hour of a day whose working_hours window starts at 07:00 AM (never before window start).
             for day in ordered_days:
                 window = day_window_map.get(day)
                 if window and window[0] == SEVEN_AM:
@@ -12344,15 +12303,12 @@ def generate_schedule():
                     if _attempt(day, end_time):
                         return _commit(day, end_time, 'b')
 
-            # (c) After the day's working-hours window end, up to 2 hours, never past 8:00 PM.
+            # (c) After the day's working-hours window end, up to MAX_HOURS_PAST_WINDOW_END hours, never ending after 8:00 PM.
             for day in ordered_days:
                 window = day_window_map.get(day)
                 if not window:
                     continue
                 win_end = window[1]
-                if (win_end + ILP_MAX_PAST_WINDOW) > ILP_DAY_END_CAP:
-                    # The 8:00 PM cap is what bounds this day's post-window zone.
-                    cap_blocked = True
                 ceiling = min(win_end + ILP_MAX_PAST_WINDOW, ILP_DAY_END_CAP)
                 start = win_end
                 while start + ONE_HOUR <= ceiling:
@@ -12360,18 +12316,133 @@ def generate_schedule():
                         return _commit(day, start, 'c')
                     start = start + ONE_HOUR
 
-            # Failure: report an accurate reason for THIS ILP session.
-            reasons = []
-            if taken_blocked:
-                reasons.append("all allowed ILP hours were taken")
-            if cap_blocked:
-                reasons.append("the remaining post-window hours were past the 8:00 PM cap")
-            if not reasons:
-                reasons.append(
-                    "no allowed ILP zone was available (the first hour of a 7:00 AM day, "
-                    "the hour after a 3-hour class, or the hours after the working-hours end)"
+            # (d) After the window end, beyond MAX_HOURS_PAST_WINDOW_END hours, up to the 8:00 PM cap.
+            for day in ordered_days:
+                window = day_window_map.get(day)
+                if not window:
+                    continue
+                win_end = window[1]
+                start = win_end + ILP_MAX_PAST_WINDOW
+                while start + ONE_HOUR <= ILP_DAY_END_CAP:
+                    if _attempt(day, start):
+                        return _commit(day, start, 'd')
+                    start = start + ONE_HOUR
+
+            # (e) LAST RESORT: any remaining free 1-hour gap inside the working_hours window on any day, never overlapping lunch.
+            for day in ordered_days:
+                window = day_window_map.get(day)
+                if not window:
+                    continue
+                win_start, win_end = window
+                ceiling = min(win_end, ILP_DAY_END_CAP)
+                start = max(win_start, SEVEN_AM)
+                while start + ONE_HOUR <= ceiling:
+                    if _attempt(day, start):
+                        return _commit(day, start, 'e')
+                    start = start + ONE_HOUR
+
+            # Diagnostics: compute exact availability breakdown across all eligible hours (steps a to e)
+            eligible_slots = []
+            for d in ordered_days:
+                w = day_window_map.get(d)
+                if not w:
+                    continue
+                w_start, w_end = w
+                l_time = day_lunch_map.get(d)
+                curr = max(w_start, SEVEN_AM)
+                while curr + ONE_HOUR <= ILP_DAY_END_CAP:
+                    slot_end = curr + ONE_HOUR
+                    if not _is_blocked_by_lunch(curr, slot_end, l_time):
+                        eligible_slots.append((d, curr, slot_end))
+                    curr = slot_end
+
+            total_eligible = len(eligible_slots)
+            prof_taken_slots = []
+            sec_taken_slots = []
+            for (d, s, en) in eligible_slots:
+                if _has_conflict(d, s, en, professor_bookings.get(pk, [])):
+                    prof_taken_slots.append((d, s, en))
+                if _has_conflict(d, s, en, section_bookings.get(sec_key, [])):
+                    sec_taken_slots.append((d, s, en))
+
+            prof_taken_count = len(prof_taken_slots)
+            prof_free_count = total_eligible - prof_taken_count
+            sec_taken_count = len(sec_taken_slots)
+            sec_free_count = total_eligible - sec_taken_count
+
+            # Tally what booked the professor's taken eligible slots
+            prof_breakdown = Counter()
+            for (d, s, en) in prof_taken_slots:
+                matched = False
+                for pe in preview_entries:
+                    if (pe.get('prof_id') == pk or pe.get('professor_key') == pk or pe.get('professor_name') == prof_full_name) and pe.get('day') == d:
+                        pst = _as_td(pe.get('start'))
+                        pen = _as_td(pe.get('end'))
+                        if pst is not None and pen is not None and pst < en and s < pen:
+                            prof_breakdown[pe.get('session_type') or 'Lecture'] += 1
+                            matched = True
+                            break
+                if not matched:
+                    prof_breakdown['Other'] += 1
+
+            # Tally what booked the section's taken eligible slots
+            sec_breakdown = Counter()
+            for (d, s, en) in sec_taken_slots:
+                matched = False
+                for pe in preview_entries:
+                    if pe.get('section') == section_name and pe.get('day') == d:
+                        pst = _as_td(pe.get('start'))
+                        pen = _as_td(pe.get('end'))
+                        if pst is not None and pen is not None and pst < en and s < pen:
+                            sec_breakdown[pe.get('session_type') or 'Lecture'] += 1
+                            matched = True
+                            break
+                if not matched:
+                    sec_breakdown['Other'] += 1
+
+            prof_breakdown_str = (
+                f"{prof_taken_count}/{total_eligible} taken "
+                f"(Lecture: {prof_breakdown.get('Lecture', 0)}, Lab: {prof_breakdown.get('Laboratory', 0)}, ILP: {prof_breakdown.get('ILP', 0)})"
+            )
+            sec_breakdown_str = (
+                f"{sec_taken_count}/{total_eligible} taken "
+                f"(Lecture: {sec_breakdown.get('Lecture', 0)}, Lab: {sec_breakdown.get('Laboratory', 0)}, ILP: {sec_breakdown.get('ILP', 0)})"
+            )
+
+            if prof_free_count == 0 and sec_free_count == 0:
+                failure_reason = "Both professor and section genuinely have no free hour left in the week (load does not fit and needs editing)"
+            elif prof_free_count == 0:
+                failure_reason = f"Professor {prof_full_name} genuinely has no free hour left in the week (load does not fit and needs editing)"
+            elif sec_free_count == 0:
+                failure_reason = f"Section {section_name} genuinely has no free hour left in the week (load does not fit and needs editing)"
+            else:
+                failure_reason = (
+                    f"Mutual timeslot conflict: professor has {prof_free_count} free hour(s), "
+                    f"section has {sec_free_count} free hour(s), but no common free hour exists"
                 )
-            _record_failure("; ".join(reasons))
+
+            diag_details = (
+                f"{failure_reason}. "
+                f"Eligible hours: {total_eligible}/wk. "
+                f"Prof: {prof_breakdown_str}, {prof_free_count}h free. "
+                f"Section: {sec_breakdown_str}, {sec_free_count}h free."
+            )
+
+            logging.warning(
+                f"[ILP UNSCHEDULED DIAGNOSTIC] Course: {course_code} (Section {section_name}) | "
+                f"Professor: {prof_full_name} | {diag_details}"
+            )
+
+            _record_failure(failure_reason, {
+                'eligible_hours': total_eligible,
+                'prof_taken': prof_taken_count,
+                'prof_free': prof_free_count,
+                'prof_breakdown': dict(prof_breakdown),
+                'sec_taken': sec_taken_count,
+                'sec_free': sec_free_count,
+                'sec_breakdown': dict(sec_breakdown),
+                'diagnostic_summary': diag_details,
+            })
             return False
 
         # Helper to schedule a paired block (Lecture + Lab)

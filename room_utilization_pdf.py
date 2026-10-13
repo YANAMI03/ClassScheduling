@@ -98,7 +98,7 @@ _MODE_LABEL = {
 _MODE_TITLE = {
     'room':      'ROOM UTILIZATION',
     'section':   'CLASS SCHEDULE',
-    'professor': 'TEACHING SCHEDULE',
+    'professor': 'FACULTY PROGRAM',
 }
 
 # ---------------------------------------------------------------------------

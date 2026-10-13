@@ -290,13 +290,13 @@ def test_ilp_after_window_end_zone_c(monkeypatch):
     assert (ilp[0]['day'], ilp[0]['start'], ilp[0]['end']) == ('Monday', '05:00 PM', '06:00 PM')
 
 
-def test_ilp_cap_failure_is_reported_as_ilp(monkeypatch):
-    # Window 08:00-20:00. Block 7-8 (zone a) and force the 3h lecture to 17:00-20:00 so
-    # zone (b) is past the window and zone (c) is empty (cap at 8 PM).
+def test_ilp_failure_reported_with_accurate_diagnostics(monkeypatch):
+    # Window 08:00-20:00. Section 1A is booked 07-08 and 08-17, and the 3h lecture is 17-20.
+    # Section 1A genuinely has no free hour left, so all steps (a-e) fail.
     wh = [_day('Monday', '08:00:00', '20:00:00', wid=1)]
     rooms = [_room()]
     schedules = [
-        {'schedule_id': 900, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
+        {'schedule_id': 900, 'section': '1A', 'room_id': 1, 'day': 'Monday',
          'class_start': '08:00:00', 'class_end': '17:00:00', 'professor_load_id': None,
          'program_id': 2, 'semester': '1st Semester', 'archive': False},
         {'schedule_id': 901, 'section': '1A', 'room_id': None, 'day': 'Monday',
@@ -307,12 +307,12 @@ def test_ilp_cap_failure_is_reported_as_ilp(monkeypatch):
                                              [_load(101, 10, 100, 1, 'Alan Turing')], rooms, wh, schedules=schedules)
     assert _ilps(entries) == []
     assert len(errors) == 1
-    assert '8:00 PM cap' in errors[0]['reason']
+    assert 'genuinely has no free hour' in errors[0]['reason']
     # The unscheduled report tags the failure as ILP (not lecture/lab).
     ilp_rows = [u for u in unscheduled if u.get('session_type') == 'ILP']
     assert len(ilp_rows) == 1
     assert ilp_rows[0]['course'] == 'IT-A'
-    assert '8:00 PM cap' in ilp_rows[0]['reason']
+    assert 'genuinely has no free hour' in ilp_rows[0]['reason']
 
 
 def test_lecture_lab_identical_with_and_without_ilp(monkeypatch):
@@ -389,3 +389,132 @@ def test_lecture_and_lab_room_assignment_unchanged(monkeypatch):
     assert all(e['room_id'] == 1 for e in lec)
     assert all(e['room_id'] == 2 for e in lab)
     assert all(_td(e['end']) <= _td('20:00:00') for e in entries)
+
+
+def test_ilp_ladder_step_d_beyond_2h_past_window(monkeypatch):
+    # Window 08:00-15:00.
+    # Block step c (15:00-17:00) with existing schedule for section 1A.
+    # Lecture 08:00-11:00 has hour after class (11:00-12:00) blocked for section 1A.
+    # Step d (17:00-18:00, beyond 2h past window) should place the ILP before step e.
+    wh = [_day('Monday', '08:00:00', '15:00:00', wid=1)]
+    rooms = [_room()]
+    schedules = [
+        # Block step b (11:00-12:00)
+        {'schedule_id': 901, 'section': '1A', 'room_id': None, 'day': 'Monday',
+         'class_start': '11:00:00', 'class_end': '12:00:00', 'professor_load_id': None,
+         'program_id': 2, 'semester': '1st Semester', 'archive': False},
+        # Block step c (15:00-17:00)
+        {'schedule_id': 902, 'section': '1A', 'room_id': None, 'day': 'Monday',
+         'class_start': '15:00:00', 'class_end': '17:00:00', 'professor_load_id': None,
+         'program_id': 2, 'semester': '1st Semester', 'archive': False},
+    ]
+    entries, errors, unscheduled = _generate(
+        monkeypatch, [_course(100, 'IT-A', lec=3, lab=0, ilp=1)],
+        [_prof(10, 'Alan', 'Turing')], [_load(101, 10, 100, 1, 'Alan Turing')],
+        rooms, wh, schedules=schedules
+    )
+    ilp = _ilps(entries)
+    assert errors == []
+    assert len(ilp) == 1
+    # Step d should place it at 17:00-18:00 (5:00 PM - 6:00 PM)
+    assert (ilp[0]['day'], ilp[0]['start'], ilp[0]['end']) == ('Monday', '05:00 PM', '06:00 PM')
+
+
+def test_ilp_ladder_step_e_window_gap(monkeypatch):
+    # Window 08:00-17:00.
+    # Post-window (17:00-20:00) completely blocked for section 1A (steps c and d unavailable).
+    # Course is 2h lecture (no 3h class, so step b unavailable).
+    # Window starts at 8 AM (step a unavailable).
+    # ILP must fall back to step e: a free 1-hour gap inside the window, never overlapping lunch (12:00-13:00).
+    wh = [_day('Monday', '08:00:00', '17:00:00', wid=1)]
+    rooms = [_room()]
+    schedules = [
+        # Block post-window entirely (17:00-20:00)
+        {'schedule_id': 901, 'section': '1A', 'room_id': None, 'day': 'Monday',
+         'class_start': '17:00:00', 'class_end': '20:00:00', 'professor_load_id': None,
+         'program_id': 2, 'semester': '1st Semester', 'archive': False},
+    ]
+    entries, errors, unscheduled = _generate(
+        monkeypatch, [_course(100, 'IT-A', lec=2, lab=0, ilp=1)],
+        [_prof(10, 'Alan', 'Turing')], [_load(101, 10, 100, 1, 'Alan Turing')],
+        rooms, wh, schedules=schedules
+    )
+    ilp = _ilps(entries)
+    assert errors == []
+    assert len(ilp) == 1
+    st = _td(ilp[0]['start'])
+    en = _td(ilp[0]['end'])
+    assert st >= _td('08:00:00'), 'must be within window'
+    assert en <= _td('17:00:00'), 'must be within window'
+    _assert_ilp_bounds(entries, wh)
+
+
+def test_ilp_ladder_a_to_c_tried_before_d_and_e(monkeypatch):
+    # When step a (7:00-8:00 AM) is available, ILP must take step a, NOT step e (gap).
+    wh = [_day('Monday', '07:00:00', '17:00:00', wid=1)]
+    rooms = [_room()]
+    entries, errors, unscheduled = _generate(
+        monkeypatch, [_course(100, 'IT-A', lec=2, lab=0, ilp=1)],
+        [_prof(10, 'Alan', 'Turing')], [_load(101, 10, 100, 1, 'Alan Turing')],
+        rooms, wh
+    )
+    ilp = _ilps(entries)
+    assert errors == []
+    assert len(ilp) == 1
+    assert (ilp[0]['day'], ilp[0]['start']) == ('Monday', '07:00 AM')
+
+
+def test_ilp_failure_diagnostics_when_professor_fully_booked(monkeypatch):
+    # Window 08:00-20:00. Professor Alan Turing is booked during all hours 08:00-20:00.
+    wh = [_day('Monday', '08:00:00', '20:00:00', wid=1)]
+    rooms = [_room(), _room(2, 'Room 102', 'Lecture Room')]
+    schedules = [
+        # Alan Turing (prof_id=10) booked 08:00-17:00 with another section
+        {'schedule_id': 900, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
+         'class_start': '08:00:00', 'class_end': '17:00:00', 'prof_id': 10,
+         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+    ]
+    # IT-A lecture (3h) takes 17:00-20:00 for Turing.
+    entries, errors, unscheduled = _generate(
+        monkeypatch, [_course(100, 'IT-A', lec=3, lab=0, ilp=1)],
+        [_prof(10, 'Alan', 'Turing')], [_load(101, 10, 100, 1, 'Alan Turing')],
+        rooms, wh, schedules=schedules
+    )
+    assert _ilps(entries) == []
+    assert len(errors) == 1
+    assert 'Professor Alan Turing genuinely has no free hour' in errors[0]['reason']
+    assert errors[0]['prof_free'] == 0
+
+
+def test_ilp_failure_diagnostics_mutual_conflict(monkeypatch):
+    # Window 08:00-20:00.
+    # Alan Turing is busy 08:00-10:00 and 11:00-20:00 (free ONLY 10:00-11:00, 1h free).
+    # Section 1A is busy 10:00-20:00 (free ONLY 08:00-10:00, 2h free).
+    # Both have free hours, but no common hour exists!
+    wh = [_day('Monday', '08:00:00', '20:00:00', lunch='12:00:00', wid=1)]
+    rooms = [_room(), _room(2, 'Room 102')]
+    schedules = [
+        # Alan Turing (prof 10) busy 08:00-10:00 with section 9Z
+        {'schedule_id': 901, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
+         'class_start': '08:00:00', 'class_end': '10:00:00', 'prof_id': 10,
+         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+        # Alan Turing (prof 10) busy 11:00-20:00 with section 9Z
+        {'schedule_id': 902, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
+         'class_start': '11:00:00', 'class_end': '20:00:00', 'prof_id': 10,
+         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+        # Section 1A busy 10:00-20:00 with prof 20
+        {'schedule_id': 903, 'section': '1A', 'room_id': 2, 'day': 'Monday',
+         'class_start': '10:00:00', 'class_end': '20:00:00', 'prof_id': 20,
+         'professor_load_id': 998, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+    ]
+    # Course is ILP-only (0 lec, 0 lab, 1 ilp)
+    entries, errors, unscheduled = _generate(
+        monkeypatch, [_course(100, 'ILP-ONLY', lec=0, lab=0, ilp=1)],
+        [_prof(10, 'Alan', 'Turing')], [_load(101, 10, 100, 1, 'Alan Turing')],
+        rooms, wh, schedules=schedules
+    )
+    assert _ilps(entries) == []
+    assert len(errors) == 1
+    assert 'Mutual timeslot conflict' in errors[0]['reason']
+    assert errors[0]['prof_free'] > 0
+    assert errors[0]['sec_free'] > 0

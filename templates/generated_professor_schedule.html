@@ -15,10 +15,10 @@
         <p class="page-subtitle">Interactive weekly timetable grid, free periods, and assigned workload details</p>
     </div>
     <div class="d-flex align-items-center gap-2">
-        <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Professor Schedule to Excel">
+        <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-success btn-sm" title="Export Faculty Program to Excel">
             <i class="bx bx-file me-1"></i> Export to Excel
         </a>
-        <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Professor Schedule to PDF (NEUST format)">
+        <a href="/professor_schedule/{{ (professor.prof_id or professor.professor_key) | urlencode }}/export_pdf?year={{ year_filter }}&semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}" class="btn btn-danger" title="Export Faculty Program to PDF (NEUST format)">
             <i class="bx bx-file-pdf me-1"></i> Export to PDF
         </a>
         <a href="/professor_schedule" class="btn btn-outline-secondary">
@@ -78,21 +78,21 @@
         </div>
     </div>
 
-    <!-- Card 2: Total Classes Assigned -->
+    <!-- Card 2: Total Courses Assigned -->
     <div class="col-md-6">
         <div class="card-custom h-100 p-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing:.05em;">Total Classes</span>
+                <span class="text-muted small fw-semibold text-uppercase" style="letter-spacing:.05em;">Total Courses</span>
                 <div class="stat-card__icon stat-card__icon--emerald" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
                     <i class="bx bx-book-open fs-5"></i>
                 </div>
             </div>
             <h3 class="fw-bold mb-1 text-dark">
-                {{ workload.valid_classes_count }} <span class="fs-6 text-muted fw-normal">class{{ 'es' if workload.valid_classes_count != 1 else '' }}</span>
+                {{ workload.valid_classes_count }} <span class="fs-6 text-muted fw-normal">course{{ 's' if workload.valid_classes_count != 1 else '' }}</span>
             </h3>
             <div class="d-flex align-items-center justify-content-between mt-2">
                 <span class="badge-custom badge-info">Active Schedule</span>
-                <small class="text-muted">Assigned sections</small>
+                <small class="text-muted">Distinct courses</small>
             </div>
         </div>
     </div>
@@ -198,6 +198,35 @@
                                      data-year="Year {{ block.year_level or '' }}"
                                      title="Click for full class details">
                                     <div class="calendar-card-body p-2 d-flex flex-column justify-content-between h-100">
+                                        {% set compact_card = ((block.duration_minutes or 0) <= 60) or (block.session_type == 'ILP') %}
+                                        {% if compact_card %}
+                                        <!-- Compact card (1-hour / ILP): time sits beside the course code so the section stays visible -->
+                                        <div class="d-flex align-items-center justify-content-between gap-1">
+                                            <div class="d-flex align-items-baseline gap-1" style="min-width: 0;">
+                                                <strong class="text-truncate fw-bold text-dark"
+                                                    style="font-size: 0.8rem;"
+                                                    title="{{ block.course_code }}">{{ block.course_code }}</strong>
+                                                <span class="text-muted font-monospace text-nowrap"
+                                                    style="font-size: 0.66rem; flex-shrink: 0;">{{ block.time_range }}</span>
+                                            </div>
+                                            <span class="calendar-pill-badge calendar-pill-badge--type"
+                                                style="font-size: 0.65rem; padding: 1px 6px; flex-shrink: 0;">
+                                                {{ block.session_type }}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex align-items-center justify-content-between gap-1">
+                                            {% if block.section %}
+                                            <span class="text-dark text-truncate fw-semibold"
+                                                style="min-width: 0; font-size: 0.82rem;"
+                                                title="{{ block.section }}"><i class="bx bx-group me-1 text-primary"></i>{{ block.section }}</span>
+                                            {% endif %}
+                                            {% if block.room_name and block.room_name != 'Room' and block.room_name != 'TBA' %}
+                                            <span class="badge bg-light text-secondary border font-monospace ms-auto"
+                                                style="font-size: 0.66rem; flex-shrink: 0;"><i class="bx bx-building me-1"></i>{{ block.room_name }}</span>
+                                            {% endif %}
+                                        </div>
+                                        {% else %}
+                                        <!-- Default layout (longer sessions) -->
                                         <div>
                                             <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
                                                 <strong class="text-truncate d-block fw-bold text-dark" style="font-size: 0.8rem; max-width: 140px;" title="{{ block.course_code }}">{{ block.course_code }}</strong>
@@ -207,17 +236,18 @@
                                             </div>
                                             <div class="d-flex align-items-center justify-content-between text-muted small" style="font-size: 0.72rem;">
                                                 <span class="fw-semibold text-dark font-monospace">{{ block.time_range }}</span>
+                                                {% if block.room_name and block.room_name != 'Room' and block.room_name != 'TBA' %}
+                                                <span class="badge bg-light text-secondary border font-monospace" style="font-size: 0.66rem;"><i class="bx bx-building me-1"></i>{{ block.room_name }}</span>
+                                                {% endif %}
                                             </div>
                                         </div>
                                         <!-- Data Mapping for Professor Schedule: Display Subject Code, Class Type, Time Range, and Section Name/Room -->
-                                        <div class="d-flex align-items-center justify-content-between text-muted small text-truncate mt-auto pt-1 gap-1" style="font-size: 0.7rem;">
-                                            {% if block.section %}
-                                            <span class="text-truncate text-dark fw-semibold" style="font-size: 0.82rem;"><i class="bx bx-group me-1 text-primary"></i>{{ block.section }}</span>
-                                            {% endif %}
-                                            {% if block.room_name and block.room_name != 'Room' and block.room_name != 'TBA' %}
-                                            <span class="badge bg-light text-secondary border font-monospace" style="font-size: 0.66rem;"><i class="bx bx-building me-1"></i>{{ block.room_name }}</span>
-                                            {% endif %}
+                                        {% if block.section %}
+                                        <div class="text-truncate text-dark fw-semibold mt-auto pt-1" style="font-size: 0.82rem;" title="{{ block.section }}">
+                                            <i class="bx bx-group me-1 text-primary"></i>{{ block.section }}
                                         </div>
+                                        {% endif %}
+                                        {% endif %}
                                     </div>
                                 </div>
                                 {% elif block.type == 'lunch' %}

@@ -128,7 +128,7 @@
                     {% endif %}
                 </div>
                 <div class="section-card__meta d-flex align-items-center gap-3 flex-wrap text-muted small">
-                    <span><i class="bx bx-book-open me-1 text-primary"></i><strong>{{ professor.class_count }}</strong> class{{ 'es' if professor.class_count != 1 else '' }} assigned</span>
+                    <span><i class="bx bx-book-open me-1 text-primary"></i><strong>{{ professor.class_count }}</strong> course{{ 's' if professor.class_count != 1 else '' }} assigned</span>
                     {% if professor.total_hours is defined %}
                     <span><i class="bx bx-time-five me-1 text-primary"></i><strong>{{ professor.total_hours }} hrs</strong> assigned</span>
                     {% endif %}

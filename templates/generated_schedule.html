@@ -19,19 +19,8 @@
     </div>
     <div class="d-flex gap-2 align-items-center flex-wrap">
         {% if session.get('role') != 'viewer' %}
-        <div class="input-group input-group-sm" style="width: auto;">
-            <label class="input-group-text bg-light text-muted fw-semibold" for="exportThemeSelect">
-                <i class="bx bx-palette me-1"></i>Export Theme:
-            </label>
-            <select class="form-select form-select-sm" id="exportThemeSelect"
-                onchange="handleSectionThemeChange(this.value)" style="width: 110px;">
-                {% for t in theme_options or ['Blue', 'Red', 'Green', 'Purple', 'Orange', 'Teal', 'Pink'] %}
-                <option value="{{ t }}" {% if (current_theme or 'Blue')==t %}selected{% endif %}>{{ t }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <a id="exportExcelBtn"
-            href="/schedule/{{ section.section_name or section.section }}/export?semester={{ semester_filter }}&major={{ major_filter }}&theme={{ current_theme or 'Blue' }}{% if is_preview %}&mode=preview{% endif %}"
+            href="/schedule/{{ section.section_name or section.section }}/export?semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}"
             class="btn btn-success" title="Export Section Schedule to Excel">
             <i class="bx bx-file me-1"></i> Export to Excel
         </a>
@@ -612,38 +601,5 @@
                     });
             });
         }
-    });
-    function handleSectionThemeChange(newTheme) {
-        const secName = "{{ section.section_name or section.section }}";
-        const exportBtn = document.getElementById('exportExcelBtn');
-        if (exportBtn) {
-            try {
-                let url = new URL(exportBtn.href, window.location.origin);
-                url.searchParams.set('theme', newTheme);
-                exportBtn.href = url.pathname + url.search;
-            } catch (e) {
-                let base = exportBtn.getAttribute('href').split('&theme=')[0];
-                exportBtn.setAttribute('href', base + '&theme=' + encodeURIComponent(newTheme));
-            }
-        }
-        // Persist via AJAX API
-        fetch('/api/section_theme', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({ section: secName, theme: newTheme })
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.success) {
-                    if (typeof showToast === 'function') {
-                        showToast(`Excel theme set to ${newTheme} for Section ${secName}`, 'info');
-                    }
-                }
-            })
-            .catch(err => console.error('Error saving section theme:', err));
-    }
 </script>
 {% endblock %}

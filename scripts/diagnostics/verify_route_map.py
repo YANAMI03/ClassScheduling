@@ -91,7 +91,6 @@ ROUTE_MAP = {
     'export_section_schedule': {'admin', 'scheduler', 'viewer'},
     'export_section_schedule_pdf': {'admin', 'scheduler', 'viewer'},
     'api_section_availability': {'admin', 'scheduler', 'viewer'},
-    'api_section_theme': {'admin', 'scheduler', 'viewer'},
 
     # Schedules: Professor Schedule (Admin READ-ONLY, Scheduler full, Viewer READ-ONLY)
     'professor_schedule': {'admin', 'scheduler', 'viewer'},

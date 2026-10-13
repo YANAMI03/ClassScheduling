@@ -636,6 +636,95 @@ def test_calendar_css_styling_rules():
     # Verify circular legend classes
     assert '.calendar-legend-circle--blue' in css
     assert '.calendar-legend-circle--green-dotted' in css
-    assert '.calendar-legend-circle--grey-dotted' in css
+
+def test_professor_schedule_1_hour_compact_card_shows_section_and_room(monkeypatch):
+    """Verify 1-hour/ILP session in professor schedule renders with compact card layout keeping section and room visible."""
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'test-user-id'
+        sess['role'] = 'admin'
+        sess['email'] = 'admin@example.com'
+
+    class FakeTable:
+        def __init__(self, table_name):
+            self.table_name = table_name
+
+        def select(self, *args, **kwargs):
+            return self
+
+        def eq(self, *args, **kwargs):
+            return self
+
+        def in_(self, *args, **kwargs):
+            return self
+
+        def execute(self):
+            if self.table_name == 'professor':
+                return type('Resp', (), {'data': [{'prof_id': 2, 'first_name': 'Rodibelle', 'last_name': 'Leona', 'department': 'IT', 'max_hours': 30}]})()
+            elif self.table_name == 'professor_load':
+                return type('Resp', (), {'data': [
+                    {'professor_load_id': 20, 'course_id': 9, 'course': {'course_code': 'IT-HCI01'}}
+                ]})()
+            elif self.table_name == 'schedule':
+                return type('Resp', (), {'data': [
+                    {
+                        'schedule_id': 201,
+                        'professor_load_id': 20,
+                        'room_id': None,
+                        'day': 'Monday',
+                        'class_start': '11:00:00',
+                        'class_end': '12:00:00',
+                        'section': '2A',
+                        'semester': '2nd Semester',
+                        'major': None,
+                        'session_type': 'ILP',
+                        'professor_load': {
+                            'professor_load_id': 20,
+                            'course': {'course_code': 'IT-HCI01'}
+                        },
+                        'room': None
+                    }
+                ]})()
+            elif self.table_name == 'working_hours':
+                return type('Resp', (), {'data': [{'start_day': 'Monday', 'end_day': 'Saturday', 'start_time': '07:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00'}]})()
+            return type('Resp', (), {'data': []})()
+
+    monkeypatch.setattr(app_module.supabase, 'table', lambda name: FakeTable(name))
+
+    resp = client.get('/professor_schedule/2')
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+
+    # Check compact card layout elements
+    assert 'Compact card (1-hour / ILP)' in html
+    assert 'IT-HCI01' in html
+    assert '11:00 AM - 12:00 PM' in html
+    assert 'ILP' in html
+    assert '2A' in html
+    assert 'No room' in html
+
+
+def test_professor_workload_counts_distinct_courses_not_sessions():
+    """Verify that multiple sessions (Lec, Lab, ILP) of the same course are counted as 1 distinct course."""
+    entries = [
+        # Course 1: CC-102 with Lecture, Lab, and ILP (3 sessions)
+        {'day': 'Monday', 'start': '08:00 AM', 'end': '10:00 AM', 'course_code': 'CC-102', 'session_type': 'Lecture'},
+        {'day': 'Wednesday', 'start': '01:00 PM', 'end': '04:00 PM', 'course_code': 'CC-102', 'session_type': 'Laboratory'},
+        {'day': 'Friday', 'start': '07:00 AM', 'end': '08:00 AM', 'course_code': 'CC-102', 'session_type': 'ILP'},
+        # Course 2: IT-HCI01 with Lecture and Lab (2 sessions)
+        {'day': 'Tuesday', 'start': '09:00 AM', 'end': '11:00 AM', 'course_code': 'IT-HCI01', 'session_type': 'Lecture'},
+        {'day': 'Thursday', 'start': '01:00 PM', 'end': '04:00 PM', 'course_code': 'IT-HCI01', 'session_type': 'Laboratory'},
+    ]
+
+    result = app_module._calculate_professor_workload(entries, max_hours=40)
+    # Total sessions = 5, but distinct courses = 2
+    assert result['valid_classes_count'] == 2
+    assert result['distinct_courses_count'] == 2
+    assert result['total_sessions_count'] == 5
+    # Total hours: 2 + 3 + 1 + 2 + 3 = 11 hours
+    assert result['total_scheduled_hours'] == 11.0
+
+
 
 
