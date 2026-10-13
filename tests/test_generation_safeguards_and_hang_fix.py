@@ -110,20 +110,17 @@ def test_pagination_safeguard():
 
 
 def test_baseline_load_order_and_canonical_working_hours_safeguards():
-    """Verify that _get_baseline_professor_load_order maps real professor keys,
-    canonical timeslot fallback covers until 20:00:00 on Tue-Fri, and cutoff handling
-    does not falsely block evening sessions when ranking table is absent."""
-    # 1. Baseline order map must contain real faculty keys
+    """Verify that _get_baseline_professor_load_order maps real professor keys.
+    Per-professor time cutoffs no longer exist (LOHB ranking removed), so there is no
+    cutoff helper left to falsely block evening sessions."""
+    # Baseline order map must contain real faculty keys
     order_map = app_module._get_baseline_professor_load_order()
     assert len(order_map) > 0, "Baseline order map must not be empty"
     # Verify specialized faculty like Cerin, Corpuz, Tambio, Franco have mapped ranks
     assert any('marcelino s. cerin iii' in str(k) for k in order_map.keys()), "Cerin must be in canonical load order"
     assert any('jev d. corpuz' in str(k) for k in order_map.keys()), "Corpuz must be in canonical load order"
 
-    # 2. Cutoff check with empty map must not block evening slots
-    res = app_module._check_professor_cutoff_conflict(
-        'marcelino s. cerin iii', 'Tuesday', '18:00:00', '20:00:00',
-        session_type='Laboratory', prof_cutoff_map={}, day_cutoff_map={'Tuesday': '17:00:00'}
-    )
-    assert res is None, "Evening slot must not be blocked when no ranking cutoff constraint exists"
+    # Per-professor cutoff logic was removed entirely.
+    assert not hasattr(app_module, '_check_professor_cutoff_conflict'), \
+        "Per-professor cutoff logic must be removed"
 

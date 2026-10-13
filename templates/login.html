@@ -234,7 +234,7 @@
                 {% elif active_tab == 'resend' %}
                 Request a new verification link
                 {% else %}
-                Sign in to manage class schedules
+                Login to manage class schedules
                 {% endif %}
             </p>
 
@@ -274,7 +274,7 @@
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary">
-                    <i class="bx bx-log-in me-2"></i> Sign In
+                    <i class="bx bx-log-in me-2"></i> Login
                 </button>
                 <div class="login-toggle">
                     Don't have an account? <a href="{{ url_for('signup') }}" id="showSignup">Sign up</a>
@@ -337,7 +337,7 @@
                     <i class="bx bx-user-plus me-2"></i> Sign Up
                 </button>
                 <div class="login-toggle">
-                    Already have an account? <a href="#" id="showLogin">Sign In</a>
+                    Already have an account? <a href="#" id="showLogin">Login</a>
                 </div>
                 <div class="login-toggle mt-2">
                     Didn't receive verification email? <a href="#" id="showResendFromSignup">Resend Verification</a>
@@ -358,7 +358,7 @@
                     <i class="bx bx-envelope me-2"></i> Send Verification Link
                 </button>
                 <div class="login-toggle mt-3">
-                    <a href="#" id="backToLoginFromResend">Back to Sign In</a>
+                    <a href="#" id="backToLoginFromResend">Back to Login</a>
                 </div>
             </form>
         </div>
@@ -458,7 +458,7 @@
                 signupForm.classList.add('hidden');
                 resendForm.classList.add('hidden');
                 loginForm.classList.remove('hidden');
-                formSubtitle.textContent = 'Sign in to manage class schedules';
+                formSubtitle.textContent = 'Login to manage class schedules';
             }
         }
 

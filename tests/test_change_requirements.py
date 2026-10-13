@@ -656,50 +656,19 @@ def test_checklist_ilp_hours_validation_course_routes(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# Checklist Item 10: Change 5 - Professor Availability Cutoff Conflicts
+# Checklist Item 10: LOHB ranking / per-professor cutoff logic removed
 # --------------------------------------------------------------------------
-def test_checklist_professor_cutoff_conflict_check(monkeypatch):
-    """_check_professor_cutoff_conflict detects cutoff violations for regular faculty while exempting LOHB and ILP."""
-    # Faculty 1: Regular ranking (has_cutoff = True)
-    # Faculty 2: LOHB ranking (has_cutoff = False)
-    rankings = [
-        {'academic_ranking_id': 1, 'name': 'Assistant Professor', 'has_cutoff': True, 'max_hours': 40},
-        {'academic_ranking_id': 2, 'name': 'LOHB / Part-Time', 'has_cutoff': False, 'max_hours': 40},
-    ]
-    profs = [
-        {'prof_id': 1, 'first_name': 'John', 'last_name': 'Doe', 'academic_ranking_id': 1, 'academic_ranking': rankings[0]},
-        {'prof_id': 2, 'first_name': 'Jane', 'last_name': 'Smith', 'academic_ranking_id': 2, 'academic_ranking': rankings[1]},
-    ]
-    working_hours = [
-        {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'professor_cutoff': '16:00:00'},
-        {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'professor_cutoff': '17:00:00'},
-    ]
-    db = MockSupabase(professors=profs, working_hours=working_hours, academic_rankings=rankings)
-    monkeypatch.setattr(app_module, 'supabase', db)
-
-    # 1. Regular faculty ending after cutoff on Monday (17:00 > 16:00) -> Conflict
-    conf1 = app_module._check_professor_cutoff_conflict(1, 'Monday', '14:00:00', '17:00:00', session_type='Lecture')
-    assert conf1 is not None
-    assert 'has a daily cutoff' in conf1['message']
-
-    # 2. Regular faculty ending before/at cutoff on Monday (16:00 <= 16:00) -> No conflict
-    conf2 = app_module._check_professor_cutoff_conflict(1, 'Monday', '13:00:00', '16:00:00', session_type='Lecture')
-    assert conf2 is None
-
-    # 3. LOHB faculty (has_cutoff = False) ending after cutoff on Monday -> Exempt (No conflict)
-    conf3 = app_module._check_professor_cutoff_conflict(2, 'Monday', '16:00:00', '19:00:00', session_type='Lecture')
-    assert conf3 is None
-
-    # 4. ILP session ending after cutoff on Monday -> Exempt (No conflict)
-    conf4 = app_module._check_professor_cutoff_conflict(1, 'Monday', '16:00:00', '17:00:00', session_type='ILP')
-    assert conf4 is None
+def test_checklist_per_professor_cutoff_logic_removed():
+    """The LOHB academic ranking and per-professor time-cutoff logic no longer exist."""
+    assert not hasattr(app_module, '_check_professor_cutoff_conflict'), \
+        "Per-professor cutoff conflict helper must be removed"
 
 
 # --------------------------------------------------------------------------
-# Checklist Item 11: ILP sessions use lecture rooms
+# Checklist Item 11: ILP sessions do not use a room
 # --------------------------------------------------------------------------
-def test_checklist_schedule_generation_places_ilp_in_lecture_room(monkeypatch):
-    """Schedule generation assigns ILP entries to an available lecture room."""
+def test_checklist_schedule_generation_places_ilp_without_room(monkeypatch):
+    """Schedule generation never assigns a room to an ILP entry."""
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
@@ -709,20 +678,20 @@ def test_checklist_schedule_generation_places_ilp_in_lecture_room(monkeypatch):
         session['program_id'] = 1
 
     courses = [
-        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3},
+        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3, 'archive': False},
     ]
     profs = [
-        {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'academic_ranking_id': 1, 'time_designation': 5, 'academic_ranking': {'name': 'Instructor', 'has_cutoff': True, 'max_hours': 40}},
+        {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'time_designation': 5},
     ]
     loads = [
-        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 1},
+        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 1, 'professor_name': 'Alan Turing'},
     ]
     rooms = [
-        {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1},
+        {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1, 'archive': False},
     ]
     working_hours = [
-        {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '16:00:00'},
-        {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
+        {'working_hours_id': 1, 'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'archive': False},
+        {'working_hours_id': 2, 'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'archive': False},
     ]
 
     db = MockSupabase(courses=courses, professors=profs, loads=loads, rooms=rooms, working_hours=working_hours)
@@ -746,16 +715,20 @@ def test_checklist_schedule_generation_places_ilp_in_lecture_room(monkeypatch):
     ilp_entries = [e for e in entries if e.get('session_type') == 'ILP']
     assert len(ilp_entries) == 1
     ilp_e = ilp_entries[0]
-    assert ilp_e['room_id'] == 1
-    assert ilp_e['room_name'] == 'Room 101'
+    assert ilp_e['room_id'] is None
+    assert ilp_e['room_name'] == 'No room'
     assert ilp_e['section'] == '1A'
     assert ilp_e['course_id'] == 100
+    # Monday's window starts at 07:00 and that first hour is free, so ILP takes 07:00-08:00.
+    assert ilp_e['day'] == 'Monday'
+    assert ilp_e['start'] == '07:00 AM'
+    assert ilp_e['end'] == '08:00 AM'
 
 
 def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
     """Verify that every section of every course with ilp_hours = 1 gets its own 1-hour ILP session,
-    and placement prioritizes first-hour, last-hour, respects operating windows, avoids lunch,
-    and allows sharing same slot only when taught by different professors.
+    and placement only uses the allowed zones (7-8 AM, after a 3-hour class, after the window end),
+    avoids lunch, never reserves a room, and never double-books a professor or section.
     """
     client = app_module.app.test_client()
     with client.session_transaction() as session:
@@ -766,24 +739,24 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
         session['program_id'] = 1
 
     courses = [
-        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3},
+        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 1, 'units': 3, 'archive': False},
     ]
     # Professor Alan Turing assigned 3 sections
     profs = [
-        {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'academic_ranking_id': 1, 'time_designation': 5, 'academic_ranking': {'name': 'Instructor', 'has_cutoff': True, 'max_hours': 40}},
+        {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'time_designation': 5},
     ]
     loads = [
-        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 3},
+        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 3, 'professor_name': 'Alan Turing'},
     ]
     rooms = [
-        {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1},
+        {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1, 'archive': False},
     ]
     working_hours = [
-        {'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '16:00:00'},
-        {'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
-        {'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
-        {'day': 'Thursday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
-        {'day': 'Friday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'professor_cutoff': '17:00:00'},
+        {'working_hours_id': 1, 'day': 'Monday', 'start_time': '07:00:00', 'end_time': '19:00:00', 'lunch_time': '12:00:00', 'archive': False},
+        {'working_hours_id': 2, 'day': 'Tuesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'archive': False},
+        {'working_hours_id': 3, 'day': 'Wednesday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'archive': False},
+        {'working_hours_id': 4, 'day': 'Thursday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'archive': False},
+        {'working_hours_id': 5, 'day': 'Friday', 'start_time': '08:00:00', 'end_time': '20:00:00', 'lunch_time': '12:00:00', 'archive': False},
     ]
 
     db = MockSupabase(courses=courses, professors=profs, loads=loads, rooms=rooms, working_hours=working_hours)
@@ -800,52 +773,60 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
     entries = app_module._get_preview_for_user(preview_id=pid)
     ilp_entries = [e for e in entries if e.get('session_type') == 'ILP']
 
+    from datetime import timedelta as _td
+    from collections import defaultdict as _dd
+
     # 1. Exactly 3 ILP entries generated across 3 sections (1A, 1B, 1C)
     assert len(ilp_entries) == 3
     sec_set = {e['section'] for e in ilp_entries}
     assert sec_set == {'1A', '1B', '1C'}
 
-    # 2. Each ILP entry uses the lecture room, is 1 hour, and avoids lunch
+    # 2. Each ILP entry is exactly 1 hour, has no room, belongs to Alan, avoids lunch, and obeys the 8 PM cap.
+    _lunch_start = app_module._parse_time('12:00:00')
+    _lunch_end = app_module._parse_time('13:00:00')
+    _day_cap = app_module._parse_time('20:00:00')
     for e in ilp_entries:
-        assert e['room_id'] == 1
-        assert e['room_name'] == 'Room 101'
+        assert e['room_id'] is None
+        assert e['room_name'] == 'No room'
         assert e['professor_name'] == 'Alan Turing'
-        # Must not be during lunch (12:00 PM)
-        assert '12:00 PM' not in e['start']
+        st = app_module._parse_time(e['start'])
+        en = app_module._parse_time(e['end'])
+        assert (en - st) == _td(hours=1)
+        assert en <= _day_cap, 'ILP must never end after 8:00 PM'
+        assert not (st < _lunch_end and _lunch_start < en), 'ILP must not overlap lunch'
 
-    # 3. Rule verification for fallback placement:
-    # In this run, Alan Turing taught 1A lecture on Monday 07:00-10:00 AM, making Monday 07:00-08:00 unavailable for Alan.
-    # Therefore, all 3 ILPs must fall back to the last hour of a day (window end minus 1 hour)
-    valid_last_hours = {
-            # Since the professor has a cutoff of 16:00 on Monday and 17:00 on Tue-Fri,
-            # the last available hours are 15:00-16:00 (Monday) and 16:00-17:00 (Tue-Fri).
-            ('Monday', '03:00 PM', '04:00 PM'),
-            ('Tuesday', '04:00 PM', '05:00 PM'),
-            ('Tuesday', '03:00 PM', '04:00 PM'), # Since 04:00 PM is taken by another section
-            ('Wednesday', '04:00 PM', '05:00 PM'),
-            ('Thursday', '04:00 PM', '05:00 PM'),
-            ('Friday', '04:00 PM', '05:00 PM'),
-        }
-    for e in ilp_entries:
-        assert (e['day'], e['start'], e['end']) in valid_last_hours
+    # 3. No professor is double-booked: with a single professor, all ILP hours are distinct.
+    ilp_slots = {(e['day'], e['start']) for e in ilp_entries}
+    assert len(ilp_slots) == len(ilp_entries)
 
-    # Must NEVER land in the first hour of Tuesday to Friday (08:00-09:00 AM)
-    assert not any(e['day'] in ['Tuesday', 'Wednesday', 'Thursday', 'Friday'] and e['start'] == '08:00 AM' for e in ilp_entries)
+    # 4. No section and no professor is double-booked by the generated sessions.
+    def _overlap(a, b):
+        return a[0] < b[1] and b[0] < a[1]
 
-    # Spread across days: 3 fallback sessions should be spread across 3 different days
-    assert len(set(e['day'] for e in ilp_entries)) >= 2
+    for key in ('section', 'professor_name'):
+        buckets = _dd(list)
+        for e in entries:
+            st = app_module._parse_time(e['start'])
+            en = app_module._parse_time(e['end'])
+            if st is None or en is None:
+                continue
+            buckets[(e.get(key), e['day'])].append((st, en))
+        for group in buckets.values():
+            group.sort()
+            for i in range(1, len(group)):
+                assert not _overlap(group[i - 1], group[i]), f'{key} double-booked'
 
-    # 4. Subtest: ILPs use the lecture room when available, even when professors differ
+    # 4. Subtest: ILPs never occupy a room, even when professors differ
     free_courses = [
-        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 1, 'units': 1},
+        {'course_id': 100, 'course_code': 'IT-ILP', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 0, 'lab_hours': 0, 'ilp_hours': 1, 'units': 1, 'archive': False},
     ]
     profs2 = [
-        {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'academic_ranking_id': 1, 'time_designation': 5, 'academic_ranking': {'name': 'Instructor', 'has_cutoff': True, 'max_hours': 40}},
-        {'prof_id': 20, 'first_name': 'Grace', 'last_name': 'Hopper', 'program_id': 1, 'academic_ranking_id': 1, 'time_designation': 5, 'academic_ranking': {'name': 'Instructor', 'has_cutoff': True, 'max_hours': 40}},
+        {'prof_id': 10, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1, 'time_designation': 5},
+        {'prof_id': 20, 'first_name': 'Grace', 'last_name': 'Hopper', 'program_id': 1, 'time_designation': 5},
     ]
     loads2 = [
-        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 1},
-        {'id': 102, 'prof_id': 20, 'course_id': 100, 'sections': 1},
+        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 1, 'professor_name': 'Alan Turing'},
+        {'id': 102, 'prof_id': 20, 'course_id': 100, 'sections': 1, 'professor_name': 'Grace Hopper'},
     ]
     db2 = MockSupabase(courses=free_courses, professors=profs2, loads=loads2, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db2)
@@ -858,14 +839,16 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
     entries2 = app_module._get_preview_for_user(preview_id=pid2)
     ilp2 = [e for e in entries2 if e.get('session_type') == 'ILP']
     assert len(ilp2) == 2
-    assert all(e['room_id'] in (None, 1) for e in ilp2)
-    assert all(e['room_name'] == ('Room 101' if e['room_id'] == 1 else 'TBA') for e in ilp2)
+    assert all(e['room_id'] is None for e in ilp2)
+    assert all(e['room_name'] == 'No room' for e in ilp2)
     assert {e['professor_name'] for e in ilp2} == {'Alan Turing', 'Grace Hopper'}
+    # Global ILP limit removed: both sections may share Monday 7-8 AM (different professors).
+    assert {(e['day'], e['start']) for e in ilp2} == {('Monday', '07:00 AM')}
 
     # 5. Subtest: Same professor with 2 sections where Monday 07:00-08:00 is free
     # First section takes Monday 07:00-08:00; second section falls back to last hour of a day (e.g. Tuesday 07:00-08:00 PM)
     loads3 = [
-        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 2},
+        {'id': 101, 'prof_id': 10, 'course_id': 100, 'sections': 2, 'professor_name': 'Alan Turing'},
     ]
     db3 = MockSupabase(courses=free_courses, professors=profs, loads=loads3, rooms=rooms, working_hours=working_hours)
     monkeypatch.setattr(app_module, 'supabase', db3)
@@ -878,18 +861,19 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
     entries3 = app_module._get_preview_for_user(preview_id=pid3)
     ilp3 = [e for e in entries3 if e.get('session_type') == 'ILP']
     assert len(ilp3) == 2
-    # Both ILPs are assigned to distinct lecture-room slots.
+    # Same professor: the two ILPs cannot overlap, and have no rooms.
     ilp3_slots = {(e['day'], e['start'], e['end']) for e in ilp3}
     assert len(ilp3_slots) == 2
-    assert all(e['room_id'] == 1 and e['room_name'] == 'Room 101' for e in ilp3)
+    assert all(e['room_id'] is None and e['room_name'] == 'No room' for e in ilp3)
 
 
 
 # --------------------------------------------------------------------------
-# Checklist Item 12: Change 5 - Schedule Generation Enforces Cutoff & TBA Fallback
+# Checklist Item 12: Lecture/lab limited only by the working-hours window
 # --------------------------------------------------------------------------
-def test_checklist_schedule_generation_enforces_cutoffs(monkeypatch):
-    """When all available slots on a day exceed the professor cutoff, regular faculty with has_cutoff=True are not assigned and fallback TBA is used; faculty with has_cutoff=False can be scheduled."""
+def test_checklist_lecture_limited_only_by_working_hours_window(monkeypatch):
+    """With per-professor cutoff removed, a 3-hour lecture is placed anywhere inside the
+    day's working-hours window, identically for every professor (no LOHB exemption needed)."""
     client = app_module.app.test_client()
     with client.session_transaction() as session:
         session['user_id'] = 1
@@ -898,55 +882,40 @@ def test_checklist_schedule_generation_enforces_cutoffs(monkeypatch):
         session['program'] = 'BSIT'
         session['program_id'] = 1
 
-    # Single day Monday: 14:00 to 19:00 (5 hours), cutoff at 16:00
-    # Any 3-hour lecture (e.g. 14:00-17:00, 15:00-18:00, 16:00-19:00) ends at 17:00 or later, exceeding the 16:00 cutoff!
+    # Single day Monday, window 14:00-19:00 (no lunch). A 3h lecture must fit inside it.
     working_hours = [
-        {'day': 'Monday', 'start_time': '14:00:00', 'end_time': '19:00:00', 'professor_cutoff': '16:00:00'},
+        {'working_hours_id': 1, 'day': 'Monday', 'start_time': '14:00:00', 'end_time': '19:00:00', 'lunch_time': None, 'archive': False},
     ]
     rooms = [
-        {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1},
+        {'room_id': 1, 'room_name': 'Room 101', 'room_type': 'Lecture Room', 'program_id': 1, 'archive': False},
     ]
     courses = [
-        {'course_id': 201, 'course_code': 'IT-CUTOFF', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
+        {'course_id': 201, 'course_code': 'IT-WINDOW', 'year_level': 1, 'semester': '1st Semester', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3, 'archive': False},
     ]
 
-    # Subtest A: Regular faculty with has_cutoff = True
-    profs_regular = [
-        {'prof_id': 20, 'first_name': 'Marie', 'last_name': 'Curie', 'program_id': 1, 'academic_ranking_id': 1, 'time_designation': 5, 'academic_ranking': {'name': 'Professor', 'has_cutoff': True, 'max_hours': 40}},
-    ]
-    loads_regular = [
-        {'id': 202, 'prof_id': 20, 'course_id': 201, 'sections': 1},
-    ]
-    db_regular = MockSupabase(courses=courses, professors=profs_regular, loads=loads_regular, rooms=rooms, working_hours=working_hours)
-    monkeypatch.setattr(app_module, 'supabase', db_regular)
-    monkeypatch.setattr(app_module, '_get_user_program_id', lambda: 1)
-    monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
-    monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
+    for pid, fname, lname in ((20, 'Marie', 'Curie'), (30, 'Ada', 'Lovelace')):
+        profs = [
+            {'prof_id': pid, 'first_name': fname, 'last_name': lname, 'program_id': 1, 'time_designation': 5},
+        ]
+        loads = [
+            {'id': 200 + pid, 'prof_id': pid, 'course_id': 201, 'sections': 1, 'professor_name': f"{fname} {lname}"},
+        ]
+        db = MockSupabase(courses=courses, professors=profs, loads=loads, rooms=rooms, working_hours=working_hours)
+        monkeypatch.setattr(app_module, 'supabase', db)
+        monkeypatch.setattr(app_module, '_get_user_program_id', lambda: 1)
+        monkeypatch.setattr(app_module, '_get_department', lambda: 'CICT')
+        monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
-    resp_reg = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '90'}, follow_redirects=True)
-    assert resp_reg.status_code == 200
-    with client.session_transaction() as sess:
-        pid_reg = sess.get('preview_id')
-    entries_reg = app_module._get_preview_for_user(preview_id=pid_reg)
-    # Marie Curie could not be assigned because every slot ends after 16:00 cutoff.
-    # Under the strict generation rule, no fallback TBA or placeholder is created; session remains unscheduled.
-    assert len(entries_reg) == 0
-
-    # Subtest B: LOHB faculty with has_cutoff = False
-    profs_lohb = [
-        {'prof_id': 30, 'first_name': 'Ada', 'last_name': 'Lovelace', 'program_id': 1, 'academic_ranking_id': 2, 'time_designation': 5, 'academic_ranking': {'name': 'LOHB Faculty', 'has_cutoff': False, 'max_hours': 40}},
-    ]
-    loads_lohb = [
-        {'id': 203, 'prof_id': 30, 'course_id': 201, 'sections': 1},
-    ]
-    db_lohb = MockSupabase(courses=courses, professors=profs_lohb, loads=loads_lohb, rooms=rooms, working_hours=working_hours)
-    monkeypatch.setattr(app_module, 'supabase', db_lohb)
-
-    resp_lohb = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '90'}, follow_redirects=True)
-    assert resp_lohb.status_code == 200
-    with client.session_transaction() as sess:
-        pid_lohb = sess.get('preview_id')
-    entries_lohb = app_module._get_preview_for_user(preview_id=pid_lohb)
-    assert len(entries_lohb) == 1
-    # Ada Lovelace is exempt from cutoff and is successfully assigned
-    assert entries_lohb[0]['prof_id'] == 30
+        resp = client.post('/generate_schedule', data={'semester': '1st Semester', 'students[1]': '90'}, follow_redirects=True)
+        assert resp.status_code == 200
+        with client.session_transaction() as sess:
+            pid_preview = sess.get('preview_id')
+        entries = app_module._get_preview_for_user(preview_id=pid_preview)
+        # No cutoff: the lecture is scheduled for both professors, inside the window.
+        assert len(entries) == 1, f"{fname} {lname} should get exactly one lecture"
+        e = entries[0]
+        st = app_module._parse_time(e['start'])
+        en = app_module._parse_time(e['end'])
+        assert st >= app_module._parse_time('14:00:00')
+        assert en <= app_module._parse_time('19:00:00')
+        assert e['room_id'] == 1
