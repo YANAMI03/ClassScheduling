@@ -251,7 +251,7 @@
             </div>
             <div class="row g-0 flex-grow-1">
                 <div class="col-6 p-3 border-end border-bottom">
-                    <div class="fs-3 fw-bold text-dark lh-1">{{ professors|length }}</div>
+                    <div class="fs-3 fw-bold text-dark lh-1">{{ professors|length if professors is defined and professors else (professor_loads|groupby('professor_key')|list|length) }}</div>
                     <div class="small text-muted text-uppercase mt-2" style="letter-spacing:.04em;">Total Faculty</div>
                 </div>
                 <div class="col-6 p-3 border-bottom">

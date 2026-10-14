@@ -67,10 +67,10 @@ def test_client_and_db(monkeypatch):
     - Prof 4 (John von Neumann): 0 loads -> 0 hrs
     """
     courses = [
-        {'course_id': 101, 'course_code': 'IT101', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3},
-        {'course_id': 102, 'course_code': 'IT102', 'program_id': 1, 'lecture_hours': 2, 'lab_hours': 3, 'ilp_hours': 0, 'units': 3},
-        {'course_id': 103, 'course_code': 'IT103', 'program_id': 1, 'lecture_hours': 4, 'lab_hours': 0, 'ilp_hours': 0, 'units': 4},
-        {'course_id': 104, 'course_code': 'IT104', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 3, 'ilp_hours': 0, 'units': 4},
+        {'course_id': 101, 'course_code': 'IT101', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3, 'archive': False},
+        {'course_id': 102, 'course_code': 'IT102', 'program_id': 1, 'lecture_hours': 2, 'lab_hours': 3, 'ilp_hours': 0, 'units': 3, 'archive': False},
+        {'course_id': 103, 'course_code': 'IT103', 'program_id': 1, 'lecture_hours': 4, 'lab_hours': 0, 'ilp_hours': 0, 'units': 4, 'archive': False},
+        {'course_id': 104, 'course_code': 'IT104', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 3, 'ilp_hours': 0, 'units': 4, 'archive': False},
     ]
 
     professor_loads = [
@@ -267,3 +267,97 @@ def test_tracker_bar_scaling_clamped_at_100():
     # Overloaded: e.g. 46 hrs (42h + 4h)
     over_widths = compute_bar_scale(46.0, [42.0, 4.0])
     assert pytest.approx(sum(over_widths), 0.001) == 100.0  # Clamped at 100%
+
+
+def test_overview_card_total_faculty_and_stats(test_client_and_db):
+    """Verify that the Overview card displays correct numbers:
+    - Total Faculty is not 0 (matches 3 distinct professors from loads)
+    - With Assignments is 3
+    - Course Catalog is 4
+    - Total Sections is 20 (2+1 + 4+4+1 + 7+1)
+    """
+    client, mock_db = test_client_and_db
+    res = client.get('/professor_load')
+    assert res.status_code == 200
+    soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
+
+    overview_card = soup.find('h5', string=lambda s: s and 'Overview' in s).find_parent('div', class_='card-custom')
+    assert overview_card is not None
+
+    overview_text = overview_card.get_text()
+    assert 'Total Faculty' in overview_text
+    assert 'With Assignments' in overview_text
+    assert 'Course Catalog' in overview_text
+    assert 'Total Sections' in overview_text
+
+    # Locate each metric box
+    stats = {}
+    for box in overview_card.find_all('div', class_=lambda c: c and 'col-6' in c):
+        val_el = box.find('div', class_=lambda c: c and 'fs-3' in c)
+        lbl_el = box.find('div', class_=lambda c: c and 'small' in c)
+        if val_el and lbl_el:
+            lbl = lbl_el.text.strip().upper()
+            val = int(val_el.text.strip())
+            stats[lbl] = val
+
+    assert stats.get('TOTAL FACULTY') == 3
+    assert stats.get('WITH ASSIGNMENTS') == 3
+    assert stats.get('COURSE CATALOG') == 4
+    assert stats.get('TOTAL SECTIONS') == 20
+
+
+def test_overview_card_with_unassigned_legacy_faculty(monkeypatch):
+    """Verify that if an unassigned faculty exists in the professor table,
+    Total Faculty includes them (4) while With Assignments reflects only those with loads (3).
+    """
+    courses = [
+        {'course_id': 101, 'course_code': 'IT101', 'program_id': 1, 'lecture_hours': 3, 'lab_hours': 0, 'ilp_hours': 0, 'units': 3, 'archive': False},
+    ]
+    professor_loads = [
+        {'id': 1, 'course_id': 101, 'sections': 2, 'professor_name': 'Alan Turing', 'program_id': 1},
+        {'id': 2, 'course_id': 101, 'sections': 1, 'professor_name': 'Ada Lovelace', 'program_id': 1},
+        {'id': 3, 'course_id': 101, 'sections': 1, 'professor_name': 'Grace Hopper', 'program_id': 1},
+    ]
+    # 4 professors in legacy table (John von Neumann has 0 assignments)
+    legacy_professors = [
+        {'prof_id': 1, 'first_name': 'Alan', 'last_name': 'Turing', 'program_id': 1},
+        {'prof_id': 2, 'first_name': 'Ada', 'last_name': 'Lovelace', 'program_id': 1},
+        {'prof_id': 3, 'first_name': 'Grace', 'last_name': 'Hopper', 'program_id': 1},
+        {'prof_id': 4, 'first_name': 'John', 'last_name': 'von Neumann', 'program_id': 1},
+    ]
+    programs = [{'id': 1, 'program_code': 'BSIT'}]
+
+    tables = {
+        'course': MockTable('course', courses),
+        'professor_load': MockTable('professor_load', professor_loads),
+        'professor': MockTable('professor', legacy_professors),
+        'program': MockTable('program', programs),
+        'users': MockTable('users', [{'id': 'usr-1', 'role': 'scheduler', 'program_id': 1}]),
+    }
+
+    mock_db = MockSupabase(tables)
+    monkeypatch.setattr(app_module, 'supabase', mock_db)
+
+    app_module.app.config['TESTING'] = True
+    with app_module.app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess['user_id'] = 'usr-1'
+            sess['role'] = 'scheduler'
+            sess['program_id'] = 1
+            sess['program'] = 'BSIT'
+
+        res = client.get('/professor_load')
+        assert res.status_code == 200
+        soup = BeautifulSoup(res.data.decode('utf-8'), 'html.parser')
+        overview_card = soup.find('h5', string=lambda s: s and 'Overview' in s).find_parent('div', class_='card-custom')
+
+        stats = {}
+        for box in overview_card.find_all('div', class_=lambda c: c and 'col-6' in c):
+            val_el = box.find('div', class_=lambda c: c and 'fs-3' in c)
+            lbl_el = box.find('div', class_=lambda c: c and 'small' in c)
+            if val_el and lbl_el:
+                stats[lbl_el.text.strip().upper()] = int(val_el.text.strip())
+
+        assert stats.get('TOTAL FACULTY') == 4
+        assert stats.get('WITH ASSIGNMENTS') == 3
+

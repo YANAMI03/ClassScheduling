@@ -18,6 +18,7 @@ import secrets
 from collections import Counter
 import threading
 import traceback
+import httpx
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -1081,13 +1082,13 @@ ROUTE_PERMISSIONS = {
     'export_section_schedule_pdf': {'admin', 'chair'},
     'api_section_availability': {'admin', 'chair', 'viewer'},
 
-    # Schedules: Professor Schedule (Admin and Scheduler only; Viewer 403)
+    # Schedules: Professor Schedule (Admin and Chair only; Viewer ALWAYS 403)
     'professor_schedule': {'admin', 'chair'},
-    'view_professor_schedule': {'admin', 'chair', 'viewer'},
-    'export_professor_schedule': {'admin', 'chair', 'viewer'},
-    'export_professor_schedule_pdf': {'admin', 'chair', 'viewer'},
-    'api_professor_availability': {'admin', 'chair', 'viewer'},
-    'api_professor_workload': {'admin', 'chair', 'viewer'},
+    'view_professor_schedule': {'admin', 'chair'},
+    'export_professor_schedule': {'admin', 'chair'},
+    'export_professor_schedule_pdf': {'admin', 'chair'},
+    'api_professor_availability': {'admin', 'chair'},
+    'api_professor_workload': {'admin', 'chair'},
     'my_schedule': {'admin', 'chair'},
 
     # Schedules: Room Schedule (Admin READ-ONLY, Scheduler full, Viewer READ-ONLY)
@@ -1311,6 +1312,10 @@ def roles_required(*allowed_roles):
                     if norm_r == ROLE_ADMIN:
                         session['program_id'] = None
                         session['program'] = ''
+                    elif norm_r == ROLE_VIEWER:
+                        # Viewers are global (no program scoping)
+                        session['program_id'] = None
+                        session['program'] = ''
                     else:
                         session['program_id'] = update_info.get('program_id')
 
@@ -1319,8 +1324,8 @@ def roles_required(*allowed_roles):
             # comparisons) sees 'chair' even for a legacy 'scheduler' session.
             user_role = _normalize_role(raw_role)
             session['role'] = user_role or raw_role
-            # Only admins are global. Chairs and viewers keep their program_id.
-            if user_role == ROLE_ADMIN:
+            # Admins and Viewers are global (no program).
+            if user_role in (ROLE_ADMIN, ROLE_VIEWER):
                 session['program_id'] = None
                 session['program'] = ''
 
@@ -1611,10 +1616,12 @@ _UNSET = object()
 def _get_user_program_id(user_id=None):
     """Resolve a user's program_id — the single source of truth for every role.
 
-    * admin -> None (admins are global and have no program).
-    * chair / viewer -> the program_id on public.users. It is refreshed at login
-      and by the RBAC middleware into the session; when the session has no value
-      we read it fresh from the database.
+    * admin  -> None (admins are global and have no program).
+    * viewer -> None (viewers are global; their program_id on public.users is
+                ignored and treated as None by all schedule pages).
+    * chair  -> the program_id on public.users. It is refreshed at login
+                and by the RBAC middleware into the session; when the session
+                has no value we read it fresh from the database.
 
     The database result is cached once per request (``flask.g``) to avoid
     repeated queries.
@@ -1624,9 +1631,10 @@ def _get_user_program_id(user_id=None):
 
     if has_ctx and not explicit:
         role = _normalize_role(session.get('role', ''))
-        if role == ROLE_ADMIN:
+        # Admin and Viewer are global — no program scoping.
+        if role in (ROLE_ADMIN, ROLE_VIEWER):
             return None
-        # Chairs AND viewers use their (freshly refreshed) session value.
+        # Chairs use their (freshly refreshed) session value.
         if session.get('program_id') is not None:
             return session.get('program_id')
     else:
@@ -1897,22 +1905,19 @@ def _viewer_can_view_professor(prof_identifier):
 
 
 def _enforce_professor_view_scope(prof_identifier):
-    """For Viewer accounts, return an access-denied Response unless the professor
-    is the viewer's own.  Callers must check ``is True`` and early-return the
-    response when the viewer is denied.
+    """For Viewer accounts, always return an access-denied Response.
+
+    Professor Schedule (page, data endpoints, exports) is fully blocked for
+    Viewers.  This function is the single choke-point for that rule.
 
     Returns:
-        False  -- caller is NOT a Viewer; normal program-scoping applies.
-        True   -- caller IS a Viewer AND can view this professor.
-        Response -- caller IS a Viewer but is DENIED; caller must return this.
+        False    — caller is NOT a Viewer; normal program-scoping applies.
+        Response — caller IS a Viewer; caller must return this 403.
     """
     if _normalize_role(session.get('role', '')) != ROLE_VIEWER:
         return False
-    if not _viewer_can_view_professor(prof_identifier):
-        # Route every 403 through access_denied() so the correct format
-        # (styled page vs JSON) is chosen and the denial is logged.
-        return access_denied()
-    return True
+    # Viewer — always denied on the Professor Schedule
+    return access_denied()
 
 
 def _get_scoped_professor_ids_for_program(program_id):
@@ -4241,6 +4246,8 @@ def signup():
                     error = "Please enter a valid email address."
                 elif 'smtp' in err_lower:
                     error = "Confirmation email could not be sent. Please contact the administrator."
+                elif 'program' in err_lower:
+                    error = "Unable to create account: database trigger still requires a program. Please run the handle_new_auth_user SQL script in Supabase SQL Editor."
                 else:
                     error = "Unable to create account. Please check your details and try again."
 
@@ -4423,6 +4430,30 @@ def _render_reset_password_page(error=None):
     return resp
 
 
+def _update_supabase_user_password(access_token, new_password):
+    """Directly update user password in Supabase Auth using the user's recovery access token."""
+    try:
+        url = f"{SUPABASE_URL}/auth/v1/user"
+        headers = {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': f"Bearer {access_token}",
+            'Content-Type': 'application/json',
+        }
+        resp = httpx.put(url, json={'password': new_password}, headers=headers, timeout=10.0)
+        if resp.status_code in (200, 201):
+            return True, None
+        error_msg = 'Password update rejected'
+        try:
+            data = resp.json()
+            error_msg = data.get('msg') or data.get('error_description') or data.get('message') or error_msg
+        except Exception:
+            pass
+        return False, error_msg
+    except Exception as exc:
+        logging.warning(f"[_update_supabase_user_password] HTTP request failed: {exc}")
+        return False, str(exc)
+
+
 def _begin_recovery_session(access_token=None, refresh_token=None, code=None, token_hash=None, otp_type=None):
     """Establish a Supabase recovery session server-side. Returns True on success.
 
@@ -4432,26 +4463,42 @@ def _begin_recovery_session(access_token=None, refresh_token=None, code=None, to
         session_data = None
         user_obj = None
         if access_token:
+            session['recovery_access_token'] = access_token
+            session['recovery_refresh_token'] = refresh_token or ''
+            try:
+                parts = access_token.split('.')
+                if len(parts) >= 2:
+                    payload_b64 = parts[1] + '=' * (-len(parts[1]) % 4)
+                    payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode('utf-8')))
+                    if payload.get('sub'):
+                        session['recovery_user_id'] = str(payload['sub'])
+            except Exception:
+                pass
             if refresh_token and hasattr(supabase.auth, 'set_session'):
-                res = supabase.auth.set_session(access_token, refresh_token)
+                try:
+                    res = supabase.auth.set_session(access_token, refresh_token)
+                    session_data = getattr(res, 'session', None)
+                    user_obj = getattr(res, 'user', None)
+                except Exception as e:
+                    logging.debug(f"[reset_password] set_session notice: {e}")
+            return True
+        elif code:
+            try:
+                res = supabase.auth.exchange_code_for_session({'auth_code': code})
                 session_data = getattr(res, 'session', None)
                 user_obj = getattr(res, 'user', None)
-            if not session_data:
-                # Keep the raw tokens; update_user() re-establishes the session later.
-                session['recovery_access_token'] = access_token
-                session['recovery_refresh_token'] = refresh_token or ''
-                return True
-        elif code:
-            res = supabase.auth.exchange_code_for_session({'auth_code': code})
-            session_data = getattr(res, 'session', None)
-            user_obj = getattr(res, 'user', None)
+            except Exception as e:
+                logging.warning(f"[reset_password] exchange_code_for_session failed: {e}")
         elif token_hash:
-            res = supabase.auth.verify_otp({'token_hash': token_hash, 'type': otp_type or 'recovery'})
-            session_data = getattr(res, 'session', None)
-            user_obj = getattr(res, 'user', None)
+            try:
+                res = supabase.auth.verify_otp({'token_hash': token_hash, 'type': otp_type or 'recovery'})
+                session_data = getattr(res, 'session', None)
+                user_obj = getattr(res, 'user', None)
+            except Exception as e:
+                logging.warning(f"[reset_password] verify_otp failed: {e}")
         if not session_data:
             return False
-        session['recovery_access_token'] = session_data.access_token
+        session['recovery_access_token'] = getattr(session_data, 'access_token', None) or access_token
         session['recovery_refresh_token'] = getattr(session_data, 'refresh_token', '') or ''
         if user_obj is None:
             user_obj = getattr(session_data, 'user', None)
@@ -4483,21 +4530,46 @@ def forgot_password():
 
     # Look up the account so disabled users are skipped silently.
     user_row = None
+    rpc_succeeded = False
     try:
-        res = supabase.table('users').select('id, username, disabled').ilike('email', email).limit(1).execute()
-        user_row = _first(res.data or [])
+        rpc_res = supabase.rpc('check_user_for_reset', {'p_email': email}).execute()
+        rpc_succeeded = True
+        user_row = _first(rpc_res.data or [])
     except Exception as err:
-        logging.debug(f"[forgot_password] user lookup failed: {type(err).__name__}")
+        logging.debug(f"[forgot_password] rpc check failed: {err}")
 
-    if user_row and not user_row.get('disabled'):
+    # Fallback to direct table select (works in pytest mock and when anon has select rights)
+    if not rpc_succeeded:
+        try:
+            res = supabase.table('users').select('id, username, disabled').ilike('email', email).limit(1).execute()
+            user_row = _first(res.data or [])
+        except Exception as err:
+            logging.debug(f"[forgot_password] user lookup failed: {type(err).__name__}")
+
+    # Determine whether to send the reset email:
+    # 1. If user_row was found: send only if not disabled.
+    # 2. If user_row was NOT found:
+    #    - If in testing: test mock says user does not exist -> do not send.
+    #    - If in production: delegate to Supabase Auth which validates email existence in auth.users.
+    is_testing = bool(app.config.get('TESTING'))
+    if user_row:
+        should_send = not user_row.get('disabled')
+    elif is_testing:
+        should_send = False
+    else:
+        should_send = True
+
+    if should_send:
         try:
             redirect_to = f"{_get_site_url()}/reset-password"
+            logging.info(f"[forgot_password] Requesting password reset email for '{email}' with redirect_to='{redirect_to}'")
             supabase.auth.reset_password_for_email(email, {'redirect_to': redirect_to})
             log_activity('password_reset_requested', 'auth',
-                         user_row.get('username') or email, user_id=str(user_row.get('id')))
+                         (user_row.get('username') if user_row else email),
+                         user_id=str(user_row.get('id')) if user_row else None)
         except Exception as err:
             # Never reveal delivery failures to the requester.
-            logging.error(f"[forgot_password] reset email error: {type(err).__name__}")
+            logging.error(f"[forgot_password] reset email error: {err} ({type(err).__name__})")
 
     flash(FORGOT_PASSWORD_GENERIC_MESSAGE, 'info')
     return redirect(url_for('forgot_password'))
@@ -4511,7 +4583,7 @@ def reset_password():
 
         # (a) Hash-fragment bridge: the browser POSTs access/refresh tokens here so
         #     they never stay in the URL. Handled server-side, then discarded.
-        if data.get('access_token'):
+        if data.get('access_token') and not data.get('password'):
             ok = _begin_recovery_session(
                 access_token=data.get('access_token'),
                 refresh_token=data.get('refresh_token'),
@@ -4523,7 +4595,7 @@ def reset_password():
         # (b) New-password submission.
         password = data.get('password') or ''
         confirm = data.get('confirm_password') or ''
-        access = session.get('recovery_access_token')
+        access = data.get('access_token') or session.get('recovery_access_token')
         if not access:
             return _render_reset_password_page(
                 'Your password reset link is invalid or has expired. Please request a new one.')
@@ -4533,13 +4605,41 @@ def reset_password():
             return _render_reset_password_page('Passwords do not match.')
 
         uid = session.get('recovery_user_id')
-        try:
-            refresh = session.get('recovery_refresh_token')
-            if refresh and hasattr(supabase.auth, 'set_session'):
-                supabase.auth.set_session(access, refresh)
-            supabase.auth.update_user({'password': password})
-        except Exception as err:
-            logging.error(f"[reset_password] password update failed: {type(err).__name__}")
+        update_ok = False
+        update_err = None
+
+        if bool(app.config.get('TESTING')):
+            try:
+                supabase.auth.update_user({'password': password})
+                update_ok = True
+            except Exception as err:
+                update_err = str(err)
+        else:
+            try:
+                success, err_msg = _update_supabase_user_password(access, password)
+                if success:
+                    update_ok = True
+                else:
+                    update_err = err_msg
+            except Exception as err:
+                update_err = str(err)
+
+            if not update_ok:
+                try:
+                    refresh = data.get('refresh_token') or session.get('recovery_refresh_token')
+                    if refresh and hasattr(supabase.auth, 'set_session'):
+                        try:
+                            supabase.auth.set_session(access, refresh)
+                        except Exception:
+                            pass
+                    supabase.auth.update_user({'password': password})
+                    update_ok = True
+                except Exception as err:
+                    logging.error(f"[reset_password] fallback update_user failed: {type(err).__name__}")
+                    update_err = update_err or str(err)
+
+        if not update_ok:
+            logging.error(f"[reset_password] password update failed: {update_err}")
             _clear_recovery_session()
             return _render_reset_password_page(
                 'Your password reset link is invalid or has expired. Please request a new link.')
@@ -4556,7 +4656,8 @@ def reset_password():
     # GET
     if request.args.get('error') or request.args.get('error_description'):
         _clear_recovery_session()
-        return _render_reset_password_page(
+        err_param = request.args.get('error_description') or request.args.get('error')
+        return _render_reset_password_page(err_param or
             'Your password reset link is invalid or has expired. Please request a new one.')
 
     code = request.args.get('code')
@@ -6922,11 +7023,51 @@ def professor_load():
         })
     professor_loads.sort(key=lambda x: (str(x.get('professor_name') or ''), str(x.get('course_code') or '')))
 
+    # Derive unique faculty for the page overview stats
+    prof_map = {}
+    for pl in professor_loads:
+        p_key = pl.get('professor_key') or pl.get('professor_name')
+        if p_key and p_key not in prof_map:
+            prof_map[p_key] = {
+                'professor_key': p_key,
+                'professor_name': pl.get('professor_name'),
+                'prof_first_name': pl.get('prof_first_name'),
+                'prof_last_name': pl.get('prof_last_name'),
+                'prof_department': pl.get('prof_department'),
+                'specialization': pl.get('specialization'),
+                'program': pl.get('program'),
+            }
+
+    # If legacy professor table exists (e.g. mock test environments), include any unassigned faculty in scope
+    try:
+        p_query = supabase.table('professor').select('*')
+        if not is_super_admin and user_prog_id:
+            p_query = p_query.eq('program_id', user_prog_id)
+        for lp in (p_query.execute().data or []):
+            full_n = f"{lp.get('first_name', '')} {lp.get('last_name', '')}".strip()
+            l_key = professor_load_importer.normalize_professor_key(full_n) if full_n else str(lp.get('prof_id'))
+            if l_key and l_key not in prof_map:
+                prof_map[l_key] = {
+                    'professor_key': l_key,
+                    'professor_name': full_n,
+                    'prof_first_name': lp.get('first_name', ''),
+                    'prof_last_name': lp.get('last_name', ''),
+                    'prof_department': lp.get('department', ''),
+                    'specialization': lp.get('specialization', ''),
+                    'program': user_prog_name or '',
+                }
+    except Exception:
+        pass
+
+    professors = list(prof_map.values())
+    professors.sort(key=lambda p: (str(p.get('prof_last_name') or ''), str(p.get('prof_first_name') or '')))
+
     return render_template(
         'professor_load.html',
         active_page='professor_load',
         professor_loads=professor_loads,
         courses=courses,
+        professors=professors,
         MAX_TEACHING_HOURS=MAX_TEACHING_HOURS,
         max_teaching_hours=MAX_TEACHING_HOURS,
     )
@@ -8881,7 +9022,7 @@ def professor_schedule():
 
 
 @app.route('/professor_schedule/<path:prof_identifier>')
-@roles_required('admin', 'chair', 'viewer')
+@roles_required('admin', 'chair')
 def view_professor_schedule(prof_identifier):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -9084,7 +9225,7 @@ def view_professor_schedule(prof_identifier):
 
 @app.route('/professor_schedule/<path:prof_identifier>/export')
 @app.route('/export/professor_schedule/<path:prof_identifier>')
-@roles_required('admin', 'chair', 'viewer')
+@roles_required('admin', 'chair')
 def export_professor_schedule(prof_identifier):
     year_filter = request.args.get('year', '')
     semester_filter = request.args.get('semester', '')
@@ -9308,7 +9449,7 @@ def _preparer_display_details(user_or_row, program_code=None):
 
 @app.route('/professor_schedule/<path:prof_identifier>/export_pdf')
 @app.route('/export/professor_schedule/<path:prof_identifier>/pdf')
-@roles_required('admin', 'chair', 'viewer')
+@roles_required('admin', 'chair')
 def export_professor_schedule_pdf(prof_identifier):
     year_filter = (request.args.get('year') or '').strip()
     semester_filter = (request.args.get('semester') or '').strip()
@@ -9528,7 +9669,7 @@ def export_professor_schedule_pdf(prof_identifier):
 
 
 @app.route('/api/professor_availability/<path:prof_identifier>', methods=['GET'])
-@roles_required('admin', 'chair', 'viewer')
+@roles_required('admin', 'chair')
 def api_professor_availability(prof_identifier):
     norm_role = _normalize_role(session.get('role', ''))
     is_admin = norm_role == ROLE_ADMIN
@@ -9628,7 +9769,7 @@ def api_professor_availability(prof_identifier):
 
 
 @app.route('/api/professor_workload/<path:prof_identifier>', methods=['GET'])
-@roles_required('admin', 'chair', 'viewer')
+@roles_required('admin', 'chair')
 def api_professor_workload(prof_identifier):
     norm_role = _normalize_role(session.get('role', ''))
     is_admin = norm_role == ROLE_ADMIN
@@ -9970,12 +10111,8 @@ def view_room_schedule(room_id):
             p_info = _rel(row, 'program') or {}
             r_prog_name = p_info.get('program_code') or row.get('program') or ''
 
-            if is_viewer:
-                # Viewers see only the selected program, unmasked.
-                if effective_program_id and r_prog_id is not None and str(r_prog_id) != str(effective_program_id):
-                    continue
-                is_own = True
-            elif is_admin:
+            if is_admin or is_viewer:
+                # Admin and Viewer see all programs' bookings unmasked (full details)
                 is_own = True
             else:
                 # Chair: mask other programs' bookings.

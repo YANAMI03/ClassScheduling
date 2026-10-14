@@ -230,3 +230,30 @@ def test_set_temp_password_without_service_role(client, monkeypatch):
     res = client.post('/set_temp_password/target-1', headers={'X-Requested-With': 'XMLHttpRequest'})
     assert res.status_code == 503
     assert 'SUPABASE_SERVICE_ROLE_KEY' in res.get_json().get('message', '')
+
+
+def test_reset_password_via_form_token(client, monkeypatch):
+    fake = _install(monkeypatch, [])
+    # Submitting form with access_token directly from hidden input works even if session has no token
+    res = client.post('/reset-password', data={
+        'password': 'brandnewpass1',
+        'confirm_password': 'brandnewpass1',
+        'access_token': 'direct_form_token',
+    })
+    assert res.status_code == 302
+    assert res.headers['Location'].endswith('/login')
+    assert any(evt[0] == 'update_user' and evt[1].get('password') == 'brandnewpass1' for evt in fake.sink)
+
+
+def test_reset_password_bridge_ajax(client, monkeypatch):
+    fake = _install(monkeypatch, [])
+    res = client.post('/reset-password', json={
+        'access_token': 'bridge_token',
+        'refresh_token': 'bridge_refresh',
+    }, headers={'X-Requested-With': 'XMLHttpRequest'})
+    assert res.status_code == 200
+    assert res.get_json() == {'success': True}
+    with client.session_transaction() as sess:
+        assert sess.get('recovery_access_token') == 'bridge_token'
+        assert sess.get('recovery_refresh_token') == 'bridge_refresh'
+

@@ -67,7 +67,6 @@ def test_signup_validation_name_format(client):
     # Invalid: missing comma
     res = client.post('/signup', data={
         'full_name': 'Maria Santos',
-        'program': '1',
         'email': 'valid@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -78,7 +77,6 @@ def test_signup_validation_name_format(client):
     # Invalid: multiple commas
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria, Jr.',
-        'program': '1',
         'email': 'valid@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -89,7 +87,6 @@ def test_signup_validation_name_format(client):
     # Invalid: empty given names or surname
     res = client.post('/signup', data={
         'full_name': 'Santos, ',
-        'program': '1',
         'email': 'valid@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -100,7 +97,6 @@ def test_signup_validation_name_format(client):
     # Invalid: contains numbers or special symbols
     res = client.post('/signup', data={
         'full_name': 'Santos123, Maria',
-        'program': '1',
         'email': 'valid@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -141,7 +137,6 @@ def test_signup_validation_password_too_short(client):
     """Password under 8 characters should be rejected."""
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria',
-        'program': '1',
         'email': 'maria@example.com',
         'password': 'short',
         'confirm_password': 'short',
@@ -155,7 +150,6 @@ def test_signup_validation_passwords_mismatch(client):
     """Mismatched password and confirm_password should be rejected."""
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria',
-        'program': '1',
         'email': 'maria@example.com',
         'password': 'Password123!',
         'confirm_password': 'DifferentPassword123!',
@@ -173,7 +167,6 @@ def test_signup_allowed_email_domains(client, monkeypatch):
     # 1. Blocked domain
     res_blocked = client.post('/signup', data={
         'full_name': 'Dela Cruz, Juan',
-        'program': '1',
         'email': 'juan@gmail.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -200,7 +193,6 @@ def test_signup_allowed_email_domains(client, monkeypatch):
 
     res_allowed = client.post('/signup', data={
         'full_name': 'Dela Cruz, Juan',
-        'program': '1',
         'email': 'juan@neust.edu.ph',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -219,7 +211,6 @@ def test_signup_honeypot_silently_rejects(client, monkeypatch):
 
     res = client.post('/signup', data={
         'full_name': 'Spammer, Bot',
-        'program': '1',
         'email': 'bot@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -273,7 +264,6 @@ def test_signup_rate_limit_friendly_message(client, monkeypatch):
 
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria',
-        'program': '1',
         'email': 'ratelimit_test@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -302,7 +292,6 @@ def test_signup_duplicate_email_neutral_message(client, monkeypatch):
 
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria',
-        'program': '1',
         'email': 'existing_user@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -332,7 +321,6 @@ def test_signup_throttle_attempts(client, monkeypatch):
     for i in range(5):
         client.post('/signup', data={
             'full_name': 'Spam, Test',
-            'program': '1',
             'email': f'spam_{i}@example.com',
             'password': 'Password123!',
             'confirm_password': 'Password123!',
@@ -341,7 +329,6 @@ def test_signup_throttle_attempts(client, monkeypatch):
     # 6th attempt from the same IP should be blocked by throttling
     res = client.post('/signup', data={
         'full_name': 'Spam, Test',
-        'program': '1',
         'email': 'spam_6@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
