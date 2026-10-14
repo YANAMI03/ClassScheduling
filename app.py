@@ -7023,11 +7023,51 @@ def professor_load():
         })
     professor_loads.sort(key=lambda x: (str(x.get('professor_name') or ''), str(x.get('course_code') or '')))
 
+    # Derive unique faculty for the page overview stats
+    prof_map = {}
+    for pl in professor_loads:
+        p_key = pl.get('professor_key') or pl.get('professor_name')
+        if p_key and p_key not in prof_map:
+            prof_map[p_key] = {
+                'professor_key': p_key,
+                'professor_name': pl.get('professor_name'),
+                'prof_first_name': pl.get('prof_first_name'),
+                'prof_last_name': pl.get('prof_last_name'),
+                'prof_department': pl.get('prof_department'),
+                'specialization': pl.get('specialization'),
+                'program': pl.get('program'),
+            }
+
+    # If legacy professor table exists (e.g. mock test environments), include any unassigned faculty in scope
+    try:
+        p_query = supabase.table('professor').select('*')
+        if not is_super_admin and user_prog_id:
+            p_query = p_query.eq('program_id', user_prog_id)
+        for lp in (p_query.execute().data or []):
+            full_n = f"{lp.get('first_name', '')} {lp.get('last_name', '')}".strip()
+            l_key = professor_load_importer.normalize_professor_key(full_n) if full_n else str(lp.get('prof_id'))
+            if l_key and l_key not in prof_map:
+                prof_map[l_key] = {
+                    'professor_key': l_key,
+                    'professor_name': full_n,
+                    'prof_first_name': lp.get('first_name', ''),
+                    'prof_last_name': lp.get('last_name', ''),
+                    'prof_department': lp.get('department', ''),
+                    'specialization': lp.get('specialization', ''),
+                    'program': user_prog_name or '',
+                }
+    except Exception:
+        pass
+
+    professors = list(prof_map.values())
+    professors.sort(key=lambda p: (str(p.get('prof_last_name') or ''), str(p.get('prof_first_name') or '')))
+
     return render_template(
         'professor_load.html',
         active_page='professor_load',
         professor_loads=professor_loads,
         courses=courses,
+        professors=professors,
         MAX_TEACHING_HOURS=MAX_TEACHING_HOURS,
         max_teaching_hours=MAX_TEACHING_HOURS,
     )
