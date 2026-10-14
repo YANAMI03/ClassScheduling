@@ -39,7 +39,7 @@ def test_section_pdf_confirmed_by_scheduler_exported_by_admin(monkeypatch):
             'major': 'General',
             'section': 'BSIT-1A',
             'program_id': 1,
-            'program': {'id': 1, 'program_name': 'BSIT'},
+            'program': {'id': 1, 'program_code': 'BSIT'},
             'professor_load_id': 1,
             'prepared_by_user_id': '077438bb-a507-4c8b-a947-e1a08a7092e4',
             'preparer': {

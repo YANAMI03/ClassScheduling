@@ -123,13 +123,13 @@ def test_schedules_view_not_used_badge_and_button(client):
                 'program_id': 1,
                 'semester': '1st Semester',
                 'specialization': None,
-                'program': {'program_name': 'BSIT'}
+                'program': {'program_code': 'BSIT'}
             }
         }
     }
 
     with patch('app.supabase') as mock_sb, \
-         patch('app._get_programs', return_value=[{'id': 1, 'program_name': 'BSIT'}]):
+         patch('app._get_programs', return_value=[{'id': 1, 'program_code': 'BSIT'}]):
 
         def fake_table(name):
             m = MagicMock()
@@ -173,7 +173,7 @@ def test_filters_no_all_options_in_schedules(client):
         sess['program'] = 'BSIT'
 
     with patch('app.supabase') as mock_sb, \
-         patch('app._get_programs', return_value=[{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}]):
+         patch('app._get_programs', return_value=[{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}]):
 
         def fake_table(name):
             m = MagicMock()
@@ -215,7 +215,7 @@ def test_filters_fallback_on_all_or_missing_params(client):
 
     captured_queries = []
     with patch('app.supabase') as mock_sb, \
-         patch('app._get_programs', return_value=[{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}]):
+         patch('app._get_programs', return_value=[{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}]):
 
         def fake_table(name):
             m = MagicMock()
@@ -252,7 +252,7 @@ def test_filters_no_all_in_archive_room_and_professor(client):
         sess['program'] = 'BSIT'
 
     with patch('app.supabase') as mock_sb, \
-         patch('app._get_programs', return_value=[{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}]):
+         patch('app._get_programs', return_value=[{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}]):
 
         def fake_table(name):
             m = MagicMock()

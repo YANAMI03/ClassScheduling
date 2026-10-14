@@ -175,7 +175,7 @@ def _build_mock_db():
         }]),
         'program': MockTable('program', [{
             'id': 1,
-            'program_name': 'BSIT',
+            'program_code': 'BSIT',
             'department': 'CICT',
         }]),
         'semester': MockTable('semester', []),

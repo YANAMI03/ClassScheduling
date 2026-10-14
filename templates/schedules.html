@@ -80,7 +80,7 @@
             </label>
             <select id="programFilter" name="program" class="form-select form-select-sm" onchange="this.form.submit()">
                 {% for p in programs %}
-                <option value="{{ p.program_name }}" {% if p.program_name == program_filter %}selected{% endif %}>{{ p.program_name }}</option>
+                <option value="{{ p.program_code }}" {% if p.program_code == program_filter %}selected{% endif %}>{{ p.program_code }}</option>
                 {% else %}
                 {% if program_filter %}
                 <option value="{{ program_filter }}" selected>{{ program_filter }}</option>

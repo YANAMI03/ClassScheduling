@@ -28,16 +28,16 @@
     <form action="/add_program" method="POST" id="add-program-form">
         <div class="row g-3">
             <div class="col-md-4">
-                <label class="form-label fw-semibold">Program Code / Name <span class="text-danger">*</span></label>
-                <input type="text" name="program_name" id="add_program_name" class="form-control" 
+                <label class="form-label fw-semibold">Program Code <span class="text-danger">*</span></label>
+                <input type="text" name="program_code" id="add_program_code" class="form-control" 
                        placeholder="e.g. BSIT, BSDS, BSCS" maxlength="100" autocomplete="off" required>
                 <div class="form-text small">Short unique code used throughout schedules and sections.</div>
             </div>
             <div class="col-md-6">
-                <label class="form-label fw-semibold">Full Program Title (Optional)</label>
-                <input type="text" name="full_name" id="add_full_name" class="form-control" 
-                       placeholder="e.g. Bachelor of Science in Data Science" maxlength="255" autocomplete="off">
-                <div class="form-text small">Official degree program description.</div>
+                <label class="form-label fw-semibold">Program Name <span class="text-danger">*</span></label>
+                <input type="text" name="program_name" id="add_program_name" class="form-control" 
+                       placeholder="e.g. Bachelor of Science in Data Science" maxlength="255" autocomplete="off" required>
+                <div class="form-text small">Official full degree program name.</div>
             </div>
             <div class="col-md-2 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary w-100" id="btn-add-program" data-loading-text="Adding...">
@@ -75,8 +75,8 @@
         <table class="table table-hover align-middle mb-0" id="programsTable">
             <thead class="table-light">
                 <tr>
-                    <th style="width: 20%;">Program</th>
-                    <th style="width: 40%;">Full Description</th>
+                    <th style="width: 20%;">Program Code</th>
+                    <th style="width: 40%;">Program Name</th>
                     <th style="width: 15%;" class="text-center">Courses</th>
                     <th style="width: 15%;" class="text-center">Chairs</th>
                     <th style="width: 10%;" class="text-end pe-3">Actions</th>
@@ -85,14 +85,14 @@
             <tbody>
                 {% if programs %}
                     {% for p in programs %}
-                    <tr class="program-row" data-search="{{ (p.program_name ~ ' ' ~ (p.full_name or '')) | lower }}">
+                    <tr class="program-row" data-search="{{ (p.program_code ~ ' ' ~ (p.program_name or '')) | lower }}">
                         <td>
                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-6 px-3 py-1 fw-bold">
-                                {{ p.program_name }}
+                                {{ p.program_code }}
                             </span>
                         </td>
                         <td>
-                            <span class="text-dark fw-medium">{{ p.full_name or '—' }}</span>
+                            <span class="text-dark fw-medium">{{ p.program_name or '—' }}</span>
                         </td>
                         <td class="text-center">
                             <span class="badge bg-light text-dark border">{{ p.course_count or 0 }}</span>
@@ -106,8 +106,8 @@
                                 <button type="button" class="btn btn-outline-secondary btn-sm edit-program-btn"
                                         data-bs-toggle="modal" data-bs-target="#editProgramModal"
                                         data-id="{{ p.id }}"
-                                        data-name="{{ p.program_name }}"
-                                        data-full-name="{{ p.full_name or '' }}"
+                                        data-name="{{ p.program_code }}"
+                                        data-program-name="{{ p.program_name or '' }}"
                                         title="Rename Program">
                                     <i class="bx bx-edit-alt"></i>
                                 </button>
@@ -117,7 +117,7 @@
                                         data-url="/restore_program/{{ p.id }}"
                                         data-method="POST"
                                         data-confirm-text="Restore"
-                                        data-confirm="Restore program '{{ p.program_name }}'?"
+                                        data-confirm="Restore program '{{ p.program_code }}'?"
                                         data-title="Restore Program"
                                         title="Restore Program">
                                     <i class="bx bx-reset"></i>
@@ -164,13 +164,13 @@
             <form id="editProgramForm" method="POST" action="">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Program Code / Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="edit_program_name" name="program_name" maxlength="100" required>
+                        <label class="form-label fw-semibold">Program Code <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit_program_code" name="program_code" maxlength="100" required>
                         <div class="form-text small">Renaming updates display across all courses, loads, and schedules automatically.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Full Program Title</label>
-                        <input type="text" class="form-control" id="edit_full_name" name="full_name" maxlength="255">
+                        <label class="form-label fw-semibold">Program Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit_program_name" name="program_name" maxlength="255" required>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -295,13 +295,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!btn) return;
             var pid = btn.getAttribute('data-id');
             var pname = btn.getAttribute('data-name');
-            var pfullName = btn.getAttribute('data-full-name');
+            var pfullName = btn.getAttribute('data-program-name');
 
             var form = document.getElementById('editProgramForm');
             if (form) form.action = '/edit_program/' + pid;
 
-            var nameInput = document.getElementById('edit_program_name');
-            var fullInput = document.getElementById('edit_full_name');
+            var nameInput = document.getElementById('edit_program_code');
+            var fullInput = document.getElementById('edit_program_name');
             if (nameInput) nameInput.value = pname || '';
             if (fullInput) fullInput.value = pfullName || '';
         });

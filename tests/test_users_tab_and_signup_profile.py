@@ -31,9 +31,9 @@ class MockDatabase:
     def __init__(self):
         self.users = []
         self.programs = [
-            {'id': 1, 'program_name': 'BSIT'},
-            {'id': 2, 'program_name': 'BSBA'},
-            {'id': 9, 'program_name': 'BSDS'},
+            {'id': 1, 'program_code': 'BSIT'},
+            {'id': 2, 'program_code': 'BSBA'},
+            {'id': 9, 'program_code': 'BSDS'},
         ]
         self.auth_users = []
         self.trigger_error_simulate = False
@@ -75,7 +75,6 @@ class MockDatabase:
             'last_name': last_name,
             'role': 'viewer',  # Hard-coded viewer
             'program_id': None,  # Hard-coded NULL
-            'created_at': getattr(new_auth_user, 'created_at', '2026-10-12T00:00:00Z'),
             'profile_picture': None,
         }
         self.users.append(new_row)
@@ -146,7 +145,7 @@ class MockTableQuery:
                     p_id = r.get('program_id')
                     if p_id:
                         p_match = next((p for p in self.db.programs if p['id'] == p_id), None)
-                        r['program'] = {'id': p_id, 'program_name': p_match['program_name']} if p_match else None
+                        r['program'] = {'id': p_id, 'program_code': p_match['program_code']} if p_match else None
                     else:
                         r['program'] = None
                 return MockPostgrestResponse(rows)
@@ -204,7 +203,6 @@ def mock_env(monkeypatch):
             'last_name': 'User',
             'email': 'admin@example.com',
             'program_id': None,
-            'created_at': '2026-10-01T10:00:00Z',
         },
         {
             'id': sched_id,
@@ -214,7 +212,6 @@ def mock_env(monkeypatch):
             'last_name': 'User',
             'email': 'scheduler@example.com',
             'program_id': 1,
-            'created_at': '2026-10-02T10:00:00Z',
         },
     ]
 
@@ -412,7 +409,6 @@ def test_existing_schedulers_and_admins_unchanged_and_search_finds_viewer(mock_e
         'last_name': 'Wonderland',
         'email': 'alice@wonderland.com',
         'program_id': None,
-        'created_at': '2026-10-12T05:00:00Z',
     }
     db.users.append(viewer_row)
 
@@ -487,7 +483,6 @@ def test_admin_edit_user_role_and_program_rules(mock_env):
         'last_name': 'User',
         'email': 'target@example.com',
         'program_id': None,
-        'created_at': '2026-10-12T01:00:00Z',
     })
 
     with client.session_transaction() as sess:
@@ -518,7 +513,7 @@ def test_admin_edit_user_role_and_program_rules(mock_env):
     assert target_row['role'] == 'chair'
     assert target_row['program_id'] == 2
 
-    # Edit to Viewer with BSBA -> success (Viewer requires program)
+    # Edit to Viewer -> success; program_id cleared (viewers are global)
     res3 = client.post(f'/edit_user/{v_id}', data={
         'first_name': 'Target',
         'last_name': 'User',
@@ -529,7 +524,7 @@ def test_admin_edit_user_role_and_program_rules(mock_env):
     assert res3.status_code == 200
     target_row = next(u for u in db.users if u['id'] == v_id)
     assert target_row['role'] == 'viewer'
-    assert target_row['program_id'] == 2
+    assert target_row['program_id'] is None
 
     # Edit to Admin -> program cleared to None (only Admin has NULL program)
     res4 = client.post(f'/edit_user/{v_id}', data={
@@ -545,17 +540,17 @@ def test_admin_edit_user_role_and_program_rules(mock_env):
     assert target_row['program_id'] is None
 
 
-def test_newest_users_appear_first(mock_env):
+def test_users_sorted_by_name(mock_env):
     """
     Test 8:
-    Users tab orders users with newest signups first.
+    Users tab orders users alphabetically by last name, then first name.
     """
     client, db, admin_id = mock_env
 
     db.users = [
-        {'id': '1', 'username': 'old', 'role': 'viewer', 'email': 'old@example.com', 'created_at': '2026-10-01T00:00:00Z'},
-        {'id': '2', 'username': 'newest', 'role': 'viewer', 'email': 'newest@example.com', 'created_at': '2026-10-12T12:00:00Z'},
-        {'id': '3', 'username': 'mid', 'role': 'viewer', 'email': 'mid@example.com', 'created_at': '2026-10-05T00:00:00Z'},
+        {'id': '1', 'username': 'zeta', 'role': 'viewer', 'email': 'zulu@example.com', 'first_name': 'Amy', 'last_name': 'Zulu'},
+        {'id': '2', 'username': 'alpha', 'role': 'viewer', 'email': 'adams@example.com', 'first_name': 'Zoe', 'last_name': 'Adams'},
+        {'id': '3', 'username': 'mid', 'role': 'viewer', 'email': 'baker@example.com', 'first_name': 'Ann', 'last_name': 'Baker'},
     ]
 
     with client.session_transaction() as sess:
@@ -566,8 +561,8 @@ def test_newest_users_appear_first(mock_env):
     assert res.status_code == 200
     html = res.get_data(as_text=True)
 
-    pos_newest = html.find('newest@example.com')
-    pos_mid = html.find('mid@example.com')
-    pos_old = html.find('old@example.com')
+    pos_adams = html.find('adams@example.com')
+    pos_baker = html.find('baker@example.com')
+    pos_zulu = html.find('zulu@example.com')
 
-    assert pos_newest < pos_mid < pos_old, "Newest user must appear first in HTML table"
+    assert pos_adams < pos_baker < pos_zulu, "Users must be sorted by last name, then first name"

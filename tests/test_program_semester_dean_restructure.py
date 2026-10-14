@@ -115,8 +115,8 @@ class MockSupabase:
     def __init__(self):
         self.tables = {
             'program': MockTable('program', [
-                {'id': 1, 'program_name': 'BSIT', 'department': 'CICT'},
-                {'id': 2, 'program_name': 'BSBA', 'department': 'CMBT'},
+                {'id': 1, 'program_code': 'BSIT', 'department': 'CICT'},
+                {'id': 2, 'program_code': 'BSBA', 'department': 'CMBT'},
             ]),
             'semester': MockTable('semester', [
                 {'id': 10, 'program_id': 1, 'school_year': '2026-2027', 'term': '1st Semester', 'is_active': True},

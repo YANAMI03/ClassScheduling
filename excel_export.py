@@ -299,7 +299,7 @@ def generate_timetable_excel(schedule_type, entity_info, entries, working_hours=
             p_first = entity_info.get('first_name', '')
             p_last = entity_info.get('last_name', '')
             prof_name = f"{p_first} {p_last}".strip() or entity_info.get('professor_name', 'Professor')
-            dept = entity_info.get('department') or entity_info.get('program_name') or entity_info.get('program') or 'N/A'
+            dept = entity_info.get('department') or entity_info.get('program_code') or entity_info.get('program') or 'N/A'
         else:
             prof_name = str(entity_info)
             dept = 'N/A'

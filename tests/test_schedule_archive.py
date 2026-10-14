@@ -86,7 +86,7 @@ class FakeArchiveQuery:
                                 'professor_name': 'Alan Turing',
                                 'course': {
                                     'program_id': 1,
-                                    'program': {'program_name': 'BSIT'},
+                                    'program': {'program_code': 'BSIT'},
                                     'course_code': 'IT101 - Intro to Computing',
                                     'semester': '1st Semester',
                                 },
@@ -467,11 +467,11 @@ def test_legacy_archived_rows_appear_as_single_legacy_archive_entry(monkeypatch)
                 return FakeResponse([])
             # Return 5 legacy rows across 2 sections with no batch_id or timestamp
             return FakeResponse([
-                {'schedule_id': 1, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
-                {'schedule_id': 2, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
-                {'schedule_id': 3, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
-                {'schedule_id': 4, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
-                {'schedule_id': 5, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
+                {'schedule_id': 1, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'program_id': 1, 'program': {'program_code': 'BSIT'}},
+                {'schedule_id': 2, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'program_id': 1, 'program': {'program_code': 'BSIT'}},
+                {'schedule_id': 3, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_code': 'BSIT'}},
+                {'schedule_id': 4, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_code': 'BSIT'}},
+                {'schedule_id': 5, 'semester': '1st Semester', 'section': '1B', 'archive': True, 'program_id': 1, 'program': {'program_code': 'BSIT'}},
             ])
 
     class FakeLegacySupabase:
@@ -595,11 +595,11 @@ def test_large_schedule_archive_pagination_not_capped_at_1000(monkeypatch):
             # Page 3 (2000 to 2999): 500 rows (total 2500 rows)
             start = getattr(self, '_last_start', 0)
             if start == 0:
-                rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_name': 'BSIT'}} for i in range(1000)]
+                rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_code': 'BSIT'}} for i in range(1000)]
             elif start == 1000:
-                rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_name': 'BSIT'}} for i in range(1000, 2000)]
+                rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_code': 'BSIT'}} for i in range(1000, 2000)]
             else:
-                rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_name': 'BSIT'}} for i in range(2000, 2500)]
+                rows = [{'schedule_id': i, 'semester': '1st Semester', 'section': f'Sec-{i%10}', 'archive': True, 'archive_batch_id': batch_uuid, 'archived_at': '2026-10-01T08:00:00Z', 'program': {'program_code': 'BSIT'}} for i in range(2000, 2500)]
             return FakeResponse(rows)
 
     class PaginatedSupabase:
@@ -641,9 +641,9 @@ def test_two_archive_batches_same_day_distinct_entries(monkeypatch):
 
     table_rows = [
         # Batch 1: 15 classes, Section 1A
-        *[{'schedule_id': 100 + i, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'archive_batch_id': batch_id_1, 'archived_at': ts_1, 'program': {'program_name': 'BSIT'}} for i in range(15)],
+        *[{'schedule_id': 100 + i, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'archive_batch_id': batch_id_1, 'archived_at': ts_1, 'program': {'program_code': 'BSIT'}} for i in range(15)],
         # Batch 2: 25 classes, Section 2A
-        *[{'schedule_id': 200 + i, 'semester': '1st Semester', 'section': '2A', 'archive': True, 'archive_batch_id': batch_id_2, 'archived_at': ts_2, 'program': {'program_name': 'BSIT'}} for i in range(25)],
+        *[{'schedule_id': 200 + i, 'semester': '1st Semester', 'section': '2A', 'archive': True, 'archive_batch_id': batch_id_2, 'archived_at': ts_2, 'program': {'program_code': 'BSIT'}} for i in range(25)],
     ]
 
     class TableDirectQuery(FakeArchiveQuery):
@@ -722,7 +722,7 @@ def test_large_archive_5000_plus_classes_pagination(monkeypatch):
                     'archive': True,
                     'archive_batch_id': batch_uuid,
                     'archived_at': '2026-10-01T12:00:00Z',
-                    'program': {'program_name': 'BSIT'}
+                    'program': {'program_code': 'BSIT'}
                 }
                 for i in range(start, end)
             ]

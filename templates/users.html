@@ -247,7 +247,7 @@
                     <div class="user-info">
                         <img src="{{ url_for('static', filename='profile/' + (user.profile_picture or 'default.png')) }}" alt="Profile" class="user-avatar" onerror="this.onerror=null;this.src='{{ url_for('static', filename='profile/default.png') }}';">
                         <div class="user-name">
-                            <strong>{{ user.first_name or '—' }}</strong>
+                            <strong>{{ user.first_name or '—' }}{% if user.middle_initial %} {{ user.middle_initial }}.{% endif %}</strong>
                             {% if user.disabled %}
                             <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1" title="This account is disabled">Disabled</span>
                             {% endif %}
@@ -270,8 +270,14 @@
                     </span>
                 </td>
                 <td class="text-end">
-                    <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.middle_name or '' }}', '{{ user.last_name }}', '{{ user.email }}', '{{ user.program or '' }}', '{{ user.role }}')">
+                    <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" onclick="openEditModal('{{ user.id }}', '{{ user.first_name }}', '{{ user.middle_initial or '' }}', '{{ user.last_name }}', '{{ user.email }}', '{{ user.program or '' }}', '{{ user.role }}')">
                         <i class="bx bx-edit"></i> Edit
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="sendResetLink('{{ user.id }}', this)" title="Email a password reset link">
+                        <i class="bx bx-mail-send"></i> Reset Link
+                    </button>
+                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="setTempPassword('{{ user.id }}', this)" title="Set a temporary password (requires server service-role key)">
+                        <i class="bx bx-key"></i> Temp Password
                     </button>
                     {% if user.disabled %}
                     <button type="button" class="btn btn-success btn-sm"
@@ -323,8 +329,8 @@
                         <input type="text" class="form-control" id="editFirstName" required>
                     </div>
                     <div class="mb-3">
-                        <label for="editMiddleName" class="form-label">Middle Name / Initial <span class="text-muted small">(optional)</span></label>
-                        <input type="text" class="form-control" id="editMiddleName" placeholder="e.g. S. or Santos">
+                        <label for="editMiddleInitial" class="form-label">Middle Initial <span class="text-muted small">(optional)</span></label>
+                        <input type="text" class="form-control" id="editMiddleInitial" maxlength="1" placeholder="e.g. S.">
                     </div>
                     <div class="mb-3">
                         <label for="editLastName" class="form-label">Last Name</label>
@@ -348,7 +354,7 @@
                             <option value="">Select Program</option>
                             {% if programs %}
                                 {% for p in programs %}
-                                <option value="{{ p.program_name }}">{{ p.program_name }}</option>
+                                <option value="{{ p.program_code }}">{{ p.program_code }}</option>
                                 {% endfor %}
                             {% else %}
                                 <option value="BSIT">BSIT</option>
@@ -367,6 +373,28 @@
     </div>
 </div>
 
+<!-- Temporary Password Modal (admin only) -->
+<div class="modal fade" id="tempPasswordModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bx bx-key me-1"></i>Temporary Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2 small text-muted">Share this with the user over a secure channel. It is shown only once.</p>
+                <div class="input-group">
+                    <input type="text" class="form-control font-monospace" id="tempPasswordValue" readonly>
+                    <button class="btn btn-outline-secondary" type="button" id="copyTempPasswordBtn">Copy</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -377,20 +405,24 @@ function toggleProgramRole(roleSelectId, programSelectId) {
     const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
     const progSelect = document.getElementById(programSelectId);
     const helpText = document.getElementById('editProgramHelp');
-    const isAdmin = roleVal === 'admin';
-    
-    if (isAdmin) {
+    const isChair = roleVal === 'chair' || roleVal === 'scheduler';
+
+    if (isChair) {
+        // Scheduler (Chair) must be assigned to a program.
+        progSelect.disabled = false;
+        progSelect.required = true;
+        if (helpText) helpText.classList.add('d-none');
+    } else {
+        // Viewers and Admins are global: no program.
         progSelect.value = '';
         progSelect.disabled = true;
         progSelect.required = false;
         if (helpText) {
-            helpText.textContent = 'Admin has global access across all programs.';
+            helpText.textContent = (roleVal === 'admin')
+                ? 'Admin has global access across all programs.'
+                : 'Viewers see schedules across all programs.';
             helpText.classList.remove('d-none');
         }
-    } else {
-        progSelect.disabled = false;
-        progSelect.required = true;
-        if (helpText) helpText.classList.add('d-none');
     }
 }
 
@@ -417,10 +449,10 @@ function normalizeRoleClient(role) {
     return 'viewer';
 }
 
-function openEditModal(userId, firstName, middleName, lastName, email, program, role) {
+function openEditModal(userId, firstName, middleInitial, lastName, email, program, role) {
     document.getElementById('editUserId').value = userId;
     document.getElementById('editFirstName').value = firstName;
-    document.getElementById('editMiddleName').value = middleName || '';
+    document.getElementById('editMiddleInitial').value = middleInitial || '';
     document.getElementById('editLastName').value = lastName;
     document.getElementById('editEmail').value = email;
 
@@ -438,12 +470,13 @@ function openEditModal(userId, firstName, middleName, lastName, email, program, 
 function saveUser() {
     const userId = document.getElementById('editUserId').value;
     const firstName = document.getElementById('editFirstName').value.trim();
-    const middleName = document.getElementById('editMiddleName').value.trim();
+    const middleInitial = document.getElementById('editMiddleInitial').value.trim();
     const lastName = document.getElementById('editLastName').value.trim();
     const email = document.getElementById('editEmail').value.trim();
     const role = document.getElementById('editRole').value;
     const program = document.getElementById('editProgram').value;
-    const isProgramRequired = (role || '').toLowerCase() !== 'admin';
+    const roleLower = (role || '').toLowerCase();
+    const isProgramRequired = roleLower === 'chair' || roleLower === 'scheduler';
     
     if (!firstName || !lastName || !email || !role) {
         showToast('Please fill in all required fields.', 'warning');
@@ -451,14 +484,13 @@ function saveUser() {
     }
     
     if (isProgramRequired && !program) {
-        const roleLabel = (role || '').toLowerCase() === 'chair' ? 'Chair' : 'Viewer';
-        showToast(`Please select a program for ${roleLabel}.`, 'warning');
+        showToast('Please select a program for the Chair (scheduler) role.', 'warning');
         return;
     }
     
     const formData = new FormData();
     formData.append('first_name', firstName);
-    formData.append('middle_name', middleName);
+    formData.append('middle_initial', middleInitial);
     formData.append('last_name', lastName);
     formData.append('email', email);
     formData.append('program', isProgramRequired ? program : '');
@@ -490,6 +522,64 @@ function saveUser() {
         }
     });
 }
+
+function sendResetLink(userId, btn) {
+    if (btn && typeof window.setButtonLoading === 'function') {
+        window.setButtonLoading(btn, true, 'Sending...');
+    }
+    fetch('/send_reset_link/' + encodeURIComponent(userId), {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    })
+    .then(function (r) { return r.json().catch(function () { return {}; }); })
+    .then(function (data) {
+        if (data.success) {
+            showToast(data.message || 'Password reset link sent.', 'success');
+        } else {
+            showToast(data.message || 'Could not send the reset link.', 'error');
+        }
+    })
+    .catch(function () { showToast('An error occurred. Please try again.', 'error'); })
+    .finally(function () {
+        if (btn && typeof window.setButtonLoading === 'function') window.setButtonLoading(btn, false);
+    });
+}
+
+function setTempPassword(userId, btn) {
+    if (!window.confirm('Set a temporary password for this user? Their current password will stop working.')) return;
+    if (btn && typeof window.setButtonLoading === 'function') {
+        window.setButtonLoading(btn, true, 'Setting...');
+    }
+    fetch('/set_temp_password/' + encodeURIComponent(userId), {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    })
+    .then(function (r) { return r.json().catch(function () { return {}; }); })
+    .then(function (data) {
+        if (data.success && data.temp_password) {
+            var field = document.getElementById('tempPasswordValue');
+            if (field) field.value = data.temp_password;
+            var modalEl = document.getElementById('tempPasswordModal');
+            if (modalEl) new bootstrap.Modal(modalEl).show();
+        } else {
+            showToast(data.message || 'Could not set a temporary password.', 'error');
+        }
+    })
+    .catch(function () { showToast('An error occurred. Please try again.', 'error'); })
+    .finally(function () {
+        if (btn && typeof window.setButtonLoading === 'function') window.setButtonLoading(btn, false);
+    });
+}
+
+document.addEventListener('click', function (e) {
+    if (e.target && e.target.id === 'copyTempPasswordBtn') {
+        var field = document.getElementById('tempPasswordValue');
+        if (field && field.value) {
+            if (navigator.clipboard) navigator.clipboard.writeText(field.value);
+            showToast('Temporary password copied.', 'info');
+        }
+    }
+});
 
 function confirmDelete(userId, displayName) {}
 </script>

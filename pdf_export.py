@@ -284,7 +284,7 @@ def _cell_text(entry, mode='room'):
 
     prof = _format_instructor_name(_safe_str(entry.get('professor') or entry.get('professor_name')))
     sec_raw = _safe_str(entry.get('section')) or 'TBA'
-    prog = _safe_str(entry.get('program') or entry.get('program_name') or entry.get('program_code'))
+    prog = _safe_str(entry.get('program') or entry.get('program_code') or entry.get('program_code'))
     sec = _format_section_with_program(sec_raw, prog)
     room = _safe_str(entry.get('room_name') or entry.get('room')) or 'TBA'
 
@@ -820,7 +820,7 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
     if norm_type == 'section':
         prog = (filter_metadata.get('program') or
                 (entity_info.get('program') if isinstance(entity_info, dict) else None) or
-                (entity_info.get('program_name') if isinstance(entity_info, dict) else None) or
+                (entity_info.get('program_code') if isinstance(entity_info, dict) else None) or
                 (entries[0].get('program') if entries else None) or
                 'BSIT')
         
@@ -842,7 +842,7 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
     if norm_type == 'professor':
         # A professor belongs to a single program -> a single preparer block.
         prog = (filter_metadata.get('program')
-                or (entity_info.get('program_name') if isinstance(entity_info, dict) else None)
+                or (entity_info.get('program_code') if isinstance(entity_info, dict) else None)
                 or (entity_info.get('program') if isinstance(entity_info, dict) else None)
                 or 'BSIT')
         name = filter_metadata.get('preparer_name') or None
@@ -865,7 +865,7 @@ def _extract_preparers(schedule_type, entity_info, entries, filter_metadata):
         prog_order = []
         entries_by_prog = {}
         for e in entries:
-            p = e.get('program') or e.get('program_name')
+            p = e.get('program') or e.get('program_code')
             if not p:
                 p = filter_metadata.get('program')
             if not p:
@@ -961,7 +961,7 @@ def generate_timetable_pdf(schedule_type, entity_info, entries, working_hours=No
         prog = filter_metadata.get('program') or ''
         if isinstance(entity_info, dict):
             sec_name = _safe_str(entity_info.get('section_name') or entity_info.get('section')) or 'Section'
-            prog = _safe_str(entity_info.get('program') or entity_info.get('program_name') or prog)
+            prog = _safe_str(entity_info.get('program') or entity_info.get('program_code') or prog)
         else:
             sec_name = _safe_str(entity_info) or 'Section'
 

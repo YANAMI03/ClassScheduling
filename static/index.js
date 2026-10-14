@@ -314,19 +314,8 @@
     };
 
     function isMajorRequired(yearValue, semesterValue) {
-        if ((yearValue === "3" || yearValue === "3rd Year") &&
-            (semesterValue === "2nd Semester" || semesterValue === "2nd" || semesterValue === "2")) {
-            return true;
-        }
-        if ((yearValue === "4" || yearValue === "4th Year") &&
-            (semesterValue === "1st Semester" || semesterValue === "1st" || semesterValue === "1")) {
-            return true;
-        }
-        if ((yearValue === "4" || yearValue === "4th Year") &&
-            (semesterValue === "2nd Semester" || semesterValue === "2nd" || semesterValue === "2")) {
-            return true;
-        }
-        return false;
+        // Specializations are available at every year level and semester.
+        return true;
     }
 
     function getYearLabel(yearValue) {
@@ -349,27 +338,15 @@
 
     function toggleMajorField() {
         if (!majorField) return;
-        var selectedYear = yearSelect ? yearSelect.value : "";
-        var selectedSemester = semesterSelect ? semesterSelect.value : "";
-        var showMajor = selectedYear ? isMajorRequired(selectedYear, selectedSemester) : false;
-
-        if (showMajor) {
-            majorField.style.display = "";
-        } else {
-            majorField.style.display = "none";
-            if (majorSelect) {
-                majorSelect.value = "";
-            }
-        }
+        // The specialization picker is always available; blank means General.
+        majorField.style.display = "";
     }
 
     function canFetchCourses() {
         if (!yearSelect || !yearSelect.value || !semesterSelect || !semesterSelect.value) {
             return false;
         }
-        if (isMajorRequired(yearSelect.value, semesterSelect.value)) {
-            return Boolean(majorSelect && majorSelect.value);
-        }
+        // Specialization is optional (blank = General), so it never blocks fetch.
         return true;
     }
 

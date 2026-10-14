@@ -205,8 +205,8 @@ def mock_db(monkeypatch):
         ],
         'activity_log': [],
         'program': [
-            {'id': 1, 'program_name': 'BSIT', 'program_code': 'BSIT'},
-            {'id': 2, 'program_name': 'BSBA', 'program_code': 'BSBA'},
+            {'id': 1, 'program_code': 'BSIT', 'program_code': 'BSIT'},
+            {'id': 2, 'program_code': 'BSBA', 'program_code': 'BSBA'},
         ],
     }
     fake_client = FakeSupabaseClient(store)
@@ -654,12 +654,12 @@ def test_signup_duplicate_email(mock_db):
 
 
 def test_user_to_dict_clean_string_formatting():
-    # Test joined dict from Supabase: {'program': {'program_name': 'BSIT'}}
+    # Test joined dict from Supabase: {'program': {'program_code': 'BSIT'}}
     row1 = {
         'id': 'u1',
         'role': 'scheduler',
         'program_id': 1,
-        'program': {'program_name': 'BSIT'},
+        'program': {'program_code': 'BSIT'},
     }
     d1 = app_module._user_to_dict(row1)
     assert d1['program'] == 'BSIT'
@@ -676,7 +676,7 @@ def test_user_to_dict_clean_string_formatting():
     assert d2['program'] == ''
     assert d2['program_id'] is None
 
-    # Test viewer role has program = '' and program_id = None
+    # Test viewer role KEEPS its program (viewers are program-scoped)
     row3 = {
         'id': 'u3',
         'role': 'viewer',
@@ -684,8 +684,8 @@ def test_user_to_dict_clean_string_formatting():
         'program': 'BSIT',
     }
     d3 = app_module._user_to_dict(row3)
-    assert d3['program'] == ''
-    assert d3['program_id'] is None
+    assert d3['program'] == 'BSIT'
+    assert d3['program_id'] == 1
 
 
 def test_edit_user_role_to_viewer_clears_program(mock_db):
@@ -706,25 +706,13 @@ def test_edit_user_role_to_viewer_clears_program(mock_db):
     }
     mock_db['users'].append(sched_user)
 
-    # Edit Sam to Viewer without program -> rejected 400 (Program is required for Chair and Viewer)
-    res_bad = client.post('/edit_user/sched-to-viewer-uuid', data={
-        'first_name': 'Sam',
-        'last_name': 'Sched',
-        'email': 'samsched@example.com',
-        'role': 'viewer',
-        'program': '',
-    })
-    assert res_bad.status_code == 400
-    assert 'Program is required' in res_bad.get_json().get('message', '')
-
-    # Edit Sam to Viewer with program BSIT -> success
+    # Edit Sam to Viewer (no program needed) -> success, program_id cleared
     res = client.post('/edit_user/sched-to-viewer-uuid', data={
         'first_name': 'Sam',
         'last_name': 'Sched',
         'email': 'samsched@example.com',
         'role': 'viewer',
-        'program': 'BSIT',
-        'program_id': '1',
+        'program': '',
     })
     assert res.status_code == 200
     data = json.loads(res.data.decode('utf-8'))
@@ -732,9 +720,9 @@ def test_edit_user_role_to_viewer_clears_program(mock_db):
 
     updated = next(u for u in mock_db['users'] if u.get('id') == 'sched-to-viewer-uuid')
     assert updated['role'] == 'viewer'
-    assert updated.get('program_id') == 1
+    assert updated.get('program_id') is None
 
-    # Edit to Admin -> program cleared to None (only Admin has NULL program)
+    # Edit to Admin -> program stays None
     res_admin = client.post('/edit_user/sched-to-viewer-uuid', data={
         'first_name': 'Sam',
         'last_name': 'Sched',

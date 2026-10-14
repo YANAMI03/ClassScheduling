@@ -335,7 +335,7 @@ def test_restore_database_legacy_format_mapping(monkeypatch):
     legacy_backup = {
         "_metadata": {"version": "1.0"},
         "data": {
-            "program": [{"id": 1, "program_name": "BSIT"}],
+            "program": [{"id": 1, "program_code": "BSIT"}],
             "professor": [{"prof_id": 5, "first_name": "Maria", "last_name": "Santos"}],
             "prof_course": [{"id": 20, "prof_id": 5, "course_id": 101, "sections": 2}],
             "schedule": [{"schedule_id": 50, "course_id": 101, "prof_course_id": 20, "day": "M"}]
@@ -387,7 +387,7 @@ def test_client_restore_clear_existing_uses_valid_pk_types(monkeypatch):
     monkeypatch.setattr(FakeSupabaseTableQuery, 'neq', tracked_neq)
 
     sample_data = {
-        'program': [{'id': 1, 'program_name': 'BSIT'}],
+        'program': [{'id': 1, 'program_code': 'BSIT'}],
         'users': [{'id': '11111111-1111-1111-1111-111111111111', 'username': 'admin'}],
         'course': [{'course_id': 10, 'course_code': 'CS1'}],
         'schedule': [{'schedule_id': 100}],
@@ -415,7 +415,7 @@ def test_client_restore_discards_dropped_columns_across_tables(monkeypatch):
 
     sample_data = {
         'program': [{
-            'id': 1, 'program_name': 'BSIT', 'full_name': 'BS Information Tech',
+            'id': 1, 'program_code': 'BSIT', 'full_name': 'BS Information Tech',
             'created_at': '2026-01-01', 'updated_at': '2026-01-02'
         }],
         'room': [{

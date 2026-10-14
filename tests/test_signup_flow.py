@@ -20,14 +20,14 @@ def test_anonymous_get_signup_page_returns_200_and_expected_fields(client):
 
     soup = BeautifulSoup(html, 'html.parser')
     assert "Create your account" in html
-    assert "New accounts have view-only access to the Section and Room schedules" in html
+    assert "New accounts have view-only access to Section and Room schedules across all programs" in html
 
     # Verify format hint line above Full Name
     assert "REQUIRED FORMAT: La Madrid, Micko John A." in html
 
-    # Verify input fields in required order
+    # Verify input fields in required order (no Program field any more)
     assert soup.find('input', {'name': 'full_name'}) is not None
-    assert soup.find('select', {'name': 'program'}) is not None
+    assert soup.find('select', {'name': 'program'}) is None
     assert soup.find('input', {'name': 'email'}) is not None
     assert soup.find('input', {'name': 'password'}) is not None
     assert soup.find('input', {'name': 'confirm_password'}) is not None
@@ -109,17 +109,17 @@ def test_signup_validation_name_format(client):
     assert "Use the format: Last name, First name M.I." in res.data.decode('utf-8')
 
 
-def test_signup_validation_program_required(client):
-    """Program is required on sign-up."""
+def test_signup_validation_program_not_required(client):
+    """Sign-up no longer asks for or requires a program (new accounts are viewers)."""
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria',
-        'program': '',
         'email': 'valid@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
     })
     assert res.status_code == 200
-    assert "Please select your program." in res.data.decode('utf-8')
+    html = res.data.decode('utf-8')
+    assert "Please select your program." not in html
 
 
 def test_signup_validation_invalid_email(client):
@@ -168,7 +168,7 @@ def test_signup_validation_passwords_mismatch(client):
 def test_signup_allowed_email_domains(client, monkeypatch):
     """ALLOWED_SIGNUP_EMAIL_DOMAINS restriction should block unapproved domains."""
     monkeypatch.setenv('ALLOWED_SIGNUP_EMAIL_DOMAINS', 'neust.edu.ph,cict.neust.edu.ph')
-    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}])
+    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_code': 'BSIT'}])
 
     # 1. Blocked domain
     res_blocked = client.post('/signup', data={
@@ -215,7 +215,7 @@ def test_signup_honeypot_silently_rejects(client, monkeypatch):
     """If bot fills the honeypot field, reject silently without calling Supabase."""
     called = []
     monkeypatch.setattr(app_module.supabase.auth, 'sign_up', lambda p: called.append(p))
-    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}])
+    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_code': 'BSIT'}])
 
     res = client.post('/signup', data={
         'full_name': 'Spammer, Bot',
@@ -243,11 +243,9 @@ def test_signup_tampering_role_ignored_and_viewer_forced(client, monkeypatch):
         session = None
 
     monkeypatch.setattr(app_module.supabase.auth, 'sign_up', lambda p: captured.append(p) or DummyRes())
-    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}])
 
     client.post('/signup', data={
         'full_name': 'Santos, Maria',
-        'program': '1',
         'email': 'tamper_test@example.com',
         'password': 'Password123!',
         'confirm_password': 'Password123!',
@@ -258,8 +256,8 @@ def test_signup_tampering_role_ignored_and_viewer_forced(client, monkeypatch):
     payload = captured[0]
     data = payload['options']['data']
     assert 'role' not in data  # Role is strictly forced to viewer by DB trigger handle_new_auth_user
-    assert data['program_id'] == 1
-    assert data['program'] == 'BSIT'
+    assert 'program_id' not in data  # No program on signup; assigned later by an admin
+    assert 'program' not in data
     assert data['full_name'] == 'Santos, Maria'
     assert data['first_name'] == 'Maria'
     assert data['last_name'] == 'Santos'
@@ -271,7 +269,7 @@ def test_signup_rate_limit_friendly_message(client, monkeypatch):
         raise Exception("429 Client Error: email rate limit exceeded for url https://.../auth/v1/signup")
 
     monkeypatch.setattr(app_module.supabase.auth, 'sign_up', raise_rate_limit)
-    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}])
+    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_code': 'BSIT'}])
 
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria',
@@ -300,7 +298,7 @@ def test_signup_duplicate_email_neutral_message(client, monkeypatch):
         session = None
 
     monkeypatch.setattr(app_module.supabase.auth, 'sign_up', lambda p: ExistingRes())
-    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}])
+    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_code': 'BSIT'}])
 
     res = client.post('/signup', data={
         'full_name': 'Santos, Maria',
@@ -325,7 +323,7 @@ def test_signup_throttle_attempts(client, monkeypatch):
         session = None
 
     monkeypatch.setattr(app_module.supabase.auth, 'sign_up', lambda p: DummyRes())
-    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_name': 'BSIT'}])
+    monkeypatch.setattr(app_module, '_get_signup_programs', lambda: [{'id': 1, 'program_code': 'BSIT'}])
     # Reset throttle state for clean test
     with app_module._signup_throttles_lock:
         app_module._signup_throttles.clear()
