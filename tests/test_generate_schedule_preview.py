@@ -1138,20 +1138,20 @@ def test_edit_schedule_entry_with_professor_load_id(monkeypatch):
     monkeypatch.setattr(app_module, 'log_activity', lambda *args, **kwargs: None)
 
     resp = client.post('/edit_schedule_entry/10', json={
-        'professor_load_id': 102,
-        'room_id': 2,
         'timeslot': 'Tuesday | 09:00 AM - 12:00 PM',
-        'session_type': 'Laboratory'
+        'room_id': 1,
     })
 
     assert resp.status_code == 200
     res_json = resp.get_json()
     assert res_json.get('success') is True
-    assert updated_data.get('professor_load_id') == 102
-    assert updated_data.get('room_id') == 2
     assert updated_data.get('day') == 'Tuesday'
-    assert updated_data.get('session_type') == 'Laboratory'
-    # Ensure obsolete columns are never written
+    assert updated_data.get('class_start') == '09:00:00'
+    assert updated_data.get('class_end') == '12:00:00'
+    assert updated_data.get('room_id') == 1
+    # Professor, course and session type are read-only and never written.
+    assert 'professor_load_id' not in updated_data
+    assert 'session_type' not in updated_data
     assert 'course_id' not in updated_data
     assert 'prof_id' not in updated_data
 

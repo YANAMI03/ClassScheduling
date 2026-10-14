@@ -378,7 +378,7 @@
 </div>
 
 {% if can_edit_schedule %}
-<!-- Edit Entry Modal (For Schedulers) -->
+<!-- Edit Entry Modal (Chair only) -->
 <div class="modal fade" id="editEntryModal" tabindex="-1" aria-labelledby="editEntryModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -392,35 +392,43 @@
                 <form id="edit-entry-form">
                     <input type="hidden" id="edit-entry-id">
                     <div class="mb-3">
-                        <label class="form-label" for="edit-entry-professor-load">Professor & Course</label>
-                        <select class="form-select" id="edit-entry-professor-load">
-                            <option value="">Select Professor - Course</option>
-                            {% for pc in all_professor_loads %}
-                            <option value="{{ pc.professor_load_id }}" data-prof-id="{{ pc.prof_id }}"
-                                data-course-id="{{ pc.course_id }}">{{ pc.label }}</option>
-                            {% endfor %}
-                        </select>
+                        <label class="form-label">Professor &amp; Course</label>
+                        <input type="text" class="form-control" id="edit-entry-professor-course" readonly>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Session Type</label>
+                        <input type="text" class="form-control" id="edit-entry-session" readonly>
+                    </div>
+                    <div class="mb-3" id="edit-entry-room-group">
                         <label class="form-label" for="edit-entry-room-select">Room</label>
                         <select class="form-select" id="edit-entry-room-select">
                             <option value="">TBA / No Room</option>
                             {% for r in rooms %}
-                            <option value="{{ r.room_id }}">{{ r.room_name }} ({{ r.room_type or 'General' }})</option>
+                            <option value="{{ r.room_id }}" data-room-type="{{ (r.room_type or '')|lower }}">{{ r.room_name }} ({{ r.room_type or 'General' }})</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="edit-entry-timeslot">Timeslot</label>
-                        <input type="text" class="form-control" id="edit-entry-timeslot"
-                            placeholder="e.g. Monday | 08:00 AM - 09:00 AM">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="edit-entry-session">Session Type</label>
-                        <select class="form-select" id="edit-entry-session">
-                            <option value="Lecture">Lecture</option>
-                            <option value="Laboratory">Laboratory</option>
+                        <label class="form-label" for="edit-entry-day">Day</label>
+                        <select class="form-select" id="edit-entry-day">
+                            <option value="Monday">Monday</option>
+                            <option value="Tuesday">Tuesday</option>
+                            <option value="Wednesday">Wednesday</option>
+                            <option value="Thursday">Thursday</option>
+                            <option value="Friday">Friday</option>
+                            <option value="Saturday">Saturday</option>
+                            <option value="Sunday">Sunday</option>
                         </select>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label" for="edit-entry-start">Start Time</label>
+                            <input type="time" class="form-control" id="edit-entry-start">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="edit-entry-end">End Time</label>
+                            <input type="time" class="form-control" id="edit-entry-end">
+                        </div>
                     </div>
                 </form>
             </div>
@@ -446,9 +454,12 @@
         var editEntryModalEl = document.getElementById('editEntryModal');
         var editEntryModal = editEntryModalEl ? new bootstrap.Modal(editEntryModalEl) : null;
         var editEntryId = document.getElementById('edit-entry-id');
-        var editEntryProfessorLoad = document.getElementById('edit-entry-professor-load');
+        var editEntryProfessorCourse = document.getElementById('edit-entry-professor-course');
         var editEntryRoomSelect = document.getElementById('edit-entry-room-select');
-        var editEntryTimeslot = document.getElementById('edit-entry-timeslot');
+        var editEntryRoomGroup = document.getElementById('edit-entry-room-group');
+        var editEntryDay = document.getElementById('edit-entry-day');
+        var editEntryStart = document.getElementById('edit-entry-start');
+        var editEntryEnd = document.getElementById('edit-entry-end');
         var editEntrySession = document.getElementById('edit-entry-session');
         var saveEntryBtn = document.getElementById('save-entry-btn');
         var currentEntryData = {};
@@ -459,42 +470,39 @@
             }
         }
 
-        function parseClientTime(value) {
-            var match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-            if (!match) return null;
+        // "08:00 AM" -> "08:00" (24h, for <input type="time">)
+        function to24h(value) {
+            var match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+            if (!match) return '';
             var hour = parseInt(match[1], 10);
-            var minute = parseInt(match[2], 10);
-            var meridiem = match[3].toUpperCase();
-            if (hour < 1 || hour > 12 || minute > 59) return null;
-            if (meridiem === 'AM' && hour === 12) hour = 0;
+            var minute = match[2];
+            var meridiem = (match[3] || '').toUpperCase();
             if (meridiem === 'PM' && hour !== 12) hour += 12;
-            return hour * 60 + minute;
+            if (meridiem === 'AM' && hour === 12) hour = 0;
+            return (hour < 10 ? '0' + hour : String(hour)) + ':' + minute;
         }
 
-        function findClientRoomConflict(entryId, roomId, timeslot) {
-            if (!roomId || !timeslot || timeslot.indexOf('|') === -1) return null;
-            var parts = timeslot.split('|', 2);
-            var day = parts[0].trim();
-            var timeParts = parts[1].split('-', 2);
-            if (timeParts.length !== 2) return null;
-            var start = parseClientTime(timeParts[0]);
-            var end = parseClientTime(timeParts[1]);
-            if (start === null || end === null || end <= start) return null;
+        function splitTimeRange(range) {
+            var parts = String(range || '').split('-', 2);
+            if (parts.length !== 2) return ['', ''];
+            return [to24h(parts[0].trim()), to24h(parts[1].trim())];
+        }
 
-            var conflict = null;
-            $('.schedule-row').each(function () {
-                var $row = $(this);
-                if (String($row.data('entry-id')) === String(entryId) || String($row.data('room-id')) !== String(roomId)) return;
-                if (String($row.data('day')) !== day) return;
-                var existingParts = String($row.data('time') || '').split('-', 2);
-                var existingStart = parseClientTime(existingParts[0]);
-                var existingEnd = parseClientTime(existingParts[1]);
-                if (existingStart !== null && existingEnd !== null && start < existingEnd && existingStart < end) {
-                    conflict = $row;
-                    return false;
-                }
+        // Show only rooms compatible with the session type (lab vs lecture).
+        function filterRoomsBySession(sessionType) {
+            if (!editEntryRoomSelect) return;
+            var isLab = /lab/i.test(sessionType || '');
+            var options = editEntryRoomSelect.querySelectorAll('option');
+            options.forEach(function (opt) {
+                if (opt.value === '') { opt.hidden = false; return; }
+                var t = (opt.getAttribute('data-room-type') || '').toLowerCase();
+                var isLabRoom = t.indexOf('lab') !== -1 || t.indexOf('laboratory') !== -1;
+                opt.hidden = isLab ? !isLabRoom : isLabRoom;
             });
-            return conflict;
+            var selected = editEntryRoomSelect.querySelector('option[value="' + editEntryRoomSelect.value + '"]');
+            if (selected && selected.hidden) {
+                editEntryRoomSelect.value = '';
+            }
         }
 
         $('.schedule-row').on('click', function (e) {
@@ -503,12 +511,15 @@
                 return;
             }
             var $t = $(this);
+            var times = splitTimeRange($t.data('time') || '');
             currentEntryData = {
                 id: $t.data('entry-id') || '',
-                professorLoadId: $t.data('professor-load-id') || '',
                 roomId: $t.data('room-id') || '',
-                timeslot: $t.data('timeslot') || ($t.data('day') + ' | ' + $t.data('time')),
-                session: $t.data('session') || 'Lecture'
+                day: $t.data('day') || '',
+                start: times[0],
+                end: times[1],
+                session: $t.data('session') || 'Lecture',
+                professorCourse: (($t.data('professor') || 'TBA') + ' - ' + ($t.data('course') || 'TBA'))
             };
 
             $('#modalCourseName').text($t.data('course') || 'TBA');
@@ -537,10 +548,25 @@
         $('#modalEditBtn').on('click', function () {
             scheduleDetailModal.hide();
             editEntryId.value = currentEntryData.id || '';
-            editEntryProfessorLoad.value = currentEntryData.professorLoadId ? String(currentEntryData.professorLoadId) : '';
-            editEntryRoomSelect.value = currentEntryData.roomId ? String(currentEntryData.roomId) : '';
-            editEntryTimeslot.value = currentEntryData.timeslot || '';
+            editEntryProfessorCourse.value = currentEntryData.professorCourse || '';
             editEntrySession.value = currentEntryData.session || 'Lecture';
+            editEntryDay.value = currentEntryData.day || 'Monday';
+            editEntryStart.value = currentEntryData.start || '';
+            editEntryEnd.value = currentEntryData.end || '';
+
+            var isIlp = /ilp/i.test(currentEntryData.session || '');
+            if (editEntryRoomGroup) {
+                if (isIlp) {
+                    // ILP sessions have no room.
+                    editEntryRoomGroup.classList.add('d-none');
+                    if (editEntryRoomSelect) editEntryRoomSelect.value = '';
+                } else {
+                    editEntryRoomGroup.classList.remove('d-none');
+                    filterRoomsBySession(currentEntryData.session);
+                    editEntryRoomSelect.value = currentEntryData.roomId ? String(currentEntryData.roomId) : '';
+                }
+            }
+
             setTimeout(function () {
                 editEntryModal.show();
             }, 350);
@@ -548,22 +574,14 @@
 
         if (saveEntryBtn) {
             saveEntryBtn.addEventListener('click', function () {
+                var sessionType = currentEntryData.session || 'Lecture';
+                var isIlp = /ilp/i.test(sessionType);
                 var payload = {
-                    professor_load_id: editEntryProfessorLoad.value ? parseInt(editEntryProfessorLoad.value, 10) : null,
-                    room_id: editEntryRoomSelect.value ? parseInt(editEntryRoomSelect.value, 10) : null,
-                    timeslot: editEntryTimeslot.value,
-                    session_type: editEntrySession.value
+                    day: editEntryDay ? editEntryDay.value : '',
+                    start: editEntryStart ? editEntryStart.value : '',
+                    end: editEntryEnd ? editEntryEnd.value : '',
+                    room_id: (isIlp || !editEntryRoomSelect || !editEntryRoomSelect.value) ? null : parseInt(editEntryRoomSelect.value, 10)
                 };
-
-                var clientConflict = findClientRoomConflict(editEntryId.value, payload.room_id, payload.timeslot);
-                if (clientConflict) {
-                    showToast(
-                        'Room conflict: ' + (clientConflict.data('room') || 'The selected room') +
-                        ' is already booked by Section ' + (clientConflict.data('section') || 'another section') + '.',
-                        'error'
-                    );
-                    return;
-                }
 
                 if (typeof window.setButtonLoading === 'function') {
                     window.setButtonLoading(saveEntryBtn, true, 'Saving...');
@@ -577,12 +595,16 @@
                     body: JSON.stringify(payload)
                 })
                     .then(function (response) {
-                        if (!response.ok) {
-                            return response.json().then(function (data) {
-                                throw new Error(data.message || 'Something went wrong. Please try again.');
-                            });
-                        }
-                        return response.json();
+                        return response.json().then(function (data) {
+                            if (!response.ok) {
+                                var msg = data.message || 'Something went wrong. Please try again.';
+                                if (data.conflicts && data.conflicts.length) {
+                                    msg = data.conflicts.join('\n');
+                                }
+                                throw new Error(msg);
+                            }
+                            return data;
+                        });
                     })
                     .then(function (data) {
                         editEntryModal.hide();
@@ -590,6 +612,7 @@
                         setTimeout(function () { window.location.reload(); }, 800);
                     })
                     .catch(function (err) {
+                        // Keep the modal open; show the conflict message.
                         showToast(err.message || 'Something went wrong. Please try again.', 'error');
                     })
                     .finally(function () {
@@ -601,5 +624,6 @@
                     });
             });
         }
+    });
 </script>
 {% endblock %}
