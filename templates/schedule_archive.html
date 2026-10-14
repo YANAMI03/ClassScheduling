@@ -32,20 +32,28 @@
 
 <!-- Filters Card -->
 <div class="card-custom mb-4 shadow-sm">
-    <form method="get" action="{{ url_for('schedule_archive') }}" class="row g-3 align-items-end">
-        <div class="col-md-3">
+    <form method="get" action="{{ url_for('schedule_archive') }}" class="row g-3 align-items-end" id="archiveFilterForm">
+        <input type="hidden" name="status" id="statusFilterInput" value="{{ status_filter or 'all' }}">
+        <div class="col-md-2">
             <label class="form-label fw-semibold small text-muted" for="semesterFilter">Semester</label>
-            <select id="semesterFilter" name="semester" class="form-select">
-                <option value="">All Semesters</option>
+            <select id="semesterFilter" name="semester" class="form-select" onchange="this.form.submit()">
                 {% for sem in semester_options %}
                 <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <label class="form-label fw-semibold small text-muted" for="schoolYearFilter">School Year</label>
+            <select id="schoolYearFilter" name="school_year" class="form-select">
+                <option value="">All School Years</option>
+                {% for sy in school_year_options %}
+                <option value="{{ sy }}" {% if sy == school_year_filter %}selected{% endif %}>{{ sy }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
             <label class="form-label fw-semibold small text-muted" for="programFilter">Program</label>
-            <select id="programFilter" name="program" class="form-select">
-                <option value="">All Programs</option>
+            <select id="programFilter" name="program" class="form-select" onchange="this.form.submit()">
                 {% for prog in program_options %}
                 <option value="{{ prog }}" {% if prog == program_filter %}selected{% endif %}>{{ prog }}</option>
                 {% endfor %}
@@ -86,21 +94,55 @@
 <!-- Archive Batches -->
 {% if archive_batches %}
 <div class="card-custom shadow-sm">
+    <!-- Archive Status Tabs (matching Academic Program pill-tab design) -->
+    <div class="archive-status-tabs-bar mb-3 pb-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="text-muted fw-semibold small text-uppercase" style="letter-spacing: 0.5px;">
+                <i class="bi bi-tag me-1"></i> ARCHIVE STATUS
+            </span>
+        </div>
+        <ul class="nav custom-nav-pills flex-wrap gap-2" id="archiveStatusTabsNav" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if not status_filter or status_filter == 'all' %}active{% endif %}" id="tab-status-all" data-status="all" type="button" role="tab">
+                    <i class="bi bi-grid me-1"></i> All Archives
+                    <span class="badge ms-1" id="count-status-all">{{ count_all }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if status_filter == 'used' %}active{% endif %}" id="tab-status-used" data-status="used" type="button" role="tab">
+                    <i class="bi bi-check-circle me-1"></i> Used
+                    <span class="badge ms-1" id="count-status-used">{{ count_used }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if status_filter == 'not_used' or status_filter == 'unused' %}active{% endif %}" id="tab-status-not-used" data-status="not_used" type="button" role="tab">
+                    <i class="bi bi-x-circle me-1"></i> Not Used
+                    <span class="badge ms-1" id="count-status-not-used">{{ count_not_used }}</span>
+                </button>
+            </li>
+        </ul>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
                     <th class="ps-3" style="width: 22%;">Archived Version / Date</th>
-                    <th style="width: 16%;">Semester & Program</th>
-                    <th style="width: 18%;">Entries & Sections</th>
-                    <th style="width: 16%;">Archived By</th>
-                    <th style="width: 14%;">Reason</th>
-                    <th class="text-end pe-3" style="width: 14%;">Actions</th>
+                    <th style="width: 18%;">Semester, S.Y. & Program</th>
+                    <th style="width: 17%;">Entries & Sections</th>
+                    <th style="width: 15%;">Archived By</th>
+                    <th style="width: 12%;">Reason</th>
+                    <th class="text-end pe-3" style="width: 16%;">Actions</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="archiveBatchesTbody">
                 {% for batch in archive_batches %}
-                <tr>
+                <tr class="archive-batch-row"
+                    data-batch-id="{{ batch.batch_id }}"
+                    data-is-used="{{ 'true' if batch.is_used else 'false' }}"
+                    data-school-year="{{ batch.school_year or '' }}"
+                    data-semester="{{ batch.semester or '' }}"
+                    data-program="{{ batch.program or '' }}">
                     <td class="ps-3">
                         <div class="d-flex align-items-center">
                             <div class="avatar-sm bg-primary-subtle text-primary rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; background-color: #e0e7ff; color: #4338ca;">
@@ -117,7 +159,15 @@
                         </div>
                     </td>
                     <td>
-                        <span class="badge bg-primary px-2 py-1 mb-1">{{ batch.semester }}</span>
+                        <div class="d-flex flex-wrap gap-1 mb-1 align-items-center">
+                            <span class="badge bg-primary px-2 py-1">{{ batch.semester }}</span>
+                            {% if batch.school_year %}
+                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1">S.Y. {{ batch.school_year }}</span>
+                            {% endif %}
+                            <span class="badge bg-success px-2 py-1 align-items-center batch-used-badge" {% if not batch.is_used %}style="display: none;"{% else %}style="display: inline-flex;"{% endif %}>
+                                <i class="bi bi-check-circle me-1"></i> Used
+                            </span>
+                        </div>
                         <span class="d-block text-secondary small fw-medium">{{ batch.program or 'All Programs' }}</span>
                     </td>
                     <td>
@@ -141,13 +191,22 @@
                         </span>
                     </td>
                     <td class="text-end pe-3">
-                        <div class="d-flex justify-content-end gap-1">
+                        <div class="d-flex justify-content-end gap-1 flex-wrap">
                             <a href="{{ url_for('view_schedule_archive_batch', batch_id=batch.batch_id) }}" class="btn btn-sm btn-outline-secondary" title="View archived schedule details">
                                 <i class="bx bx-show"></i> View
                             </a>
+                            {% if is_scheduler and (not is_admin) and (not batch.program or batch.program == user_prog or user_prog == '') %}
+                            <button type="button" class="btn btn-sm {% if batch.is_used %}btn-outline-success{% else %}btn-success{% endif %} toggle-batch-used-btn"
+                                    data-batch-id="{{ batch.batch_id }}"
+                                    data-is-used="{{ 'true' if batch.is_used else 'false' }}"
+                                    title="Toggle used status">
+                                <i class="bi {% if batch.is_used %}bi-x-circle{% else %}bi-check-circle{% endif %} me-1 btn-used-icon"></i>
+                                <span class="btn-used-text">{% if batch.is_used %}Unmark as Used{% else %}Mark as Used{% endif %}</span>
+                            </button>
+                            {% endif %}
                             {% set can_restore = (not is_admin) and is_scheduler and (not batch.program or batch.program == user_prog or user_prog == '') %}
                             {% if can_restore %}
-                            <button type="button" class="btn btn-sm btn-success restore-batch-btn"
+                            <button type="button" class="btn btn-sm btn-outline-primary restore-batch-btn"
                                     data-batch-id="{{ batch.batch_id }}"
                                     data-semester="{{ batch.semester }}"
                                     data-program="{{ batch.program or 'All Programs' }}"
@@ -160,6 +219,11 @@
                     </td>
                 </tr>
                 {% endfor %}
+                <tr id="empty-status-filter-row" style="display: none;">
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        <i class="bi bi-info-circle me-1"></i> No archived schedules match the selected status filter.
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -283,6 +347,177 @@
                 if (deleteModalBatch) deleteModalBatch.textContent = batchId;
 
                 deleteModal.show();
+            });
+        });
+
+        // Archive Status Pill Tabs & Used Toggle Logic
+        var currentStatus = (document.getElementById('statusFilterInput') ? document.getElementById('statusFilterInput').value : 'all') || 'all';
+
+        function updateCounts() {
+            var rows = document.querySelectorAll('.archive-batch-row');
+            var total = rows.length;
+            var used = 0;
+            rows.forEach(function(row) {
+                if (row.getAttribute('data-is-used') === 'true') {
+                    used++;
+                }
+            });
+            var notUsed = total - used;
+            var elAll = document.getElementById('count-status-all');
+            var elUsed = document.getElementById('count-status-used');
+            var elNotUsed = document.getElementById('count-status-not-used');
+            if (elAll) elAll.textContent = total;
+            if (elUsed) elUsed.textContent = used;
+            if (elNotUsed) elNotUsed.textContent = notUsed;
+        }
+
+        function filterByStatus(status) {
+            currentStatus = status || 'all';
+            var statusInput = document.getElementById('statusFilterInput');
+            if (statusInput) statusInput.value = currentStatus;
+
+            document.querySelectorAll('#archiveStatusTabsNav .nav-link').forEach(function(tab) {
+                if (tab.getAttribute('data-status') === currentStatus) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+
+            var rows = document.querySelectorAll('.archive-batch-row');
+            var visibleCount = 0;
+            rows.forEach(function(row) {
+                var isUsed = row.getAttribute('data-is-used') === 'true';
+                var show = false;
+                if (currentStatus === 'all') {
+                    show = true;
+                } else if (currentStatus === 'used') {
+                    show = isUsed;
+                } else if (currentStatus === 'not_used' || currentStatus === 'unused') {
+                    show = !isUsed;
+                }
+                if (show) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            var emptyRow = document.getElementById('empty-status-filter-row');
+            if (emptyRow) {
+                emptyRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+            }
+        }
+
+        document.querySelectorAll('#archiveStatusTabsNav .nav-link').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                var status = this.getAttribute('data-status');
+                filterByStatus(status);
+            });
+        });
+
+        // Initialize status filter & counts
+        filterByStatus(currentStatus);
+        updateCounts();
+
+        // Handle Mark as Used / Unmark as Used button clicks
+        document.querySelectorAll('.toggle-batch-used-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var self = this;
+                var batchId = self.getAttribute('data-batch-id');
+                var currentUsed = self.getAttribute('data-is-used') === 'true';
+                var targetUsed = !currentUsed;
+                self.disabled = true;
+
+                fetch('/api/schedule/toggle_used', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        batch_id: batchId,
+                        is_used: targetUsed
+                    })
+                })
+                .then(function(res) {
+                    return res.json().then(function(data) {
+                        if (!res.ok || !data.ok) {
+                            throw new Error(data.error || 'Failed to update schedule status.');
+                        }
+                        return data;
+                    });
+                })
+                .then(function(data) {
+                    var isUsed = data.is_used;
+                    var sy = data.school_year;
+                    var sem = data.semester;
+
+                    // If marking as used, unmark other batches in same school_year + semester in DOM
+                    if (isUsed) {
+                        document.querySelectorAll('.archive-batch-row').forEach(function(otherRow) {
+                            var otherBatchId = otherRow.getAttribute('data-batch-id');
+                            var otherSy = otherRow.getAttribute('data-school-year');
+                            var otherSem = otherRow.getAttribute('data-semester');
+                            if (otherBatchId !== batchId && otherSy === sy && otherSem === sem) {
+                                otherRow.setAttribute('data-is-used', 'false');
+                                var otherBadge = otherRow.querySelector('.batch-used-badge');
+                                if (otherBadge) otherBadge.style.display = 'none';
+                                var otherBtn = otherRow.querySelector('.toggle-batch-used-btn');
+                                if (otherBtn) {
+                                    otherBtn.setAttribute('data-is-used', 'false');
+                                    otherBtn.className = 'btn btn-sm btn-success toggle-batch-used-btn';
+                                    var otherIcon = otherBtn.querySelector('.btn-used-icon');
+                                    var otherText = otherBtn.querySelector('.btn-used-text');
+                                    if (otherIcon) otherIcon.className = 'bi bi-check-circle me-1 btn-used-icon';
+                                    if (otherText) otherText.textContent = 'Mark as Used';
+                                }
+                            }
+                        });
+                    }
+
+                    // Update clicked row
+                    var parentRow = self.closest('.archive-batch-row');
+                    if (parentRow) {
+                        parentRow.setAttribute('data-is-used', isUsed ? 'true' : 'false');
+                        var badge = parentRow.querySelector('.batch-used-badge');
+                        if (badge) badge.style.display = isUsed ? 'inline-flex' : 'none';
+                    }
+
+                    self.setAttribute('data-is-used', isUsed ? 'true' : 'false');
+                    var icon = self.querySelector('.btn-used-icon');
+                    var text = self.querySelector('.btn-used-text');
+
+                    if (isUsed) {
+                        self.className = 'btn btn-sm btn-outline-success toggle-batch-used-btn';
+                        if (icon) icon.className = 'bi bi-x-circle me-1 btn-used-icon';
+                        if (text) text.textContent = 'Unmark as Used';
+                        if (typeof showToast === 'function') {
+                            showToast('Archived schedule marked as used.', 'success');
+                        }
+                    } else {
+                        self.className = 'btn btn-sm btn-success toggle-batch-used-btn';
+                        if (icon) icon.className = 'bi bi-check-circle me-1 btn-used-icon';
+                        if (text) text.textContent = 'Mark as Used';
+                        if (typeof showToast === 'function') {
+                            showToast('Archived schedule unmarked as used.', 'info');
+                        }
+                    }
+
+                    updateCounts();
+                    filterByStatus(currentStatus);
+                })
+                .catch(function(err) {
+                    if (typeof showToast === 'function') {
+                        showToast(err.message || 'Error updating status', 'danger');
+                    } else {
+                        alert(err.message || 'Error updating status');
+                    }
+                })
+                .finally(function() {
+                    self.disabled = false;
+                });
             });
         });
     });

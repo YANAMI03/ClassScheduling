@@ -21,8 +21,14 @@
                 <i class="bx bx-arrow-back me-1"></i> Back to Archive
             </a>
             <span class="badge bg-secondary">Archived Version</span>
+            {% if batch_info.school_year %}
+            <span class="badge bg-secondary-subtle text-secondary border">S.Y. {{ batch_info.school_year }}</span>
+            {% endif %}
+            {% if batch_info.is_used %}
+            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Used</span>
+            {% endif %}
         </div>
-        <h1 class="page-title mb-1">{{ batch_info.semester }} ({{ batch_info.program or 'All Programs' }})</h1>
+        <h1 class="page-title mb-1">{% if batch_info.school_year %}S.Y. {{ batch_info.school_year }} &middot; {% endif %}{{ batch_info.semester }} ({{ batch_info.program or 'All Programs' }})</h1>
         <p class="page-subtitle mb-0">
             Archived on <strong>{{ batch_info.archived_at_fmt }}</strong> by <strong>{{ batch_info.archived_by or 'Chair' }}</strong>{% if batch_info.archived_by_title and batch_info.archived_by_title != 'Role/title unavailable' %} <span class="text-muted">({{ batch_info.archived_by_title }})</span>{% endif %}
             {% if batch_info.archive_reason %} &bull; <em>{{ batch_info.archive_reason }}</em>{% endif %}

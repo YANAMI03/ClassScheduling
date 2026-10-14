@@ -16,11 +16,19 @@
 {% set can_view_archive = user_role_lower in ['super_admin', 'super admin', 'admin', 'chair', 'dean', 'chair'] %}
 <div class="page-header d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
-        <h1 class="page-title">Section Schedule</h1>
-        <p class="page-subtitle">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h1 class="page-title mb-0">Section Schedule</h1>
+            <span class="badge bg-success fs-6 py-1 px-2.5 d-inline-flex align-items-center" id="active-used-badge" {% if not active_is_used %}style="display: none;"{% endif %}>
+                <i class="bi bi-check-circle me-1"></i> Used
+            </span>
+        </div>
+        <p class="page-subtitle mt-1 mb-0">
             View and manage generated class schedules by section
+            {% if active_school_year %}
+            &bull; <span class="badge-custom badge-secondary"><i class="bx bx-calendar me-1"></i>S.Y. {{ active_school_year }}</span>
+            {% endif %}
             {% if program_filter or semester_filter %}
-            &bull; <span class="badge-custom badge-primary"><i class="bx bx-buildings me-1"></i>{{ program_filter or 'All Programs' }}{% if semester_filter %} &middot; {{ semester_filter if semester_filter|lower != 'all' else 'All Semesters' }}{% endif %}</span>
+            &bull; <span class="badge-custom badge-primary"><i class="bx bx-buildings me-1"></i>{{ program_filter }}{% if semester_filter %} &middot; {{ semester_filter }}{% endif %}</span>
             {% endif %}
         </p>
     </div>
@@ -31,6 +39,10 @@
         </a>
         {% endif %}
         {% if can_edit_schedule and not is_admin and (sections_with_entries or sections) %}
+        <button type="button" class="btn {% if active_is_used %}btn-outline-success{% else %}btn-success{% endif %}" id="btn-toggle-active-used" data-batch-id="{{ active_batch_id or 'active' }}" data-is-used="{{ 'true' if active_is_used else 'false' }}" title="Toggle schedule used status">
+            <i class="bi {% if active_is_used %}bi-x-circle{% else %}bi-check-circle{% endif %} me-1" id="btn-toggle-used-icon"></i>
+            <span id="btn-toggle-used-text">{% if active_is_used %}Unmark as Used{% else %}Mark as Used{% endif %}</span>
+        </button>
         <form action="/archive_schedule" method="POST" class="d-inline" onsubmit="return confirm('This removes the schedule from active use. You can restore it later from the archive.');">
             {% if semester_filter %}
             <input type="hidden" name="semester" value="{{ semester_filter }}">
@@ -57,11 +69,10 @@
                 <i class="bx bx-buildings me-1"></i>Program
             </label>
             <select id="programFilter" name="program" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="all" {% if not program_filter or program_filter|lower == 'all' %}selected{% endif %}>All Programs</option>
                 {% for p in programs %}
                 <option value="{{ p.program_name }}" {% if p.program_name == program_filter %}selected{% endif %}>{{ p.program_name }}</option>
                 {% else %}
-                {% if program_filter and program_filter|lower != 'all' %}
+                {% if program_filter %}
                 <option value="{{ program_filter }}" selected>{{ program_filter }}</option>
                 {% endif %}
                 {% endfor %}
@@ -84,11 +95,10 @@
             </select>
         </div>
 
-        <!-- Semester Filter (1st / 2nd / All) -->
+        <!-- Semester Filter (1st / 2nd Semester) -->
         <div class="col-md-2 col-lg-2">
             <label class="form-label small fw-bold text-muted mb-1" for="semesterFilter">Semester</label>
             <select id="semesterFilter" name="semester" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="all" {% if not semester_filter or semester_filter|lower == 'all' %}selected{% endif %}>All Semesters</option>
                 {% for sem in semester_options %}
                 <option value="{{ sem }}" {% if sem == semester_filter %}selected{% endif %}>{{ sem }}</option>
                 {% endfor %}
@@ -264,17 +274,10 @@
 <div class="card-custom text-center py-5">
     <div class="empty-state">
         <div class="empty-state__icon text-warning mb-3"><i class="bx bx-archive fs-1"></i></div>
-        {% if no_active_schedule %}
-        <h4 class="fw-bold">No Schedule Generated Yet</h4>
+        <h4 class="fw-bold">No schedule for this program and semester</h4>
         <p class="text-secondary mx-auto mb-4" style="max-width: 480px; margin: 0 auto 1.5rem;">
-            No schedule generated yet for {{ program_filter or 'this program' }}{% if semester_filter and semester_filter|lower != 'all' %} &middot; {{ semester_filter }}{% endif %}.
+            There is currently no active schedule for {{ program_filter }}{% if semester_filter %} &middot; {{ semester_filter }}{% endif %}. You can generate a new schedule or restore an archived schedule version.
         </p>
-        {% else %}
-        <h4 class="fw-bold">No Active Schedule</h4>
-        <p class="text-secondary mx-auto mb-4" style="max-width: 480px; margin: 0 auto 1.5rem;">
-            There is currently no active schedule for the selected program and semester. You can generate a new schedule for either semester or restore an archived schedule version.
-        </p>
-        {% endif %}
         <div class="d-flex justify-content-center gap-2">
             {% if can_edit_schedule %}
             <a href="/" class="btn btn-primary">
@@ -459,6 +462,72 @@ $(function(){
     if (yearFilterSelect) {
         yearFilterSelect.addEventListener('change', updateMajorFilterVisibility);
         updateMajorFilterVisibility();
+    }
+
+    var toggleUsedBtn = document.getElementById('btn-toggle-active-used');
+    if (toggleUsedBtn) {
+        toggleUsedBtn.addEventListener('click', function() {
+            var batchId = this.getAttribute('data-batch-id') || 'active';
+            var currentUsed = this.getAttribute('data-is-used') === 'true';
+            var targetUsed = !currentUsed;
+            var self = this;
+            self.disabled = true;
+
+            fetch('/api/schedule/toggle_used', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    batch_id: batchId,
+                    is_used: targetUsed
+                })
+            })
+            .then(function(res) {
+                return res.json().then(function(data) {
+                    if (!res.ok || !data.ok) {
+                        throw new Error(data.error || 'Failed to update schedule status.');
+                    }
+                    return data;
+                });
+            })
+            .then(function(data) {
+                var isUsed = data.is_used;
+                self.setAttribute('data-is-used', isUsed ? 'true' : 'false');
+                var icon = document.getElementById('btn-toggle-used-icon');
+                var text = document.getElementById('btn-toggle-used-text');
+                var badge = document.getElementById('active-used-badge');
+
+                if (isUsed) {
+                    self.className = 'btn btn-outline-success';
+                    if (icon) icon.className = 'bi bi-x-circle me-1';
+                    if (text) text.textContent = 'Unmark as Used';
+                    if (badge) badge.style.display = 'inline-flex';
+                    if (typeof showToast === 'function') {
+                        showToast('Schedule marked as used.', 'success');
+                    }
+                } else {
+                    self.className = 'btn btn-success';
+                    if (icon) icon.className = 'bi bi-check-circle me-1';
+                    if (text) text.textContent = 'Mark as Used';
+                    if (badge) badge.style.display = 'none';
+                    if (typeof showToast === 'function') {
+                        showToast('Schedule unmarked as used.', 'info');
+                    }
+                }
+            })
+            .catch(function(err) {
+                if (typeof showToast === 'function') {
+                    showToast(err.message || 'Error updating used status', 'danger');
+                } else {
+                    alert(err.message || 'Error updating used status');
+                }
+            })
+            .finally(function() {
+                self.disabled = false;
+            });
+        });
     }
 });
 </script>

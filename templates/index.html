@@ -133,18 +133,28 @@
 
     <form id="schedule-form" action="/generate_schedule" method="post">
         <div class="row g-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <label class="form-label" for="program-display">Program</label>
                 <input type="text" class="form-control" id="program-display" name="program_display" value="{{ session['program'] or 'Global / All Programs' }}"
                     readonly>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-4">
+                <label class="form-label" for="school-year-select">School Year</label>
+                <select class="form-select" name="school_year" id="school-year-select" required>
+                    <option value="" {% if not selected_school_year %}selected{% endif %}>Select School Year</option>
+                    {% for sy in school_years %}
+                    <option value="{{ sy }}" {% if sy == selected_school_year %}selected{% endif %}>{{ sy }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-4">
                 <label class="form-label" for="semester-select">Semester</label>
                 <select class="form-select" name="semester" id="semester-select" required>
-                    <option value="" selected>Select Semester</option>
+                    <option value="" {% if not selected_semester %}selected{% endif %}>Select Semester</option>
                     {% for semester_option in semesters %}
-                    <option value="{{ semester_option }}">{{ semester_option }}</option>
+                    <option value="{{ semester_option }}" {% if semester_option == selected_semester %}selected{% endif %}>{{ semester_option }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -568,6 +578,7 @@
 {% block scripts %}
 <script>
     (function () {
+        var schoolYearSelect = document.getElementById('school-year-select');
         var semesterSelect = document.getElementById('semester-select');
         var submitBtn = document.getElementById('schedule-submit');
         var errorBanner = document.getElementById('calc-error-banner');
@@ -580,7 +591,7 @@
 
         function renderEmptyState(message) {
             if (tbody) {
-                tbody.innerHTML = '<tr id="empty-counts-row"><td colspan="4" class="text-center py-4 text-muted"><i class="bx bx-info-circle me-1"></i> ' + (message || 'Please select a semester above to compute section counts from assigned faculty loads.') + '</td></tr>';
+                tbody.innerHTML = '<tr id="empty-counts-row"><td colspan="4" class="text-center py-4 text-muted"><i class="bx bx-info-circle me-1"></i> ' + (message || 'Please select a school year and semester above to compute section counts from assigned faculty loads.') + '</td></tr>';
             }
         }
 
@@ -591,6 +602,7 @@
         }
 
         function updateSectionCounts() {
+            var sy = schoolYearSelect ? schoolYearSelect.value.trim() : '';
             var sem = semesterSelect ? semesterSelect.value.trim() : '';
 
             if (activeAbortController) {
@@ -598,14 +610,14 @@
                 activeAbortController = null;
             }
 
-            if (!sem) {
+            if (!sy || !sem) {
                 if (errorBanner) errorBanner.style.display = 'none';
                 if (activeNotice) activeNotice.style.display = 'none';
-                renderEmptyState();
-                if (statusText) statusText.textContent = 'Select a semester to calculate section counts.';
+                renderEmptyState(!sy ? 'Please select a school year and semester above.' : 'Please select a semester above.');
+                if (statusText) statusText.textContent = 'Select both school year and semester to calculate section counts.';
                 if (submitBtn) {
                     submitBtn.disabled = true;
-                    submitBtn.title = 'Select a semester first';
+                    submitBtn.title = 'Select school year and semester first';
                 }
                 return;
             }
@@ -618,7 +630,7 @@
 
             activeAbortController = new AbortController();
 
-            fetch('/api/semester-section-counts?semester=' + encodeURIComponent(sem), {
+            fetch('/api/semester-section-counts?semester=' + encodeURIComponent(sem) + '&school_year=' + encodeURIComponent(sy), {
                 signal: activeAbortController.signal,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
@@ -629,9 +641,10 @@
             .then(function(data) {
                 // 1. Handle Active Schedule Notice
                 var activeSched = data.active_schedule || {};
-                if (activeSched.exists && !activeSched.same_semester) {
+                if (activeSched.exists && !activeSched.same_scope) {
                     if (activeNotice) activeNotice.style.display = 'block';
-                    if (activeNoticeSem) activeNoticeSem.textContent = activeSched.semester || 'another semester';
+                    var activeDesc = (activeSched.school_year ? (activeSched.school_year + ' ') : '') + (activeSched.semester || 'another semester');
+                    if (activeNoticeSem) activeNoticeSem.textContent = activeDesc;
                 } else {
                     if (activeNotice) activeNotice.style.display = 'none';
                 }
@@ -771,17 +784,26 @@
             });
         }
 
+        if (schoolYearSelect) {
+            schoolYearSelect.addEventListener('change', updateSectionCounts);
+        }
         if (semesterSelect) {
             semesterSelect.addEventListener('change', updateSectionCounts);
-            if (semesterSelect.value) {
-                updateSectionCounts();
-            }
+        }
+        if (semesterSelect && semesterSelect.value && schoolYearSelect && schoolYearSelect.value) {
+            updateSectionCounts();
         }
 
         var form = document.getElementById('schedule-form');
         if (form) {
             form.addEventListener('submit', function (e) {
+                var sy = schoolYearSelect ? schoolYearSelect.value.trim() : '';
                 var s = semesterSelect ? semesterSelect.value.trim() : '';
+                if (!sy) {
+                    e.preventDefault();
+                    showToast('Please select a School Year first.', 'warning');
+                    return;
+                }
                 if (!s) {
                     e.preventDefault();
                     showToast('Please select a Semester first.', 'warning');
