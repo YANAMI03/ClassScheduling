@@ -109,7 +109,7 @@ def _client():
 
 
 def test_viewer_with_db_program_and_empty_session_is_scoped(monkeypatch):
-    """Session has NO program_id, but public.users does -> must NOT error."""
+    """Session has NO program_id, but public.users has program_id=1 -> viewer is global (program_id is None)."""
     monkeypatch.setattr(app_module, 'supabase', FakeSupabase(_store(1)))
     client = _client()
     with client.session_transaction() as sess:
@@ -124,7 +124,7 @@ def test_viewer_with_db_program_and_empty_session_is_scoped(monkeypatch):
         from flask import session as f_session
         f_session['user_id'] = 'v1'
         f_session['role'] = 'viewer'
-        assert app_module._get_user_program_id() == 1
+        assert app_module._get_user_program_id() is None
 
     res = client.get('/schedules')
     assert res.status_code == 200

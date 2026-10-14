@@ -257,10 +257,10 @@
                 <td>{{ user.last_name or '—' }}</td>
                 <td>{{ user.email or '—' }}</td>
                 <td>
-                    {% if user.role and normalize_role(user.role) == 'admin' %}
-                    <span class="text-muted fst-italic">Global / All Programs</span>
-                    {% else %}
+                    {% if user.role and normalize_role(user.role) == 'chair' %}
                     {{ user.program or 'No program' }}
+                    {% else %}
+                    <span class="text-muted fst-italic">—</span>
                     {% endif %}
                 </td>
                 <td>
@@ -404,16 +404,19 @@ let deleteUserId = null;
 function toggleProgramRole(roleSelectId, programSelectId) {
     const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
     const progSelect = document.getElementById(programSelectId);
+    const progGroup = document.getElementById('editProgramGroup');
     const helpText = document.getElementById('editProgramHelp');
     const isChair = roleVal === 'chair' || roleVal === 'scheduler';
 
     if (isChair) {
         // Scheduler (Chair) must be assigned to a program.
+        if (progGroup) progGroup.classList.remove('d-none');
         progSelect.disabled = false;
         progSelect.required = true;
         if (helpText) helpText.classList.add('d-none');
     } else {
-        // Viewers and Admins are global: no program.
+        // Viewers and Admins are global: no program. Show program only for Chair.
+        if (progGroup) progGroup.classList.add('d-none');
         progSelect.value = '';
         progSelect.disabled = true;
         progSelect.required = false;

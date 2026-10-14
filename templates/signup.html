@@ -34,6 +34,10 @@
             --shadow-btn: 0 2px 6px rgba(37, 99, 235, 0.2);
         }
 
+        /* Safety net: the hidden attribute must always hide an element,
+           even when a more-specific CSS rule sets display to something else. */
+        [hidden] { display: none !important; }
+
         *, *::before, *::after {
             box-sizing: border-box;
         }
@@ -237,12 +241,16 @@
         /* Required Name Format Line */
         .name-format-hint {
             font-size: 0.72rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
             font-weight: 700;
             color: #2563eb;
             margin-bottom: 6px;
             display: block;
+        }
+
+        /* Only the label portion is uppercased; the example keeps natural casing */
+        .name-format-hint__label {
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         /* Input with leading icon */
@@ -362,12 +370,13 @@
             font-size: 12.5px;
             line-height: 1.4;
             margin-top: 4px;
-            display: none;
+            display: none; /* JS shows/hides via style.display = 'flex'/'none' */
         }
 
         .field-feedback.error-feedback {
             color: #dc2626;
-            display: flex;
+            /* NOTE: do NOT set display here — that would override display:none above
+               and make every error div visible on page load (the bug that was fixed). */
             align-items: center;
             gap: 5px;
         }
@@ -573,7 +582,7 @@
 
                     <h1 class="signup-brand__heading">Create your account</h1>
                     <p class="signup-brand__purpose">
-                        Sign up to access verified class timetables and room assignments tailored to your academic program.
+                        Sign up to view verified class timetables and room assignments across all programs.
                     </p>
 
                     <!-- 3 Benefit Points -->
@@ -596,7 +605,7 @@
                 <!-- View-only info note -->
                 <div class="signup-brand__notice" role="note">
                     <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
-                    <span>New accounts have view-only access to Section and Room schedules across all programs. An administrator can change your role and assign a program when you become a scheduler.</span>
+                    <span>New accounts have view-only access to Section and Room schedules across all programs. An administrator can change your role (for example, to Chair) and assign a program.</span>
                 </div>
             </aside>
 
@@ -706,7 +715,7 @@
                                    id="password"
                                    name="password"
                                    class="form-control"
-                                   placeholder="At least 8 characters"
+                                   placeholder="Enter your password"
                                    required
                                    minlength="8"
                                    autocomplete="new-password"
@@ -918,53 +927,109 @@
                 }
             }
 
-            if (passInput) {
-                passInput.addEventListener('input', function () {
-                    updatePasswordStrength();
-                    if (confirmInput && confirmInput.value) {
-                        updatePasswordMatch();
-                    }
-                });
+
+            // ---------- Touched flags (errors only appear after first blur or submit) ----------
+            var nameTouched    = false;
+            var emailTouched   = false;
+            var passTouched    = false;
+            var confirmTouched = false;
+
+            // ---------- Field-level show/clear helpers ----------
+            function _showError(input, errEl) {
+                if (input)  { input.classList.add('is-invalid'); input.classList.remove('is-valid'); input.setAttribute('aria-invalid', 'true'); }
+                if (errEl)  { errEl.style.display = 'flex'; }
+            }
+            function _clearError(input, errEl, markValid) {
+                if (input)  { input.classList.remove('is-invalid'); input.setAttribute('aria-invalid', 'false'); }
+                if (errEl)  { errEl.style.display = 'none'; }
+                if (markValid && input) { input.classList.add('is-valid'); }
             }
 
-            if (confirmInput) {
-                confirmInput.addEventListener('input', updatePasswordMatch);
+            // ---------- Per-field validators that respect touched flags ----------
+            function _validateName(force) {
+                if (!nameTouched && !force) return true;
+                var val    = nameInput ? nameInput.value.trim() : '';
+                var errEl  = document.getElementById('nameErrorMsg');
+                var valid  = val && validateNameFormat(val);
+                if (!valid) { _showError(nameInput, errEl); return false; }
+                _clearError(nameInput, errEl, !!val);
+                return true;
             }
 
-            // Inline blur validation
+            function _validateEmail(force) {
+                if (!emailTouched && !force) return true;
+                var val   = emailInput ? emailInput.value.trim() : '';
+                var errEl = document.getElementById('emailErrorMsg');
+                var valid = val && validateEmailFormat(val);
+                if (!valid) { _showError(emailInput, errEl); return false; }
+                _clearError(emailInput, errEl, !!val);
+                return true;
+            }
+
+            function _validatePassword(force) {
+                if (!passTouched && !force) return true;
+                var val   = passInput ? passInput.value : '';
+                var errEl = document.getElementById('passwordErrorMsg');
+                var valid = val && val.length >= 8;
+                if (!valid) { _showError(passInput, errEl); return false; }
+                _clearError(passInput, errEl, !!val);
+                return true;
+            }
+
+            function _validateConfirm(force) {
+                if (!confirmTouched && !force) return true;
+                var passVal    = passInput    ? passInput.value    : '';
+                var confirmVal = confirmInput ? confirmInput.value : '';
+                var errEl      = document.getElementById('confirmErrorMsg');
+                var valid      = confirmVal && passVal === confirmVal;
+                if (!valid) { _showError(confirmInput, errEl); return false; }
+                _clearError(confirmInput, errEl, !!confirmVal);
+                return true;
+            }
+
+            // ---------- Blur handlers (mark field as touched, then validate) ----------
             if (nameInput) {
                 nameInput.addEventListener('blur', function () {
-                    var val = nameInput.value.trim();
-                    var errEl = document.getElementById('nameErrorMsg');
-                    if (val && !validateNameFormat(val)) {
-                        nameInput.classList.add('is-invalid');
-                        nameInput.classList.remove('is-valid');
-                        nameInput.setAttribute('aria-invalid', 'true');
-                        if (errEl) errEl.style.display = 'flex';
-                    } else if (val) {
-                        nameInput.classList.remove('is-invalid');
-                        nameInput.classList.add('is-valid');
-                        nameInput.setAttribute('aria-invalid', 'false');
-                        if (errEl) errEl.style.display = 'none';
-                    }
+                    nameTouched = true;
+                    _validateName(false);
+                });
+                // Live re-validation while typing in an already-touched field
+                nameInput.addEventListener('input', function () {
+                    if (nameTouched) _validateName(false);
                 });
             }
 
             if (emailInput) {
                 emailInput.addEventListener('blur', function () {
-                    var val = emailInput.value.trim();
-                    var errEl = document.getElementById('emailErrorMsg');
-                    if (val && !validateEmailFormat(val)) {
-                        emailInput.classList.add('is-invalid');
-                        emailInput.classList.remove('is-valid');
-                        emailInput.setAttribute('aria-invalid', 'true');
-                        if (errEl) errEl.style.display = 'flex';
-                    } else if (val) {
-                        emailInput.classList.remove('is-invalid');
-                        emailInput.classList.add('is-valid');
-                        emailInput.setAttribute('aria-invalid', 'false');
-                        if (errEl) errEl.style.display = 'none';
-                    }
+                    emailTouched = true;
+                    _validateEmail(false);
+                });
+                emailInput.addEventListener('input', function () {
+                    if (emailTouched) _validateEmail(false);
+                });
+            }
+
+            if (passInput) {
+                passInput.addEventListener('blur', function () {
+                    passTouched = true;
+                    _validatePassword(false);
+                });
+                passInput.addEventListener('input', function () {
+                    updatePasswordStrength();
+                    if (passTouched)    _validatePassword(false);
+                    // Re-check confirm if it was already touched
+                    if (confirmTouched) _validateConfirm(false);
+                });
+            }
+
+            if (confirmInput) {
+                confirmInput.addEventListener('blur', function () {
+                    confirmTouched = true;
+                    _validateConfirm(false);
+                });
+                confirmInput.addEventListener('input', function () {
+                    updatePasswordMatch();
+                    if (confirmTouched) _validateConfirm(false);
                 });
             }
 
@@ -979,75 +1044,34 @@
                 });
             }
 
-            // Form Submit Validation
+            // Form Submit Validation — mark all fields touched, validate all, focus first error
             if (form) {
                 form.addEventListener('submit', function (e) {
-                    clearFieldErrors();
-                    var hasError = false;
-                    var firstErrorField = null;
+                    // Mark every field as touched so validators can show errors
+                    nameTouched    = true;
+                    emailTouched   = true;
+                    passTouched    = true;
+                    confirmTouched = true;
 
-                    var nameVal = nameInput ? nameInput.value.trim() : '';
-                    var emailVal = emailInput ? emailInput.value.trim() : '';
-                    var passVal = passInput ? passInput.value : '';
-                    var confirmVal = confirmInput ? confirmInput.value : '';
+                    if (clientErrorBox) clientErrorBox.classList.add('hidden');
 
-                    // 1. Full Name Validation
-                    if (!nameVal || !validateNameFormat(nameVal)) {
-                        hasError = true;
-                        if (nameInput) {
-                            nameInput.classList.add('is-invalid');
-                            nameInput.setAttribute('aria-invalid', 'true');
-                            if (!firstErrorField) firstErrorField = nameInput;
-                        }
-                        var nameErr = document.getElementById('nameErrorMsg');
-                        if (nameErr) nameErr.style.display = 'flex';
-                    }
+                    var n_ok = _validateName(true);
+                    var e_ok = _validateEmail(true);
+                    var p_ok = _validatePassword(true);
+                    var c_ok = _validateConfirm(true);
 
-                    // 2. Email Validation
-                    if (!emailVal || !validateEmailFormat(emailVal)) {
-                        hasError = true;
-                        if (emailInput) {
-                            emailInput.classList.add('is-invalid');
-                            emailInput.setAttribute('aria-invalid', 'true');
-                            if (!firstErrorField) firstErrorField = emailInput;
-                        }
-                        var emailErr = document.getElementById('emailErrorMsg');
-                        if (emailErr) emailErr.style.display = 'flex';
-                    }
-
-                    // 4. Password Validation
-                    if (!passVal || passVal.length < 8) {
-                        hasError = true;
-                        if (passInput) {
-                            passInput.classList.add('is-invalid');
-                            passInput.setAttribute('aria-invalid', 'true');
-                            if (!firstErrorField) firstErrorField = passInput;
-                        }
-                        var passErr = document.getElementById('passwordErrorMsg');
-                        if (passErr) passErr.style.display = 'flex';
-                    }
-
-                    // 5. Confirm Password Validation
-                    if (!confirmVal || passVal !== confirmVal) {
-                        hasError = true;
-                        if (confirmInput) {
-                            confirmInput.classList.add('is-invalid');
-                            confirmInput.setAttribute('aria-invalid', 'true');
-                            if (!firstErrorField) firstErrorField = confirmInput;
-                        }
-                        var confirmErr = document.getElementById('confirmErrorMsg');
-                        if (confirmErr) confirmErr.style.display = 'flex';
-                    }
-
-                    if (hasError) {
+                    if (!n_ok || !e_ok || !p_ok || !c_ok) {
                         e.preventDefault();
                         if (clientErrorBox && clientErrorText) {
                             clientErrorText.textContent = 'Please correct the highlighted fields before submitting.';
                             clientErrorBox.classList.remove('hidden');
                         }
-                        if (firstErrorField) {
-                            firstErrorField.focus();
-                        }
+                        // Focus the first invalid field
+                        var firstBad = !n_ok ? nameInput
+                                     : !e_ok ? emailInput
+                                     : !p_ok ? passInput
+                                     : confirmInput;
+                        if (firstBad) firstBad.focus();
                         return false;
                     }
 
