@@ -9,9 +9,9 @@
 {% endblock %}
 
 {% block content %}
-{% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_edit_schedule = user_role_lower in ['chair'] %}
-{% set is_admin = user_role_lower in ['super_admin', 'super admin', 'admin'] %}
+{% set user_role_lower = current_user_role %}
+{% set can_edit_schedule = user_role_lower == 'chair' %}
+{% set is_admin = user_role_lower == 'admin' %}
 <div class="page-header">
     <div>
         <h1 class="page-title">Section Schedule: {{ section.section_name or section.section }}</h1>

@@ -14,7 +14,7 @@
         <h1 class="page-title">Room Schedule</h1>
         <p class="page-subtitle">
             Read-only view of room utilization and bookings for the active semester
-            {% if is_super_admin and program_filter %}
+            {% if program_filter %}
             &bull; <span class="badge-custom badge-primary"><i class="bx bx-buildings me-1"></i>{{ program_filter }}</span>
             {% endif %}
         </p>
@@ -26,10 +26,19 @@
     {% endif %}
 </div>
 
+{% if no_program_assigned %}
+<div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+    <div>
+        <strong>Program Required:</strong> {{ no_program_message or "No program is assigned to your account. Please contact an administrator." }}
+    </div>
+</div>
+{% endif %}
+
 <!-- Filter Controls -->
 <div class="card-custom mb-4 p-3 bg-light-subtle">
     <form method="get" class="row g-2 align-items-end" id="roomScheduleFilterForm">
-        {% if (is_super_admin or is_admin or is_viewer) and programs %}
+        {% if (is_super_admin or is_admin) and programs %}
         <!-- Program Filter -->
         <div class="col-md-2">
             <label class="form-label small fw-bold text-muted mb-1" for="programFilter">

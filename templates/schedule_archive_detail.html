@@ -9,11 +9,11 @@
 {% endblock %}
 
 {% block content %}
-{% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set is_admin = user_role_lower in ['super_admin', 'admin'] %}
-{% set is_scheduler = user_role_lower in ['chair', 'dean'] %}
+{% set user_role_lower = current_user_role %}
+{% set is_admin = user_role_lower == 'admin' %}
+{% set is_scheduler = user_role_lower == 'chair' %}
 {% set user_prog = session.get('program', '') %}
-{% set can_restore = is_admin or (is_scheduler and (not batch_info.program or batch_info.program == user_prog or user_prog == '')) %}
+{% set can_restore = is_scheduler and (not batch_info.program or batch_info.program == user_prog or user_prog == '') %}
 <div class="page-header d-flex justify-content-between align-items-center mb-4">
     <div>
         <div class="d-flex align-items-center gap-2 mb-1">

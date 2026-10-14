@@ -115,7 +115,7 @@ class MockSupabase:
                 {'room_id': 2, 'room_name': 'Room 201', 'room_type': 'Lecture Room', 'program_id': 2},
             ]),
             'users': MockTable('users', [
-                {'id': 1, 'email': 'dean_it@example.com', 'username': 'dean_it', 'role': 'Dean', 'program_id': 1},
+                {'id': 1, 'email': 'dean_it@example.com', 'username': 'dean_it', 'role': 'admin', 'program_id': 1},
                 {'id': 2, 'email': 'admin@example.com', 'username': 'admin', 'role': 'super_admin', 'program_id': None},
             ]),
             'delete_requests': MockTable('delete_requests', []),

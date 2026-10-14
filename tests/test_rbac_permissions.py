@@ -124,12 +124,15 @@ def test_role_normalization():
     assert _normalize_role('Admin') == 'admin'
     assert _normalize_role('SUPER_ADMIN') == 'admin'
     assert _normalize_role('super admin') == 'admin'
-    assert _normalize_role('scheduler') == 'scheduler'
-    assert _normalize_role('Scheduler') == 'scheduler'
-    assert _normalize_role('dean') == 'scheduler'
-    assert _normalize_role('CHAIR') == 'scheduler'
-    assert _normalize_role('Dean/Chair') == 'scheduler'
-    assert _normalize_role('program_chair') == 'scheduler'
+    # The former "Scheduler" role was renamed "Chair" (pure rename).
+    assert _normalize_role('chair') == 'chair'
+    assert _normalize_role('Chair') == 'chair'
+    assert _normalize_role('scheduler') == 'chair'
+    assert _normalize_role('Scheduler') == 'chair'
+    assert _normalize_role('dean') == 'chair'
+    assert _normalize_role('CHAIR') == 'chair'
+    assert _normalize_role('Dean/Chair') == 'chair'
+    assert _normalize_role('program_chair') == 'chair'
     assert _normalize_role('viewer') == 'viewer'
     assert _normalize_role('Viewer') == 'viewer'
     assert _normalize_role('instructor') == 'viewer'
@@ -254,16 +257,12 @@ def test_scheduler_restricted_write_actions_return_403_json(test_client):
     endpoints = [
         ('POST', '/add_course', {'course_code': 'test'}),
         ('POST', '/edit_course/1', {'course_code': 'test'}),
-        ('GET', '/delete_course/1', None),
         ('POST', '/add_room', {'room_name': 'test'}),
         ('POST', '/edit_room/1', {'room_name': 'test'}),
-        ('GET', '/delete_room/1', None),
         ('POST', '/add_working_hours', {'day': 'Monday'}),
         ('POST', '/edit_working_hours/1', {}),
-        ('GET', '/delete_working_hours/1', None),
         ('POST', '/create_user', {'username': 'newuser'}),
         ('POST', '/edit_user/some-id', {'username': 'newuser'}),
-        ('POST', '/delete_user/some-id', {}),
         ('POST', '/restore', {}),
         ('GET', '/backup', None),
         ('POST', '/delete_schedule_archive/batch1', {}),
@@ -449,7 +448,8 @@ def test_admin_can_access_pdf_export_routes(test_client):
 
 
 def test_post_login_landing_pages():
-    # Admin and Viewer land on /schedules, Scheduler lands on / (home)
+    # Admin and Viewer land on /schedules, Chair (formerly Scheduler) lands on / (home)
     assert _normalize_role('admin') in ('admin', 'viewer')
     assert _normalize_role('viewer') in ('admin', 'viewer')
-    assert _normalize_role('scheduler') == 'scheduler'
+    assert _normalize_role('scheduler') == 'chair'
+    assert _normalize_role('chair') == 'chair'

@@ -204,10 +204,20 @@ def viewer_env(monkeypatch):
                 'username': 'viewuser',
                 'email': 'viewer@test.com',
                 'role': 'viewer',
-                'program_id': None,
-                'program': None,
+                'program_id': 1,
+                'program': 'BSIT',
                 'first_name': 'Victor',
                 'last_name': 'Viewer',
+            },
+            {
+                'id': 'viewer-noprog-uuid',
+                'username': 'noproguser',
+                'email': 'noprog@test.com',
+                'role': 'viewer',
+                'program_id': None,
+                'program': None,
+                'first_name': 'No',
+                'last_name': 'Program',
             },
         ],
         'program': [
@@ -426,7 +436,7 @@ def test_viewer_403_on_professor_schedule_and_management_routes(viewer_env):
 def test_viewer_schedules_viewable_but_exports_blocked(viewer_env, monkeypatch):
     """Rule 3: Viewer can view Section and Room schedules, but CANNOT export (Excel/PDF hidden & 403)."""
     client = viewer_env['client']
-    _login_session(client, 'viewer-uuid', 'viewer', 'viewuser')
+    _login_session(client, 'viewer-uuid', 'viewer', 'viewuser', program_id=1, program='BSIT')
 
     # 1. Section Schedule (view allowed, read-only)
     res_sec = client.get('/schedules')
@@ -442,10 +452,20 @@ def test_viewer_schedules_viewable_but_exports_blocked(viewer_env, monkeypatch):
     assert soup_sec.find('a', href=lambda h: h and '/export' in h) is None
     assert soup_sec.find('a', href=lambda h: h and '/export_pdf' in h) is None
 
-    # Program selector should be present (no program lock, viewer can select any program)
-    assert soup_sec.find('select', id='programFilter') is not None
+    # Program selector is locked/hidden for Viewers (viewers cannot switch programs)
+    assert soup_sec.find('select', id='programFilter') is None
     assert soup_sec.find('select', id='yearFilter') is not None
     assert soup_sec.find('select', id='semesterFilter') is not None
+
+    # Admin CAN switch programs
+    _login_session(client, 'admin-uuid', 'admin', 'adminuser')
+    res_admin = client.get('/schedules')
+    assert res_admin.status_code == 200
+    soup_admin = BeautifulSoup(res_admin.data.decode('utf-8'), 'html.parser')
+    assert soup_admin.find('select', id='programFilter') is not None
+
+    # Re-login as viewer for remaining checks
+    _login_session(client, 'viewer-uuid', 'viewer', 'viewuser', program_id=1, program='BSIT')
 
     # 2. Section detail view /schedule/BSIT-1A (view allowed, export hidden)
     res_detail = client.get('/schedule/BSIT-1A')
@@ -492,12 +512,12 @@ def test_admin_promotes_viewer_to_scheduler_immediately(viewer_env):
     # Log in as Admin
     _login_session(client, 'admin-uuid', 'admin', 'adminuser')
 
-    # Admin promotes viewer-uuid to Scheduler for BSIT (program_id=1)
+    # Admin promotes viewer-uuid to Chair (formerly Scheduler) for BSIT (program_id=1)
     res_edit = client.post('/edit_user/viewer-uuid', data={
         'first_name': 'Victor',
         'last_name': 'Viewer',
         'email': 'viewer@test.com',
-        'role': 'scheduler',
+        'role': 'chair',
         'program_id': '1',
     })
     assert res_edit.status_code == 200
@@ -510,49 +530,81 @@ def test_admin_promotes_viewer_to_scheduler_immediately(viewer_env):
     role_change_log = next((l for l in act_logs if 'role' in l.get('target_detail', '').lower()), None)
     assert role_change_log is not None
     assert 'viewer' in role_change_log['target_detail'].lower()
-    assert 'scheduler' in role_change_log['target_detail'].lower()
+    assert 'chair' in role_change_log['target_detail'].lower()
     assert 'bsit' in role_change_log['target_detail'].lower()
 
     # Now the user (viewer-uuid) makes their next request
-    # With same session / token, live cache / DB refresh grants them scheduler access immediately
+    # With same session / token, live cache / DB refresh grants them chair access immediately
     _login_session(client, 'viewer-uuid', 'viewer', 'viewuser')  # Session still had old 'viewer' cached
 
-    # Accessing scheduler page /professor_load
+    # Accessing chair page /professor_load
     res_next = client.get('/professor_load')
-    # Should NOT be 403 Forbidden because live role check refreshed role to scheduler
+    # Should NOT be 403 Forbidden because live role check refreshed role to chair
     assert res_next.status_code != 403
     assert res_next.status_code == 200
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Test 7: Admin demotes Scheduler to Viewer (access removed immediately)
+# Test 7: Admin demotes Scheduler to Viewer (access removed immediately, requires program)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def test_admin_demotes_scheduler_to_viewer_immediately(viewer_env):
-    """Rule 2: Admin sets Scheduler back to Viewer -> access is removed on next request."""
+    """Rule 2: Admin sets Scheduler back to Viewer -> requires program, access is removed on next request."""
     client = viewer_env['client']
     store = viewer_env['store']
 
     # Log in as Admin
     _login_session(client, 'admin-uuid', 'admin', 'adminuser')
 
-    # Admin demotes scheduler-uuid to Viewer (clearing program_id)
-    res_demote = client.post('/edit_user/scheduler-uuid', data={
+    # Demoting without program must fail (Program is required for Chair and Viewer)
+    res_bad = client.post('/edit_user/scheduler-uuid', data={
         'first_name': 'Sarah',
         'last_name': 'Scheduler',
         'email': 'scheduler@test.com',
         'role': 'viewer',
         'program_id': '',
     })
+    assert res_bad.status_code == 400
+    assert "Program is required for Viewer role." in (res_bad.get_json().get('message') or res_bad.get_json().get('error') or '')
+
+    # Admin demotes scheduler-uuid to Viewer with program_id=1
+    res_demote = client.post('/edit_user/scheduler-uuid', data={
+        'first_name': 'Sarah',
+        'last_name': 'Scheduler',
+        'email': 'scheduler@test.com',
+        'role': 'viewer',
+        'program_id': '1',
+    })
     assert res_demote.status_code == 200
     res_json = res_demote.get_json()
     assert res_json.get('success') is True
 
-    # Verify program_id was cleared in store
+    # Verify role and program_id in store
     sched_row = next((u for u in store['users'] if u.get('id') == 'scheduler-uuid'), None)
     assert sched_row is not None
     assert sched_row.get('role') == 'viewer'
+    assert sched_row.get('program_id') == 1
+
+    # Setting to Admin clears program_id to None
+    res_admin = client.post('/edit_user/scheduler-uuid', data={
+        'first_name': 'Sarah',
+        'last_name': 'Scheduler',
+        'email': 'scheduler@test.com',
+        'role': 'admin',
+        'program_id': '',
+    })
+    assert res_admin.status_code == 200
+    assert sched_row.get('role') == 'admin'
     assert sched_row.get('program_id') is None
+
+    # Reset back to viewer
+    client.post('/edit_user/scheduler-uuid', data={
+        'first_name': 'Sarah',
+        'last_name': 'Scheduler',
+        'email': 'scheduler@test.com',
+        'role': 'viewer',
+        'program_id': '1',
+    })
 
     # Now the user (scheduler-uuid) makes their next request with existing session
     _login_session(client, 'scheduler-uuid', 'scheduler', 'scheduser', program_id=1, program='BSIT')
@@ -574,3 +626,30 @@ def test_viewer_landing_redirects_to_schedules(viewer_env):
     res = client.get('/')
     assert res.status_code == 302
     assert '/schedules' in res.headers.get('Location', '')
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test 9: Viewer program scoping and missing-program alert
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_viewer_program_scoping_and_alerts(viewer_env):
+    """Viewer with no program sees warning alert; viewer with program is scoped strictly."""
+    client = viewer_env['client']
+
+    # 1. Viewer with no program assigned sees warning
+    _login_session(client, 'viewer-noprog-uuid', 'viewer', 'noproguser', program_id=None, program=None)
+    res_no_prog = client.get('/schedules')
+    assert res_no_prog.status_code == 200
+    html_no_prog = res_no_prog.data.decode('utf-8')
+    assert "No program is assigned to your account. Please contact an administrator." in html_no_prog
+
+    # 2. Viewer with program_id=1 (BSIT) sees own schedules; programFilter dropdown is locked/hidden
+    _login_session(client, 'viewer-uuid', 'viewer', 'viewuser', program_id=1, program='BSIT')
+    res_own = client.get('/schedules')
+    assert res_own.status_code == 200
+    soup = BeautifulSoup(res_own.data.decode('utf-8'), 'html.parser')
+    assert soup.find('select', id='programFilter') is None
+
+    # 3. Viewer tampering with URL parameter to request another program receives 403 Access Denied
+    res_tamper = client.get('/schedules?program=BSCS')
+    assert res_tamper.status_code == 403

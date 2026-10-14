@@ -280,9 +280,9 @@ merge into main
 
 ## Role Permissions Matrix (Schedule Archive)
 
-| Action | Super Admin / Academic Admin | Program Scheduler | Description & Scoping |
+| Action | Admin | Chair (formerly Scheduler) | Description & Scoping |
 | :--- | :---: | :---: | :--- |
-| **Archive Active Schedule** | Allowed (All programs) | **Allowed (Own program only)** | Direct archive without deletion request or admin approval. Sets `archive = TRUE`, `archived_at = now()`, and fresh `archive_batch_id`. Schedulers attempting other programs receive HTTP 403. |
+| **Archive Active Schedule** | Allowed (All programs) | **Allowed (Own program only)** | Direct archive without deletion request or admin approval. Sets `archive = TRUE`, `archived_at = now()`, and fresh `archive_batch_id`. A Chair attempting another program receives HTTP 403. |
 | **Restore Archived Schedule** | Allowed (All programs) | **Allowed (Own program only)** | Conflict-guarded against other programs' room and professor schedules. Blocked if an active schedule already exists for the program & semester. Reactivates batch atomically (`archive = FALSE`, clears timestamp and batch ID). |
-| **Permanent Delete Archive** | **Allowed (Direct action)** | **Blocked (HTTP 403 / No UI)** | Permanent deletion of archived batches is strictly restricted to Academic Admins and Super Admins. Schedulers cannot view or call deletion. Database RLS enforces `DELETE` only for admin roles on rows where `archive = TRUE`. |
+| **Permanent Delete Archive** | **Blocked (HTTP 403 / No UI)** | **Blocked (HTTP 403 / No UI)** | Permanent deletion of archived batches is disabled. Neither Admin nor Chair can view or call deletion. |
 

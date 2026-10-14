@@ -87,7 +87,7 @@ def test_section_pdf_confirmed_by_scheduler_exported_by_admin(monkeypatch):
 
     # The PDF must contain the confirmer's name and title, NOT the admin's name
     assert b'MICKO LA MADRID' in pdf_bytes
-    assert b'Program Scheduler - BSIT' in pdf_bytes
+    assert b'Chair - BSIT' in pdf_bytes
     assert b'ADMIN USER' not in pdf_bytes
 
 
@@ -187,7 +187,7 @@ def test_preparer_display_uses_linked_user_fields():
         'BSIT'
     )
     assert name == 'SOLE SCHEDULER'
-    assert title == 'Program Scheduler - BSIT'
+    assert title == 'Chair - BSIT'
 
 
 def test_missing_preparer_user_is_not_guessed():

@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort, has_request_context
+from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort, has_request_context, Response
 from datetime import timedelta, datetime, timezone
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
@@ -26,6 +26,20 @@ from postgrest.exceptions import APIError
 from pdf_export import generate_timetable_pdf
 from excel_export import generate_timetable_excel
 import professor_load_importer
+from roles import (
+    ROLE_ADMIN,
+    ROLE_CHAIR,
+    ROLE_VIEWER,
+    VALID_ROLES,
+    ROLE_LABELS,
+    ROLE_ALIASES,
+    LEGACY_STORED_ROLES,
+    normalize_role as _normalize_role,
+    is_known_role as _is_known_role,
+    role_label as _role_label,
+    sanitize_stored_role as _sanitize_stored_role,
+    role_for_restore as _role_for_restore,
+)
 
 SUPABASE_URL: str = os.environ.get("SUPABASE_URL")
 # Anon / public key only. `SUPABASE_PUBLISHABLE_KEY` is the newer name for the
@@ -774,13 +788,31 @@ def handle_postgrest_error(err):
 
 from werkzeug.exceptions import HTTPException
 
+
+@app.errorhandler(403)
+def handle_forbidden(e):
+    """THE app-level 403 handler.
+
+    Catches every abort(403) / Forbidden raised anywhere (decorators, in-function
+    checks, libraries, blueprint-less code) and routes it through the shared
+    permission layer so the response is always either our styled 403 page (for
+    navigation) or the JSON 403 (for AJAX / API / export / import).
+    """
+    return access_denied()
+
+
 @app.errorhandler(HTTPException)
 def handle_import_http_exception(e):
+    # Import endpoints speak JSON for every HTTP error.
     if request.path.startswith('/professor_load/import'):
         code = getattr(e, 'code', 500)
         desc = getattr(e, 'description', str(e))
         return jsonify({'ok': False, 'success': False, 'error': desc}), code
+    # A raw 403 must never fall through to Werkzeug's default "Forbidden" page.
+    if getattr(e, 'code', None) == 403:
+        return access_denied()
     return e
+
 
 def login_required(f):
     @wraps(f)
@@ -790,22 +822,49 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def _normalize_role(role_val):
-    if not role_val:
-        return ''
-    r = str(role_val).strip().lower().replace(' ', '_').replace('-', '_')
-    if r in ('super_admin', 'superadmin', 'administrator', 'admin'):
-        return 'admin'
-    if r in ('chair', 'dean', 'scheduler', 'dean/chair', 'program_chair', 'department_head'):
-        return 'chair'
-    if r in ('viewer', 'instructor', 'guest'):
-        return 'viewer'
-    return r
+def _canonical_role(value):
+    """Canonical role for any stored/legacy value (see :mod:`roles`).
 
-VALID_USER_ROLES = {'admin', 'super_admin', 'chair', 'viewer', 'dean'}
+    Kept as a thin alias so every existing caller keeps working while there is a
+    single implementation (``roles.normalize_role``) underneath.
+    """
+    return _normalize_role(value)
+
+
+# Single source of truth whitelist.  Any role written to public.users must be one
+# of these; legacy aliases are normalised to one of these before validation.
+VALID_USER_ROLES = set(VALID_ROLES)
+# Backwards-compatible aliases some templates/tests still reference.
+ROLE_LABEL_MAP = dict(ROLE_LABELS)
+
 _LIVE_USER_ROLE_UPDATES: dict = {}
 _USER_ROLE_CACHE: dict = {}
 _USER_ROLE_CACHE_LOCK = threading.Lock()
+
+# How long an admin's role change propagates to an already-open session before the
+# authoritative database role is re-read. Long enough to make the change effective
+# on the target's next request, short enough that a stale entry can never pin a
+# user to an outdated role forever (which caused spurious 403 "Access denied").
+_LIVE_USER_ROLE_TTL_SECONDS = 30.0
+
+
+def _get_live_user_role_update(uid_str):
+    """Return a fresh live role-update for a user, or None.
+
+    Live updates exist only to make an admin's role/disable change take effect on
+    the target's next request without a DB round-trip. They are short-lived: once
+    the TTL lapses the entry is purged and the authoritative database role is used
+    again. This prevents a leaked/stale entry from permanently overriding a user's
+    real role (the cause of spurious RBAC 403s).
+    """
+    entry = _LIVE_USER_ROLE_UPDATES.get(uid_str)
+    if not entry:
+        return None
+    ts = entry.get('timestamp')
+    if ts is None or (time.time() - ts) >= _LIVE_USER_ROLE_TTL_SECONDS:
+        _LIVE_USER_ROLE_UPDATES.pop(uid_str, None)
+        return None
+    return entry
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1001,6 +1060,8 @@ def _is_api_request():
 
 def _is_ajax_or_write_request():
     """Detect whether a forbidden action is an API, AJAX, or write operation that should return JSON 403."""
+    if not has_request_context():
+        return False
     if _is_api_request():
         return True
     path = request.path.lower()
@@ -1010,12 +1071,75 @@ def _is_ajax_or_write_request():
         return True
     if path.startswith('/backup') or path.startswith('/restore'):
         return True
+    # Exports / downloads / generated files must never answer with an HTML page.
+    if path.startswith('/export') or '/export' in path or path.endswith(('.pdf', '.xlsx', '.csv', '.json')):
+        return True
     # If method is not GET/HEAD, frontend forms/fetch expect JSON or direct action response
     if request.method not in ('GET', 'HEAD'):
         return True
     if any(path.startswith(prefix) for prefix in ('/delete_', '/archive_', '/edit_', '/add_')):
         return True
     return False
+
+
+# Minimal, dependency-free styled 403 page.  Rendered only when the full styled
+# template cannot be rendered (e.g. a broken session), so the user never sees the
+# bare Werkzeug "Forbidden" page.
+_MINIMAL_403_HTML = (
+    '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    '<title>Access Denied</title>'
+    '<style>body{font-family:system-ui,Segoe UI,Arial,sans-serif;background:#f1f5f9;'
+    'margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}'
+    '.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:2.5rem;'
+    'max-width:480px;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,.08)}'
+    'h1{font-size:1.35rem;color:#0f172a;margin:0 0 .75rem}'
+    'p{color:#64748b;margin:0 0 1.5rem}'
+    'a{display:inline-block;background:#2563eb;color:#fff;text-decoration:none;'
+    'padding:.7rem 1.5rem;border-radius:8px;font-weight:600}</style></head>'
+    '<body><div class="card"><h1>403 - Access Denied</h1>'
+    '<p>You do not have permission to access this page.</p>'
+    '<a href="/">Go to home</a></div></body></html>'
+)
+
+
+def access_denied(required_roles=None, message=None, status=403):
+    """THE single place every permission failure is turned into a response.
+
+    * AJAX / API / export / import / write requests -> JSON
+      ``{"ok": false, "error": "Access denied"}`` with status 403.
+    * Page navigation -> the styled ``templates/403.html`` page with status 403.
+
+    Never raises: it falls back to a minimal styled page if the template cannot
+    be rendered, so the bare Werkzeug "Forbidden" page can never escape.
+    """
+    raw_role = session.get('role', '') if has_request_context() else ''
+    role = _normalize_role(raw_role)
+    endpoint = request.endpoint if has_request_context() else None
+    if required_roles is None and endpoint:
+        required_roles = ROUTE_PERMISSIONS.get(endpoint)
+    try:
+        # Never leak role/required details to the client.
+        logging.warning(
+            "Access denied: user_id=%s role=%r path=%s method=%s endpoint=%s required=%s",
+            session.get('user_id') if has_request_context() else None,
+            raw_role,
+            request.path if has_request_context() else '-',
+            request.method if has_request_context() else '-',
+            endpoint,
+            sorted(required_roles) if required_roles else required_roles,
+        )
+    except Exception:
+        pass
+
+    if _is_ajax_or_write_request():
+        return jsonify({'ok': False, 'error': 'Access denied'}), status
+    try:
+        return render_template('403.html', active_page='403'), status
+    except Exception:
+        logging.exception("Failed to render the styled 403 page; using the minimal fallback.")
+        return Response(_MINIMAL_403_HTML, status=status, mimetype='text/html')
+
 
 
 def _is_ajax_or_api_request():
@@ -1033,7 +1157,7 @@ def _default_landing_url(role=None):
     if role is None:
         role = session.get('role', '')
     norm_role = _normalize_role(role)
-    if norm_role in ('admin', 'viewer'):
+    if norm_role in (ROLE_ADMIN, ROLE_VIEWER):
         return url_for('schedules')
     return url_for('home')
 
@@ -1068,29 +1192,26 @@ def roles_required(*allowed_roles):
                 uid_str = str(uid)
                 if uid_str in _LIVE_USER_ROLE_UPDATES:
                     update_info = _LIVE_USER_ROLE_UPDATES[uid_str]
-                    session['role'] = update_info['role']
-                    norm_r = _normalize_role(update_info['role'])
-                    if norm_r in ('admin', 'super_admin', 'viewer'):
+                    session['role'] = _normalize_role(update_info['role'])
+                    norm_r = session['role']
+                    if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
                         session['program_id'] = None
                         session['program'] = ''
                     else:
                         session['program_id'] = update_info.get('program_id')
 
             raw_role = session.get('role', '')
+            # Store the canonical role so every downstream check (templates, .lower()
+            # comparisons) sees 'chair' even for a legacy 'scheduler' session.
             user_role = _normalize_role(raw_role)
-            if user_role in ('admin', 'super_admin', 'viewer'):
+            session['role'] = user_role or raw_role
+            if user_role in (ROLE_ADMIN, ROLE_VIEWER):
                 session['program_id'] = None
                 session['program'] = ''
 
             target_allowed = normalized_allowed or ROUTE_PERMISSIONS.get(f.__name__, set())
             if user_role not in target_allowed:
-                logging.warning(
-                    f"RBAC Access Denied: user_id={session.get('user_id')} role='{raw_role}' "
-                    f"path='{request.path}' method='{request.method}' allowed={target_allowed}"
-                )
-                if _is_ajax_or_write_request():
-                    return jsonify({'ok': False, 'error': 'Access denied'}), 403
-                return render_template('403.html', active_page='403'), 403
+                return access_denied(target_allowed)
 
             return f(*args, **kwargs)
         return decorated_function
@@ -1122,17 +1243,17 @@ def enforce_rbac_permissions():
             return jsonify({'ok': False, 'error': 'Authentication required'}), 401
         return redirect(url_for('login'))
 
-    # Synchronize session role/program directly from live updates or short-lived DB cache
+        # Synchronize session role/program directly from live updates or short-lived DB cache
     uid = session.get('user_id')
     account_disabled = False
     if uid:
         uid_str = str(uid)
-        if uid_str in _LIVE_USER_ROLE_UPDATES:
-            update_info = _LIVE_USER_ROLE_UPDATES[uid_str]
+        update_info = _get_live_user_role_update(uid_str)
+        if update_info:
             account_disabled = bool(update_info.get('disabled'))
-            session['role'] = update_info['role']
-            norm_r = _normalize_role(update_info['role'])
-            if norm_r in ('admin', 'super_admin', 'viewer'):
+            session['role'] = _normalize_role(update_info['role'])
+            norm_r = session['role']
+            if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
                 session['program_id'] = None
                 session['program'] = ''
             else:
@@ -1159,7 +1280,7 @@ def enforce_rbac_permissions():
                                 break
                     if matching_row:
                         u_row = matching_row
-                        db_role = u_row.get('role') or 'viewer'
+                        db_role = _normalize_role(u_row.get('role')) or ROLE_VIEWER
                         p_id = u_row.get('program_id')
                         p_name = (_rel(u_row, 'program') or {}).get('program_name') or ''
                         account_disabled = bool(u_row.get('disabled'))
@@ -1172,8 +1293,8 @@ def enforce_rbac_permissions():
                                 'disabled': account_disabled,
                             }
                         session['role'] = db_role
-                        norm_r = _normalize_role(db_role)
-                        if norm_r in ('admin', 'super_admin', 'viewer'):
+                        norm_r = db_role
+                        if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
                             session['program_id'] = None
                             session['program'] = ''
                         else:
@@ -1183,10 +1304,10 @@ def enforce_rbac_permissions():
                     logging.debug(f"RBAC user sync notice: {e}")
             elif cached:
                 account_disabled = bool(cached.get('disabled'))
-                cached_role = cached.get('role') or 'viewer'
+                cached_role = _normalize_role(cached.get('role')) or ROLE_VIEWER
                 session['role'] = cached_role
-                norm_r = _normalize_role(cached_role)
-                if norm_r in ('admin', 'super_admin', 'viewer'):
+                norm_r = cached_role
+                if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
                     session['program_id'] = None
                     session['program'] = ''
                 else:
@@ -1204,23 +1325,18 @@ def enforce_rbac_permissions():
 
     raw_role = session.get('role', '')
     user_role = _normalize_role(raw_role)
-    if user_role in ('admin', 'super_admin', 'viewer'):
+    session['role'] = user_role or raw_role
+    if user_role in (ROLE_ADMIN, ROLE_VIEWER):
         session['program_id'] = None
         session['program'] = ''
 
     if user_role not in allowed_roles:
-        logging.warning(
-            f"RBAC Access Denied (before_request): user_id={session.get('user_id')} role='{raw_role}' "
-            f"path='{request.path}' method='{request.method}' endpoint='{endpoint}' allowed={allowed_roles}"
-        )
-        if _is_ajax_or_write_request():
-            return jsonify({'ok': False, 'error': 'Access denied'}), 403
-        return render_template('403.html', active_page='403'), 403
+        return access_denied(allowed_roles)
 
 
 @app.context_processor
 def inject_permissions():
-    """Inject permission checking helpers and role into Jinja template context."""
+    """Inject permission checking helpers, role constants and labels into Jinja."""
     raw_role = session.get('role', '')
     user_role = _normalize_role(raw_role)
     def can_access(endpoint_name):
@@ -1230,8 +1346,18 @@ def inject_permissions():
         return user_role in allowed
     return {
         'current_user_role': user_role,
+        'current_user_role_label': _role_label(user_role),
         'can_access': can_access,
-        'ROUTE_PERMISSIONS': ROUTE_PERMISSIONS
+        'ROUTE_PERMISSIONS': ROUTE_PERMISSIONS,
+        # Single source of truth exposed to templates (no magic strings).
+        'ROLE_ADMIN': ROLE_ADMIN,
+        'ROLE_CHAIR': ROLE_CHAIR,
+        'ROLE_VIEWER': ROLE_VIEWER,
+        'VALID_ROLES': VALID_ROLES,
+        'ROLE_LABELS': ROLE_LABELS,
+        'role_label': _role_label,
+        'normalize_role': _normalize_role,
+        'VALID_USER_ROLES': VALID_ROLES,
     }
 
 
@@ -1366,7 +1492,7 @@ def _get_user_program_id(user_id=None):
     has_ctx = has_request_context()
     if has_ctx and not user_id:
         role = _normalize_role(session.get('role', ''))
-        if role in ('admin', 'super_admin', 'viewer'):
+        if role == ROLE_ADMIN:
             return None
         if session.get('program_id'):
             return session.get('program_id')
@@ -1586,14 +1712,21 @@ def _viewer_can_view_professor(prof_identifier):
 
 
 def _enforce_professor_view_scope(prof_identifier):
-    """For Viewer accounts, abort 403 unless the professor is the viewer's own.
+    """For Viewer accounts, return an access-denied Response unless the professor
+    is the viewer's own.  Callers must check ``is True`` and early-return the
+    response when the viewer is denied.
 
-    Returns True when the caller is a Viewer (so callers can skip program scoping).
+    Returns:
+        False  -- caller is NOT a Viewer; normal program-scoping applies.
+        True   -- caller IS a Viewer AND can view this professor.
+        Response -- caller IS a Viewer but is DENIED; caller must return this.
     """
-    if _normalize_role(session.get('role', '')) != 'viewer':
+    if _normalize_role(session.get('role', '')) != ROLE_VIEWER:
         return False
     if not _viewer_can_view_professor(prof_identifier):
-        abort(403)
+        # Route every 403 through access_denied() so the correct format
+        # (styled page vs JSON) is chosen and the denial is logged.
+        return access_denied()
     return True
 
 
@@ -2180,17 +2313,17 @@ def inject_pending_requests():
     return context
 
 def _request_delete_if_scheduler(item_type, item_id, item_details):
-    role = (session.get('role') or '').lower()
-    if role == 'chair':
+    role = _normalize_role(session.get('role') or '')
+    if role == ROLE_CHAIR:
         user_prog_id = _get_user_program_id()
         if item_type == 'course' and user_prog_id:
             try:
                 c_chk = supabase.table('course').select('program_id').eq('course_id', item_id).limit(1).execute()
                 if c_chk.data and c_chk.data[0].get('program_id'):
                     if int(c_chk.data[0]['program_id']) != int(user_prog_id):
-                        abort(403)
-            except HTTPException:
-                raise
+                        # Cross-program deletion denied: return the response tuple so the
+                        # caller can propagate it.  True = handled, response object = denied.
+                        return True, access_denied({ROLE_CHAIR})
             except Exception:
                 pass
 
@@ -3469,7 +3602,10 @@ def _establish_authenticated_session(session_data):
     session['last_name'] = metadata.get('last_name', '')
     session['program'] = metadata.get('program', '')
     session['profile_picture'] = metadata.get('profile_picture')
-    session['role'] = metadata.get('role', 'viewer')
+    # Role is NEVER taken from client-editable user_metadata. The authoritative
+    # value is read from public.users below; until then the least-privileged role
+    # is assumed. (metadata.get('role') is intentionally ignored.)
+    session['role'] = ROLE_VIEWER
 
     # Refresh role, program_id, and program directly from database profile
     try:
@@ -3480,7 +3616,7 @@ def _establish_authenticated_session(session_data):
                 session.clear()
                 return 'disabled'
             if u_row.get('role'):
-                session['role'] = u_row['role']
+                session['role'] = _normalize_role(u_row['role']) or ROLE_VIEWER
             if u_row.get('program_id'):
                 session['program_id'] = u_row['program_id']
             p_rel = _rel(u_row, 'program') or {}
@@ -3510,7 +3646,8 @@ def _establish_authenticated_session(session_data):
         logging.debug(f"Could not load public.users profile: {u_err}")
 
     norm_role = _normalize_role(session.get('role', ''))
-    if norm_role in ('admin', 'super_admin', 'viewer'):
+    session['role'] = norm_role or ROLE_VIEWER
+    if norm_role in (ROLE_ADMIN, ROLE_VIEWER):
         session['program_id'] = None
         session['program'] = ''
     else:
@@ -3621,6 +3758,66 @@ def _check_and_record_signup_throttle(ip, email):
         return True
 
 
+def _get_signup_programs():
+    """Fetch active programs for the public signup dropdown using get_public_programs RPC."""
+    try:
+        res = supabase.rpc('get_public_programs').execute()
+        if res.data:
+            return res.data
+    except Exception as err:
+        logging.debug(f"[signup] get_public_programs RPC unavailable, falling back: {err}")
+    try:
+        raw_list = _get_programs(include_archived=False)
+        return [{'id': p.get('id'), 'program_name': p.get('program_name')} for p in raw_list if p.get('id') and p.get('program_name')]
+    except Exception:
+        return []
+
+
+def _validate_and_normalize_signup_name(full_name_str):
+    """Client and server validation for sign-up full name.
+
+    REQUIRED FORMAT: Surname, Given Names M.I. (e.g. "La Madrid, Micko John A.")
+    Rules:
+      - 2 to 100 characters.
+      - Exactly one comma.
+      - Both parts non-empty.
+      - Unicode letters (including accents and Ñ), spaces, hyphens, apostrophes, periods allowed.
+      - Disallows digits and underscores.
+      - Suffixes (Jr., III) must pass.
+      - Normalizes: trim, collapse repeated spaces, exactly one space after comma.
+    """
+    if not full_name_str:
+        return None, None, None, None, "Use the format: Last name, First name M.I. (for example La Madrid, Micko John A.)"
+    raw = str(full_name_str).strip()
+    if len(raw) < 2 or len(raw) > 100:
+        return None, None, None, None, "Use the format: Last name, First name M.I. (for example La Madrid, Micko John A.)"
+    if raw.count(',') != 1:
+        return None, None, None, None, "Use the format: Last name, First name M.I. (for example La Madrid, Micko John A.)"
+
+    parts = raw.split(',', 1)
+    last = re.sub(r'\s+', ' ', parts[0]).strip()
+    first = re.sub(r'\s+', ' ', parts[1]).strip()
+    if not last or not first:
+        return None, None, None, None, "Use the format: Last name, First name M.I. (for example La Madrid, Micko John A.)"
+
+    for part in (last, first):
+        if re.search(r'[\d_]', part) or re.search(r'[^\w\s\-\'\.]', part, re.UNICODE):
+            return None, None, None, None, "Use the format: Last name, First name M.I. (for example La Madrid, Micko John A.)"
+
+    normalized_full = f"{last}, {first}"[:100]
+    last_name = last[:100]
+
+    first_tokens = [t for t in first.split() if t]
+    if len(first_tokens) >= 2:
+        first_name = first_tokens[0][:100]
+        middle_name = (' '.join(first_tokens[1:]))[:100]
+    else:
+        first_name = first[:100]
+        middle_name = ''
+
+    return normalized_full, first_name, middle_name, last_name, None
+
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     """Public standalone sign-up endpoint creating Viewer accounts."""
@@ -3631,11 +3828,15 @@ def signup():
     success_message = None
     full_name = ''
     email = ''
+    selected_program_id = None
+    selected_program_name = None
+
+    programs = _get_signup_programs()
 
     if request.method == 'POST':
         # Request size sanity check (10 KB max for signup form)
         if request.content_length and request.content_length > 10000:
-            return render_template('signup.html', error="Request payload too large.", full_name='', email='')
+            return render_template('signup.html', error="Request payload too large.", full_name='', email='', programs=programs)
 
         # Anti-bot honeypot field check (bots fill it, humans do not)
         honeypot = (request.form.get('website') or '').strip()
@@ -3647,16 +3848,26 @@ def signup():
         # Check whether submitted from legacy client (first_name/last_name fields)
         is_legacy = ('first_name' in request.form and 'full_name' not in request.form)
 
-        full_name = (request.form.get('full_name') or '').strip()
-        first_name = (request.form.get('first_name') or '').strip()
-        last_name = (request.form.get('last_name') or '').strip()
+        full_name_input = (request.form.get('full_name') or '').strip()
+        first_name_input = (request.form.get('first_name') or '').strip()
+        last_name_input = (request.form.get('last_name') or '').strip()
         username = (request.form.get('username') or '').strip()
         email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
         confirm_password = request.form.get('confirm_password') or ''
+        program_input = (request.form.get('program') or request.form.get('program_id') or '').strip()
+
+        # Resolve chosen program
+        for p in programs:
+            p_id_str = str(p.get('id') or '')
+            p_name = str(p.get('program_name') or '').strip()
+            if program_input and (program_input == p_id_str or program_input.casefold() == p_name.casefold()):
+                selected_program_id = p.get('id')
+                selected_program_name = p_name
+                break
 
         if is_legacy:
-            if not first_name or not last_name or not password or not confirm_password:
+            if not first_name_input or not last_name_input or not password or not confirm_password:
                 error = 'All fields are required.'
             elif not email and not username:
                 error = 'Please provide an email, a username, or both.'
@@ -3667,12 +3878,21 @@ def signup():
             else:
                 if not email and username:
                     email = f"{username.lower()}@example.com"
-                full_name = f"{first_name} {last_name}".strip()
+                full_name = f"{last_name_input}, {first_name_input}".strip()
+                first_name = first_name_input[:100]
+                middle_name = ''
+                last_name = last_name_input[:100]
+                # If no program provided in legacy, default to first available program
+                if not selected_program_id and programs:
+                    selected_program_id = programs[0].get('id')
+                    selected_program_name = programs[0].get('program_name')
         else:
-            if not full_name and (first_name or last_name):
-                full_name = f"{first_name} {last_name}".strip()
-            if not full_name or len(full_name) < 2 or len(full_name) > 100:
-                error = 'Full name is required (between 2 and 100 characters).'
+            full_name = full_name_input
+            norm_name, f_name, m_name, l_name, name_err = _validate_and_normalize_signup_name(full_name)
+            if name_err:
+                error = name_err
+            elif not selected_program_id:
+                error = 'Please select your program.'
             elif not email or len(email) > 254 or not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email):
                 error = 'Please enter a valid email address.'
             elif len(password) < 8:
@@ -3680,6 +3900,10 @@ def signup():
             elif password != confirm_password:
                 error = 'Passwords do not match.'
             else:
+                full_name = norm_name
+                first_name = f_name
+                middle_name = m_name
+                last_name = l_name
                 allowed_domains_str = os.environ.get('ALLOWED_SIGNUP_EMAIL_DOMAINS', '').strip()
                 if allowed_domains_str:
                     allowed_domains = {d.strip().lower().lstrip('@') for d in allowed_domains_str.split(',') if d.strip()}
@@ -3698,16 +3922,10 @@ def signup():
 
         if not error:
             try:
-                # Role and program are NEVER read from client or user metadata.
-                # Hardcoded server-side and database-side to Viewer and NULL program.
-                name_parts = full_name.split(' ', 1)
-                first_name = name_parts[0][:100]
-                last_name = name_parts[1][:100] if len(name_parts) > 1 else ''
-                _tokens = [t for t in full_name.split() if t]
-                middle_name = (' '.join(_tokens[1:-1])[:100] if len(_tokens) >= 3 else '')
-
+                # Role is strictly forced to Viewer. Client-supplied roles are completely ignored.
+                # Program is stored in metadata and validated/stored by the database trigger.
                 redirect_to = f"{_get_site_url()}/auth/callback"
-                logging.info(f"[signup] Calling supabase.auth.sign_up for '{email}' as viewer")
+                logging.info(f"[signup] Calling supabase.auth.sign_up for '{email}' as viewer (program: {selected_program_name})")
 
                 res = supabase.auth.sign_up({
                     'email': email,
@@ -3719,6 +3937,8 @@ def signup():
                             'first_name': first_name,
                             'middle_name': middle_name,
                             'last_name': last_name,
+                            'program_id': selected_program_id,
+                            'program': selected_program_name,
                         }
                     }
                 })
@@ -3734,16 +3954,7 @@ def signup():
                     else:
                         # Record signup activity
                         try:
-                            if is_legacy:
-                                if email and username:
-                                    act_detail = f'Self-registered: {username} ({email})'
-                                elif email:
-                                    act_detail = f'Self-registered: {email}'
-                                else:
-                                    act_detail = f'Self-registered: {username}'
-                            else:
-                                act_detail = f'Self-registered: {email}'
-
+                            act_detail = f'Self-registered: {email} (Program: {selected_program_name})'
                             supabase.table('activity_log').insert({
                                 'username': full_name or email,
                                 'action': 'signup',
@@ -3776,6 +3987,8 @@ def signup():
                     error = "Please enter a valid email address."
                 elif 'smtp' in err_lower:
                     error = "Confirmation email could not be sent. Please contact the administrator."
+                elif 'program' in err_lower and ('valid' in err_lower or 'required' in err_lower):
+                    error = "Please select your program."
                 else:
                     error = "Unable to create account. Please check your details and try again."
 
@@ -3786,6 +3999,9 @@ def signup():
         success_message=success_message,
         full_name=full_name,
         email=email,
+        programs=programs,
+        selected_program_id=selected_program_id,
+        selected_program=selected_program_name,
         active_tab='signup'
     )
 
@@ -3869,7 +4085,7 @@ def auth_callback():
                     if _cb_result == 'disabled':
                         return jsonify({'success': False, 'error': 'This account has been disabled. Contact your administrator.'}), 403
                     log_activity('verify_email', 'auth', session.get('username', ''))
-                    flash('Your email has been verified successfully! Welcome to Scheduler.', 'success')
+                    flash('Your email has been verified successfully! Welcome.', 'success')
                     return jsonify({'success': True, 'redirect_url': url_for('schedules')})
                 else:
                     session['jwt_token'] = access_token
@@ -3900,7 +4116,7 @@ def auth_callback():
                     flash('This account has been disabled. Contact your administrator.', 'error')
                     return redirect(url_for('login'))
                 log_activity('verify_email', 'auth', session.get('username', ''))
-                flash('Your email has been verified successfully! Welcome to Scheduler.', 'success')
+                flash('Your email has been verified successfully! Welcome.', 'success')
                 return redirect(url_for('schedules'))
             else:
                 flash('Your email has been verified! You can now sign in.', 'success')
@@ -3922,7 +4138,7 @@ def auth_callback():
                     flash('This account has been disabled. Contact your administrator.', 'error')
                     return redirect(url_for('login'))
                 log_activity('verify_email', 'auth', session.get('username', ''))
-                flash('Your email has been verified successfully! Welcome to Scheduler.', 'success')
+                flash('Your email has been verified successfully! Welcome.', 'success')
                 return redirect(url_for('schedules'))
             else:
                 flash('Your email has been verified! You can now sign in with your credentials.', 'success')
@@ -4130,8 +4346,8 @@ def edit_user(user_id):
         # Check if admin is trying to change their own role
         current_user_id = session.get('user_id')
         if str(current_user_id) == str(user_id):
-            new_role = request.form.get('role', '').strip().lower()
-            if new_role not in ('admin', 'super_admin'):
+            new_role = _normalize_role(request.form.get('role', ''))
+            if new_role != ROLE_ADMIN:
                 return jsonify({'success': False, 'message': 'You cannot remove your own administrator access.'}), 403
 
         # Update user
@@ -4141,33 +4357,32 @@ def edit_user(user_id):
         email = request.form.get('email', '').strip()
         role = request.form.get('role', '').strip()
 
-        # Validate role against single source of truth whitelist
-        role_lower = role.lower()
-        if role_lower not in VALID_USER_ROLES:
+        # Validate role against the single source of truth whitelist. Legacy
+        # aliases are normalised first, and only the canonical value is stored.
+        role_canon = _normalize_role(role)
+        if role_canon not in VALID_ROLES:
             return jsonify({'success': False, 'message': f"Invalid role '{role}'. Allowed roles are: Admin, Chair, Viewer."}), 400
 
-        # Only a Super Admin can grant Super Admin
-        raw_current_user_role = (session.get('role') or '').lower()
-        if role_lower == 'super_admin' and raw_current_user_role not in ('super_admin', 'super admin'):
-            return jsonify({'success': False, 'message': 'Only a Super Admin can grant the Super Admin role.'}), 403
+        is_program_required = role_canon in (ROLE_CHAIR, ROLE_VIEWER)
+        program_input = request.form.get('program', '').strip() if is_program_required else None
+        program_id_input = request.form.get('program_id', '').strip() if is_program_required else None
 
-        is_scheduler = role_lower == 'chair'
-        program_input = request.form.get('program', '').strip() if is_scheduler else None
-        program_id_input = request.form.get('program_id', '').strip() if is_scheduler else None
-
-        if is_scheduler and not (program_input or program_id_input):
-            flash('Program is required for Chair role.', 'error')
-            return jsonify({'success': False, 'message': 'Program is required for Chair role.'}), 400
+        if is_program_required and not (program_input or program_id_input):
+            role_label_str = ROLE_LABELS.get(role_canon, role_canon.title())
+            err_msg = f'Program is required for {role_label_str} role.'
+            flash(err_msg, 'error')
+            return jsonify({'success': False, 'message': err_msg}), 400
 
         # Resolve program and program_id
         program_id = None
-        if is_scheduler:
+        if is_program_required:
             program_id = _find_program_id_by_name(program_id_input or program_input)
             if program_id is None:
                 err_msg = f"Unknown program '{program_input or program_id_input}'. Please select a valid program."
                 flash(err_msg, 'error')
                 return jsonify({'success': False, 'message': err_msg}), 400
         else:
+            # Admin role: program is strictly NULL
             program_id = None
 
         # Fetch old user profile for detailed audit logging
@@ -4186,7 +4401,7 @@ def edit_user(user_id):
             'first_name': first_name,
             'middle_name': middle_name,
             'last_name': last_name,
-            'role': role,
+            'role': role_canon,
             'program_id': program_id,
         }
         if email:
@@ -4204,7 +4419,7 @@ def edit_user(user_id):
         now = time.time()
         # Track live role update so it takes effect on the user's next request without restart
         _LIVE_USER_ROLE_UPDATES[str(user_id)] = {
-            'role': role,
+            'role': role_canon,
             'program_id': program_id,
             'program': new_prog_name if program_id else '',
             'disabled': bool(old_user.get('disabled')),
@@ -4213,15 +4428,15 @@ def edit_user(user_id):
         with _USER_ROLE_CACHE_LOCK:
             _USER_ROLE_CACHE[str(user_id)] = {
                 'time': now,
-                'role': role,
+                'role': role_canon,
                 'program_id': program_id,
                 'program': new_prog_name if program_id else '',
                 'disabled': bool(old_user.get('disabled')),
             }
 
         if str(current_user_id) == str(user_id):
-            session['role'] = role
-            if role_lower in ('admin', 'super_admin', 'viewer'):
+            session['role'] = role_canon
+            if role_canon == ROLE_ADMIN:
                 session['program_id'] = None
                 session['program'] = ''
             else:
@@ -4230,7 +4445,7 @@ def edit_user(user_id):
 
         actor = session.get('username') or session.get('first_name') or 'Admin'
         target_name = f"{first_name} {last_name}".strip() or old_user.get('username') or str(user_id)
-        detail = f"Role change for {target_name} ({user_id}) by {actor}: old_role='{old_role}', new_role='{role}', program='{new_prog_name}'"
+        detail = f"Role change for {target_name} ({user_id}) by {actor}: old_role='{old_role}', new_role='{role_canon}', program='{new_prog_name}'"
         log_activity('edit', 'user', detail)
         flash('Edited successfully', 'success')
         return jsonify({'success': True, 'message': 'User updated successfully.'})
@@ -4329,7 +4544,9 @@ def create_user():
     # Manual user creation from the Users tab is disabled.
     # New accounts must be provisioned through the sign-up flow.
     return jsonify({
+        'ok': False,
         'success': False,
+        'error': 'Access denied',
         'message': 'User creation is disabled. New accounts must sign up from the sign-up page.'
     }), 403
 
@@ -4345,17 +4562,12 @@ def create_user():
         if not first_name or not last_name or not email or not password or not role:
             return jsonify({'success': False, 'message': 'All required fields must be filled.'}), 400
 
-        # Validate role against single source of truth whitelist
-        role_lower = role.lower()
-        if role_lower not in VALID_USER_ROLES:
+        # Validate role against the single source of truth whitelist
+        role_canon = _normalize_role(role)
+        if role_canon not in VALID_ROLES:
             return jsonify({'success': False, 'message': f"Invalid role '{role}'. Allowed roles are: Admin, Chair, Viewer."}), 400
 
-        # Only a Super Admin can grant Super Admin
-        raw_current_user_role = (session.get('role') or '').lower()
-        if role_lower == 'super_admin' and raw_current_user_role not in ('super_admin', 'super admin'):
-            return jsonify({'success': False, 'message': 'Only a Super Admin can grant the Super Admin role.'}), 403
-
-        is_scheduler = role_lower == 'chair'
+        is_scheduler = role_canon == ROLE_CHAIR
         program_input    = request.form.get('program',    '').strip() if is_scheduler else None
         program_id_input = request.form.get('program_id', '').strip() if is_scheduler else None
 
@@ -5198,9 +5410,7 @@ def add_course():
 
         if not is_admin:
             if submitted_program_id and user_prog_id and int(submitted_program_id) != int(user_prog_id):
-                if is_ajax:
-                    return jsonify({'success': False, 'error': 'Access denied'}), 403
-                return render_template('403.html', active_page='403'), 403
+                return access_denied({ROLE_ADMIN})
             program_id = user_prog_id
         else:
             program_id = submitted_program_id
@@ -5327,9 +5537,7 @@ def show_courses():
         if program_arg:
             req_pid = int(program_arg) if program_arg.isdigit() else _find_program_id_by_name(program_arg)
             if program_arg.lower() == 'all' or (req_pid and user_prog_id and int(req_pid) != int(user_prog_id)):
-                if _is_ajax_or_write_request():
-                    return jsonify({'ok': False, 'error': 'Access denied'}), 403
-                return render_template('403.html', active_page='403'), 403
+                return access_denied()
 
         eff_prog_id = user_prog_id
         active_tab_program = str(user_prog_id) if user_prog_id else ''
@@ -5434,7 +5642,7 @@ def search_courses():
         if program_filter and program_filter.lower() != 'all':
             p_id = int(program_filter) if program_filter.isdigit() else _find_program_id_by_name(program_filter)
             if p_id and user_prog_id and int(p_id) != int(user_prog_id):
-                return jsonify({'error': 'Access denied', 'courses': []}), 403
+                return access_denied({ROLE_ADMIN})
         eff_prog_id = user_prog_id or _find_program_id_by_name(user_program)
 
     if not eff_prog_id:
@@ -8000,7 +8208,9 @@ def professor_schedule():
                 elif any(p.get('professor_key') == p_filter_key and (user_prog_id in p.get('program_ids', set()) or p.get('prof_id') in scoped_pids) for p in all_candidate_profs):
                     allowed = True
                 if not allowed:
-                    abort(403)
+                    # Chair requesting a professor outside their own program scope.
+                    # Return the styled 403 page (page navigation request).
+                    return access_denied({ROLE_CHAIR})
             all_prof_options = [p for p in all_candidate_profs if (p.get('prof_id') in scoped_pids or p.get('professor_key') in scoped_pids or user_prog_id in p.get('program_ids', set()))]
         else:
             if program_filter and (is_super_admin or is_viewer):
@@ -8161,9 +8371,14 @@ def view_professor_schedule(prof_identifier):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
     program = session.get('program', '')
-    user_role = (session.get('role') or 'chair').lower()
-    is_admin = user_role in ('admin', 'super_admin')
-    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    user_role = _normalize_role(session.get('role', ''))
+    is_admin = user_role == ROLE_ADMIN
+    _viewer_check = _enforce_professor_view_scope(prof_identifier)
+    # _enforce_professor_view_scope returns False (not a viewer), True (viewer
+    # allowed), or a Response (viewer denied).  Propagate the denial immediately.
+    if not isinstance(_viewer_check, bool):
+        return _viewer_check
+    is_viewer = _viewer_check
     user_prog_id = _get_user_program_id()
     all_programs = _get_programs(include_archived=False)
     default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
@@ -8173,7 +8388,8 @@ def view_professor_schedule(prof_identifier):
     else:
         program_filter = default_prog
     if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
-        abort(403)
+        # Chair accessing a professor outside their own program scope.
+        return access_denied({ROLE_CHAIR})
 
     professor, prof_pc_ids, pc_course_codes = _resolve_professor_info(prof_identifier)
     if not professor:
@@ -8208,7 +8424,7 @@ def view_professor_schedule(prof_identifier):
             maj = str(p_entry.get('major') or '')
             prog = str(p_entry.get('program') or '')
 
-            if user_role in ('super_admin', 'admin'):
+            if is_admin:
                 if program_filter and prog != program_filter:
                     continue
             else:
@@ -8246,7 +8462,6 @@ def view_professor_schedule(prof_identifier):
                 'year_level': _year_of_section(sec),
             })
     else:
-        is_admin = user_role in ('super_admin', 'admin')
         user_program_id = _get_user_program_id()
         user_prog_name = session.get('program', '')
 
@@ -8360,10 +8575,13 @@ def export_professor_schedule(prof_identifier):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
     program = session.get('program', '')
-    user_role = (session.get('role') or 'chair').lower()
-    is_admin = user_role in ('admin', 'super_admin')
+    user_role = _normalize_role(session.get('role', ''))
+    is_admin = user_role == ROLE_ADMIN
     user_prog_id = _get_user_program_id()
-    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    _viewer_check = _enforce_professor_view_scope(prof_identifier)
+    if not isinstance(_viewer_check, bool):
+        return _viewer_check
+    is_viewer = _viewer_check
     all_programs = _get_programs(include_archived=False)
     default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
     if is_admin or is_viewer:
@@ -8372,7 +8590,8 @@ def export_professor_schedule(prof_identifier):
     else:
         program_filter = default_prog
     if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
-        abort(403)
+        # Chair requesting export for a professor outside their own program.
+        return access_denied({ROLE_CHAIR})
 
     professor, prof_pc_ids, pc_course_codes = _resolve_professor_info(prof_identifier)
     if not professor:
@@ -8407,7 +8626,7 @@ def export_professor_schedule(prof_identifier):
             maj = str(p_entry.get('major') or '')
             prog = str(p_entry.get('program') or '')
 
-            if user_role in ('super_admin', 'admin'):
+            if is_admin:
                 if program_filter and prog != program_filter:
                     continue
             else:
@@ -8449,7 +8668,7 @@ def export_professor_schedule(prof_identifier):
             'room(room_name)'
         ).eq('archive', False)
 
-        if user_role in ('super_admin', 'admin'):
+        if is_admin:
             if program_filter:
                 query = query.eq('professor_load.course.program_id', _find_program_id_by_name(program_filter) or -1)
         elif user_prog_id:
@@ -8551,14 +8770,15 @@ def _preparer_display_details(user_or_row, program_name=None):
 
     program = (program_name or '').strip() or 'Unknown Program'
     raw_role = str(user_or_row.get('role') or '').strip().lower().replace('-', '_').replace(' ', '_')
-    if raw_role in ('super_admin', 'superadmin'):
-        role_title = 'Super Admin'
-    elif raw_role in ('admin', 'administrator', 'academic_admin'):
-        role_title = 'Academic Admin'
-    elif raw_role in ('scheduler', 'program_scheduler'):
-        role_title = 'Program Scheduler'
-    elif raw_role in ('chair', 'dean', 'dean/chair', 'program_chair', 'department_head'):
+    canonical = _normalize_role(raw_role)
+    if canonical == ROLE_ADMIN:
+        # Preserve the historic "Super Admin" wording only for the explicit
+        # super-admin alias; everything else that normalises to admin is Admin.
+        role_title = 'Super Admin' if raw_role in ('super_admin', 'superadmin') else 'Academic Admin'
+    elif canonical == ROLE_CHAIR:
         role_title = 'Chair'
+    elif canonical == ROLE_VIEWER:
+        role_title = 'Viewer'
     elif raw_role:
         role_title = raw_role.replace('_', ' ').title()
     else:
@@ -8576,12 +8796,15 @@ def export_professor_schedule_pdf(prof_identifier):
     major_filter = (request.args.get('major') or '').strip()
     program_filter = (request.args.get('program') or '').strip()
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
-    user_role = (session.get('role') or 'chair').lower()
-    is_admin = user_role in ('admin', 'super_admin')
+    user_role = _normalize_role(session.get('role', ''))
+    is_admin = user_role == ROLE_ADMIN
     user_prog_id = _get_user_program_id()
-    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    _viewer_check = _enforce_professor_view_scope(prof_identifier)
+    if not isinstance(_viewer_check, bool):
+        return _viewer_check
+    is_viewer = _viewer_check
     if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
-        abort(403)
+        return access_denied({ROLE_CHAIR})
 
     if year_filter.lower() in ('all', 'all years', 'none', ''):
         year_filter = ''
@@ -8627,7 +8850,7 @@ def export_professor_schedule_pdf(prof_identifier):
             maj = str(p_entry.get('major') or '')
             prog = str(p_entry.get('program') or '')
 
-            if user_role in ('super_admin', 'admin'):
+            if is_admin:
                 if program_filter and program_filter.lower() != 'all' and prog != program_filter:
                     continue
             else:
@@ -8672,7 +8895,7 @@ def export_professor_schedule_pdf(prof_identifier):
             'room(room_name)'
         ).eq('archive', False)
 
-        if user_role in ('super_admin', 'admin'):
+        if is_admin:
             if program_filter and program_filter.lower() != 'all':
                 query = query.eq('professor_load.course.program_id', _find_program_id_by_name(program_filter) or -1)
 
@@ -8788,12 +9011,15 @@ def export_professor_schedule_pdf(prof_identifier):
 @app.route('/api/professor_availability/<path:prof_identifier>', methods=['GET'])
 @roles_required('admin', 'chair', 'viewer')
 def api_professor_availability(prof_identifier):
-    user_role = (session.get('role') or 'chair').lower()
-    is_admin = user_role in ('admin', 'super_admin')
+    norm_role = _normalize_role(session.get('role', ''))
+    is_admin = norm_role == ROLE_ADMIN
     user_prog_id = _get_user_program_id()
-    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    _viewer_check = _enforce_professor_view_scope(prof_identifier)
+    if not isinstance(_viewer_check, bool):
+        return _viewer_check
+    is_viewer = _viewer_check
     if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
-        abort(403)
+        return access_denied({ROLE_CHAIR})
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
     professor, prof_pc_ids, pc_course_codes = _resolve_professor_info(prof_identifier)
@@ -8885,12 +9111,15 @@ def api_professor_availability(prof_identifier):
 @app.route('/api/professor_workload/<path:prof_identifier>', methods=['GET'])
 @roles_required('admin', 'chair', 'viewer')
 def api_professor_workload(prof_identifier):
-    user_role = (session.get('role') or 'chair').lower()
-    is_admin = user_role in ('admin', 'super_admin')
+    norm_role = _normalize_role(session.get('role', ''))
+    is_admin = norm_role == ROLE_ADMIN
     user_prog_id = _get_user_program_id()
-    is_viewer = _enforce_professor_view_scope(prof_identifier)
+    _viewer_check = _enforce_professor_view_scope(prof_identifier)
+    if not isinstance(_viewer_check, bool):
+        return _viewer_check
+    is_viewer = _viewer_check
     if not is_viewer and not is_admin and user_prog_id and not _is_professor_in_program(prof_identifier, user_prog_id):
-        abort(403)
+        return access_denied({ROLE_CHAIR})
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
     professor, prof_pc_ids, pc_course_codes = _resolve_professor_info(prof_identifier)
@@ -8945,14 +9174,36 @@ def room_schedule():
     is_viewer = norm_role == 'viewer'
     program = session.get('program', '')
     all_programs = _get_programs(include_archived=False)
-    programs = all_programs if (is_super_admin or is_viewer) else []
-    program_filter = request.args.get('program', '').strip()
-
     default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
-    if is_super_admin or is_viewer:
+    program_filter = (request.args.get('program') or '').strip()
+
+    if is_viewer:
+        if not user_prog_id:
+            return render_template(
+                'room_schedule.html',
+                active_page='room_schedule',
+                no_program_assigned=True,
+                no_program_message="No program is assigned to your account. Please contact an administrator.",
+                all_room_options=[],
+                rooms=[],
+                year_options=[],
+                semester_options=[],
+                major_options=[],
+                programs=[],
+                program_filter="",
+                is_super_admin=False,
+                is_admin=False,
+                is_viewer=True
+            )
+        prog_name_str = _find_program_name_by_id(user_prog_id) or program or ''
+        programs = [{'id': user_prog_id, 'program_name': prog_name_str}]
+        program_filter = prog_name_str
+    elif is_super_admin:
+        programs = all_programs
         if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
             program_filter = default_prog
     else:
+        programs = []
         program_filter = default_prog
 
     active_semester = _get_active_semester(user_prog_id)
@@ -9112,9 +9363,15 @@ def view_room_schedule(room_id):
     norm_role = _normalize_role(user_role)
     is_admin = norm_role == 'admin'
     is_viewer = norm_role == 'viewer'
+    user_prog_id = _get_user_program_id()
+    if is_viewer and not user_prog_id:
+        flash("No program is assigned to your account. Please contact an administrator.", "warning")
+        return redirect(url_for('room_schedule'))
     all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_name_by_id(_get_user_program_id()) or (all_programs[0].get('program_name') if all_programs else '')
-    if is_admin or is_viewer:
+    default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
+    if is_viewer:
+        program_filter = default_prog
+    elif is_admin:
         if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
             program_filter = default_prog
     else:
@@ -9223,22 +9480,13 @@ def view_room_schedule(room_id):
             norm_role = _normalize_role(user_role)
             is_viewer = norm_role == 'viewer'
             is_own = True
-            if is_viewer:
-                if program_filter and program_filter.lower() != 'all':
-                    target_pid = _find_program_id_by_name(program_filter)
-                    if target_pid and r_prog_id is not None:
-                        is_own = (str(r_prog_id) == str(target_pid))
-                    elif r_prog_name:
-                        is_own = (r_prog_name.strip().upper() == program_filter.strip().upper())
-                    else:
-                        is_own = True
-                else:
-                    is_own = True
-            elif not is_admin:
+            if is_viewer or not is_admin:
                 if user_program_id and r_prog_id is not None:
                     is_own = (str(r_prog_id) == str(user_program_id))
                 elif user_prog_name and r_prog_name:
                     is_own = (r_prog_name.strip().upper() == user_prog_name.strip().upper())
+                else:
+                    is_own = False
             else:
                 is_own = True
 
@@ -9749,11 +9997,10 @@ def schedules():
 
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'chair').lower()
     norm_role = _normalize_role(session.get('role', ''))
-    is_admin = norm_role == 'admin'
-    is_viewer = norm_role == 'viewer'
-    can_pick_program = is_admin or is_viewer
+    is_admin = norm_role == ROLE_ADMIN
+    is_viewer = norm_role == ROLE_VIEWER
+    can_pick_program = is_admin
     all_programs = _get_programs(include_archived=False)
     fetch_error = None
     no_active_schedule = False
@@ -9761,22 +10008,48 @@ def schedules():
     # ------------------------------------------------------------------
     # DEFAULT PROGRAM
     #   * Exactly one program selected at all times (no "All Programs").
-    #   * Scheduler / Dean / Chair -> their own program (server-scoped).
-    #   * Admin / Viewer -> if explicit program param, use it.
-    #     Otherwise, default to user's program if any, else the first available program.
+    #   * Chair -> their own program (server-scoped; cannot request another program).
+    #   * Viewer -> strictly their own program (locked to user record).
+    #   * Admin -> can select any program from dropdown / param.
     # ------------------------------------------------------------------
     default_pid = user_program_id or _find_program_id_by_name(program)
     if not default_pid and all_programs:
         default_pid = all_programs[0].get('id')
 
-    if not can_pick_program:
+    if is_viewer:
+        if not user_program_id:
+            return render_template(
+                'schedules.html',
+                active_page='schedules',
+                no_program_assigned=True,
+                no_program_message="No program is assigned to your account. Please contact an administrator.",
+                programs=[],
+                sections=[],
+                year_levels=[],
+                semesters=SEMESTER_CHOICES,
+                majors=[],
+                program_filter="",
+                can_pick_program=False,
+                is_admin=False,
+                is_viewer=True,
+                schedule_metadata={}
+            )
+        effective_program_id = user_program_id
+        if program_arg_present and program_filter and program_filter.lower() != 'all':
+            target_pid = _find_program_id_by_name(program_filter)
+            if target_pid and int(target_pid) != int(effective_program_id):
+                return access_denied({ROLE_VIEWER})
+        program_filter = _find_program_name_by_id(effective_program_id) or program
+        programs = [{'id': effective_program_id, 'program_name': program_filter}]
+    elif not can_pick_program:
         effective_program_id = default_pid
         if program_arg_present and program_filter and program_filter.lower() != 'all':
             target_pid = _find_program_id_by_name(program_filter)
             if target_pid and effective_program_id and int(target_pid) != int(effective_program_id):
-                abort(403)
+                # Chair tried to view another program's schedule via the URL.
+                return access_denied({ROLE_CHAIR})
             elif not effective_program_id and program and program_filter.strip().upper() != program.strip().upper():
-                abort(403)
+                return access_denied({ROLE_CHAIR})
         program_filter = _find_program_name_by_id(effective_program_id) or program or (all_programs[0].get('program_name') if all_programs else '')
         if effective_program_id:
             programs = [p for p in all_programs if str(p.get('id')) == str(effective_program_id)]
@@ -9993,6 +10266,7 @@ def schedules():
         major_filter=major_filter,
         program_filter=program_filter,
         programs=programs,
+        can_pick_program=can_pick_program,
         is_admin=is_admin,
         is_viewer=is_viewer,
         fetch_error=fetch_error,
@@ -10012,7 +10286,12 @@ def view_schedule(section_name):
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
     program = session.get('program', '')
     user_program_id = _get_user_program_id()
-    user_role = (session.get('role') or 'chair').lower()
+    norm_role = _normalize_role(session.get('role', ''))
+    is_viewer = norm_role == ROLE_VIEWER
+
+    if is_viewer and not user_program_id:
+        flash("No program is assigned to your account. Please contact an administrator.", "warning")
+        return redirect(url_for('schedules'))
 
     preview_pool = _get_preview_for_user()
     has_preview = bool(preview_pool)
@@ -10027,7 +10306,7 @@ def view_schedule(section_name):
             maj = str(p_entry.get('major') or '')
             prog = str(p_entry.get('program') or '')
 
-            if user_role not in ('super_admin', 'admin') and program and prog and prog != program:
+            if norm_role != ROLE_ADMIN and program and prog and prog != program:
                 continue
 
             if semester_filter and sem != semester_filter:
@@ -10074,7 +10353,7 @@ def view_schedule(section_name):
             'room(room_name)'
         ).eq('section', section_name).eq('archive', False)
 
-        if user_role not in ('super_admin', 'admin', 'viewer') and user_program_id:
+        if norm_role != ROLE_ADMIN and user_program_id:
             query = query.eq('professor_load.course.program_id', user_program_id)
 
         rows = query.execute().data or []
@@ -13523,14 +13802,8 @@ def confirm_preview():
         raw_role = str(session.get('role') or '').strip().lower().replace('-', '_').replace(' ', '_')
         if raw_role in ('super_admin', 'superadmin'):
             prep_title = 'Super Admin'
-        elif raw_role in ('admin', 'administrator', 'academic_admin'):
-            prep_title = 'Academic Admin'
-        elif raw_role in ('chair', 'dean', 'scheduler', 'dean/chair', 'program_chair', 'department_head'):
-            prep_title = 'Chair'
-        elif raw_role:
-            prep_title = raw_role.replace('_', ' ').title()
         else:
-            prep_title = 'Chair'
+            prep_title = _role_label(raw_role)
 
         session_sy = session.get('generation_school_year') or '2026-2027'
         rows = []
@@ -13882,7 +14155,7 @@ def archive_schedule():
     """Archive currently active schedule for the program so a new one can be generated."""
     user_prog_id = _get_user_program_id()
     user_program = session.get('program', '')
-    user_role = (session.get('role') or 'chair').lower()
+    norm_role = _normalize_role(session.get('role', ''))
     redirect_target = request.form.get('redirect_to') or request.args.get('redirect_to') or url_for('schedules')
 
     req_prog_id = request.form.get('program_id') or request.args.get('program_id')
@@ -13895,10 +14168,10 @@ def archive_schedule():
         except (ValueError, TypeError):
             pass
 
-    # Server-side scoping: a Scheduler sending another program's id or batch gets HTTP 403
-    if user_role not in ('super_admin', 'admin'):
+    # Server-side scoping: a Chair sending another program's id or batch gets 403.
+    if norm_role != ROLE_ADMIN:
         if req_prog_id and user_prog_id and req_prog_id != user_prog_id:
-            abort(403)
+            return access_denied({ROLE_ADMIN})
         effective_prog_id = user_prog_id
     else:
         effective_prog_id = req_prog_id or user_prog_id
@@ -14575,10 +14848,10 @@ def view_schedule_archive_batch(batch_id):
 @roles_required('chair')
 def restore_schedule_archive(batch_id):
     user_role = _normalize_role(session.get('role', ''))
-    if user_role not in ('chair', 'chair', 'dean'):
-        if _is_ajax_or_write_request():
-            return jsonify({'ok': False, 'error': 'Access denied'}), 403
-        abort(403)
+    # The @roles_required('chair') decorator already enforces this; kept as an
+    # explicit, correctly-normalised second check.
+    if user_role != ROLE_CHAIR:
+        return access_denied({ROLE_CHAIR})
 
     restored_by = session.get('username') or session.get('first_name') or 'Chair'
     if session.get('last_name'):
@@ -14633,11 +14906,14 @@ def restore_schedule_archive(batch_id):
 
         batch_semester = batch_items[0].get('semester') or '1st Semester'
 
-        # Server-side scoping: a Scheduler sending another program's id or batch gets HTTP 403
-        if user_role not in ('super_admin', 'admin'):
+        # Server-side scoping: a Chair sending another program's batch gets 403.
+        if user_role != ROLE_ADMIN:
             if user_prog_id is not None and batch_prog_id is not None and str(batch_prog_id) != str(user_prog_id):
-                logging.warning(f"Forbidden 403: Scheduler {session.get('username')} (prog {user_prog_id}) tried to restore batch {batch_id} for prog {batch_prog_id}")
-                abort(403)
+                logging.warning(
+                    "Access denied: Chair %s (prog %s) tried to restore batch %s for prog %s",
+                    session.get('username'), user_prog_id, batch_id, batch_prog_id,
+                )
+                return access_denied({ROLE_CHAIR})
 
         # Conflict check against other programs' active schedules before restore
         try:
@@ -14751,7 +15027,10 @@ def restore_schedule_archive(batch_id):
                     flash(err_str, 'warning')
                     return redirect(url_for('schedule_archive'))
                 if '42501' in err_str or 'Permission denied' in err_str:
-                    abort(403)
+                    # Database RLS / RPC denied the restore (e.g. cross-program scope
+                    # or the stored role hasn't been migrated yet).  Route through
+                    # access_denied() so the response is always JSON for POST.
+                    return access_denied({ROLE_CHAIR})
                 logging.warning(f"restore_archived_schedule_batch RPC fallback: {rpc_err}")
                 rpc_success = False
 
@@ -14845,7 +15124,7 @@ def api_toggle_schedule_used():
 
         # Authorization: Chairs can only toggle their own program's schedules
         if user_role != 'admin' and user_prog_id is not None and sched_pid is not None and str(user_prog_id) != str(sched_pid):
-            return jsonify({'ok': False, 'success': False, 'error': 'Permission denied: Cannot modify another program\'s schedule.'}), 403
+            return access_denied({ROLE_CHAIR})
 
         current_is_used = _batch_is_used(target_rows)
         if explicit_used is not None:
@@ -14921,8 +15200,8 @@ def api_toggle_schedule_used():
 @roles_required()
 def delete_schedule_archive(batch_id):
     if _is_ajax_or_write_request():
-        return jsonify({'ok': False, 'error': 'Access denied'}), 403
-    abort(403)
+        return access_denied(set())
+    return access_denied(set())
 
     try:
         # Resolve batch details for logging
@@ -15142,6 +15421,18 @@ def _execute_client_side_restore(data_dict, clear_existing=True):
                 item.pop('archive_reason', None)
                 if 'is_used' in item:
                     item['is_used'] = bool(item.get('is_used'))
+                clean_rows.append(item)
+            rows = clean_rows
+        elif table == 'users':
+            # Backups written before the Scheduler -> Chair rename store
+            # role='scheduler'. Map legacy values and NEVER allow a role outside
+            # the whitelist (admin / chair / viewer) to be restored.
+            clean_rows = []
+            for r in rows:
+                item = dict(r)
+                item['role'] = _role_for_restore(item.get('role'))
+                if item['role'] in (ROLE_ADMIN, ROLE_VIEWER):
+                    item['program_id'] = None
                 clean_rows.append(item)
             rows = clean_rows
         elif table == 'program':

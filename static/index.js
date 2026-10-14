@@ -2,6 +2,51 @@
     "use strict";
 
     /* =========================================================================
+     * GLOBAL 403 NORMALISER
+     * -------------------------------------------------------------------------
+     * Every permission failure is answered by the server as JSON
+     * {"ok": false, "error": "Access denied"} (AJAX/API/export/import) or as the
+     * styled 403 HTML page (navigation). A fetch() caller must never try to
+     * JSON-parse the HTML variant -- that surfaces as "Unexpected token '<'".
+     * This wrapper converts ANY 403 into a JSON response carrying a friendly
+     * message so every existing .json() call site keeps working and shows:
+     *   "You don't have permission to do this action."
+     * ========================================================================= */
+    (function install403Normaliser() {
+        if (!window.fetch || window.__fetch403Patched) return;
+        var originalFetch = window.fetch.bind(window);
+        window.__fetch403Patched = true;
+        window.fetch = function () {
+            return originalFetch.apply(window, arguments).then(function (response) {
+                if (!response || response.status !== 403) return response;
+                var friendly = {
+                    ok: false,
+                    success: false,
+                    error: 'Access denied',
+                    message: "You don't have permission to do this action."
+                };
+                return response.text().then(function (text) {
+                    var body = Object.assign({}, friendly);
+                    try {
+                        var parsed = text ? JSON.parse(text) : null;
+                        if (parsed && typeof parsed === 'object') {
+                            body = Object.assign(body, parsed);
+                            body.message = body.message || friendly.message;
+                        }
+                    } catch (e) {
+                        // HTML 403 page (or empty body): keep the friendly JSON.
+                    }
+                    return new Response(JSON.stringify(body), {
+                        status: 403,
+                        statusText: 'Forbidden',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                });
+            });
+        };
+    })();
+
+    /* =========================================================================
      * DEVELOPER GUIDE: How to add loading states to buttons
      * -------------------------------------------------------------------------
      * 1. Forms (Class A): Any standard form submit button (<button type="submit">)
