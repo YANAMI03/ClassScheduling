@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Access Denied - Scheduler{% endblock %}
+{% block title %}Access Denied - Class Scheduling{% endblock %}
 
 {% block header_title %}
 <nav aria-label="breadcrumb" class="header__breadcrumb">
@@ -85,8 +85,8 @@
             You do not have permission to access this page. Please use the navigation menu or return to your allowed home page.
         </p>
         <div>
-            {% set role_lower = (session.get('role', '') or '') | lower %}
-            {% if role_lower in ['admin', 'super_admin', 'super admin', 'viewer', 'instructor'] %}
+            {% set role_lower = current_user_role if current_user_role else 'viewer' %}
+            {% if role_lower in ['admin', 'viewer'] %}
             <a href="{{ url_for('schedules') }}" class="btn denied-action-btn" id="btn-back-home">
                 <i class="bx bx-arrow-back"></i> Go to Section Schedule
             </a>

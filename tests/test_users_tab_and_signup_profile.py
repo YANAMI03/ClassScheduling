@@ -237,7 +237,7 @@ def mock_env(monkeypatch):
                 return MockAuthResponse(user=auth_user, session=None)
 
     monkeypatch.setattr(app_module, 'supabase', MockSupabase())
-    monkeypatch.setattr(app_module, '_get_programs', lambda: db.programs)
+    monkeypatch.setattr(app_module, '_get_programs', lambda *args, **kwargs: db.programs)
 
     app = app_module.app
     app.config['TESTING'] = True
@@ -355,8 +355,8 @@ def test_two_signups_same_email_local_part_get_distinct_usernames(mock_env):
         'confirm_password': 'Password123!',
     })
 
-    user1 = next((u for u in db.users if u['email'] == 'alex@domainA.com'), None)
-    user2 = next((u for u in db.users if u['email'] == 'alex@domainB.com'), None)
+    user1 = next((u for u in db.users if (u.get('email') or '').lower() == 'alex@domaina.com'), None)
+    user2 = next((u for u in db.users if (u.get('email') or '').lower() == 'alex@domainb.com'), None)
 
     assert user1 is not None and user2 is not None
     assert user1['username'] != user2['username']
@@ -505,20 +505,20 @@ def test_admin_edit_user_role_and_program_rules(mock_env):
     assert res.status_code == 400
     assert 'Program is required' in res.get_json().get('message', '')
 
-    # Edit to Scheduler with BSBA -> success
+    # Edit to Chair (formerly Scheduler) with BSBA -> success
     res2 = client.post(f'/edit_user/{v_id}', data={
         'first_name': 'Target',
         'last_name': 'User',
         'email': 'target@example.com',
-        'role': 'scheduler',
+        'role': 'chair',
         'program': 'BSBA',
     })
     assert res2.status_code == 200
     target_row = next(u for u in db.users if u['id'] == v_id)
-    assert target_row['role'] == 'scheduler'
+    assert target_row['role'] == 'chair'
     assert target_row['program_id'] == 2
 
-    # Edit back to Viewer -> program cleared to None
+    # Edit to Viewer with BSBA -> success (Viewer requires program)
     res3 = client.post(f'/edit_user/{v_id}', data={
         'first_name': 'Target',
         'last_name': 'User',
@@ -529,6 +529,19 @@ def test_admin_edit_user_role_and_program_rules(mock_env):
     assert res3.status_code == 200
     target_row = next(u for u in db.users if u['id'] == v_id)
     assert target_row['role'] == 'viewer'
+    assert target_row['program_id'] == 2
+
+    # Edit to Admin -> program cleared to None (only Admin has NULL program)
+    res4 = client.post(f'/edit_user/{v_id}', data={
+        'first_name': 'Target',
+        'last_name': 'User',
+        'email': 'target@example.com',
+        'role': 'admin',
+        'program': '',
+    })
+    assert res4.status_code == 200
+    target_row = next(u for u in db.users if u['id'] == v_id)
+    assert target_row['role'] == 'admin'
     assert target_row['program_id'] is None
 
 

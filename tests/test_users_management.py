@@ -51,6 +51,9 @@ class FakeTableQuery:
     def limit(self, count):
         return self
 
+    def order(self, *args, **kwargs):
+        return self
+
     def execute(self):
         class Response:
             def __init__(self, data):
@@ -201,6 +204,10 @@ def mock_db(monkeypatch):
             },
         ],
         'activity_log': [],
+        'program': [
+            {'id': 1, 'program_name': 'BSIT', 'program_code': 'BSIT'},
+            {'id': 2, 'program_name': 'BSBA', 'program_code': 'BSBA'},
+        ],
     }
     fake_client = FakeSupabaseClient(store)
     monkeypatch.setattr(app_module, 'supabase', fake_client)
@@ -388,13 +395,14 @@ def test_delete_user(mock_db):
         sess['role'] = 'admin'
         sess['username'] = 'adminuser'
 
-    res = client.post('/delete_user/user-3-viewer')
+    res = client.post('/disable_user/user-3-viewer')
     assert res.status_code == 200
     data = json.loads(res.data.decode('utf-8'))
     assert data['success'] is True
 
-    remaining_ids = [u['id'] for u in mock_db['users']]
-    assert 'user-3-viewer' not in remaining_ids
+    target = next((u for u in mock_db['users'] if u['id'] == 'user-3-viewer'), None)
+    assert target is not None
+    assert target.get('disabled') is True
 
 
 def test_admin_cannot_delete_self(mock_db):
@@ -404,10 +412,11 @@ def test_admin_cannot_delete_self(mock_db):
         sess['role'] = 'admin'
         sess['username'] = 'adminuser'
 
-    res = client.post('/delete_user/user-1-admin')
+    res = client.post('/disable_user/user-1-admin')
     assert res.status_code == 403
     data = json.loads(res.data.decode('utf-8'))
     assert data['success'] is False
+    assert 'cannot disable your own account' in data['message'].lower()
 
 
 def test_create_user_endpoint_disabled(mock_db):
@@ -494,7 +503,7 @@ def test_signup_success(mock_db):
     assert '/login' in res.location
 
     # Check activity log was recorded
-    logs = [l for l in mock_db['activity_log'] if 'Self-registered: alicew' in l.get('target_detail', '')]
+    logs = [l for l in mock_db['activity_log'] if 'alice@example.com' in l.get('target_detail', '')]
     assert len(logs) == 1
     assert 'alice@example.com' in logs[0]['target_detail']
 
@@ -697,13 +706,25 @@ def test_edit_user_role_to_viewer_clears_program(mock_db):
     }
     mock_db['users'].append(sched_user)
 
-    # Edit Sam to Viewer (program not provided / cleared)
-    res = client.post('/edit_user/sched-to-viewer-uuid', data={
+    # Edit Sam to Viewer without program -> rejected 400 (Program is required for Chair and Viewer)
+    res_bad = client.post('/edit_user/sched-to-viewer-uuid', data={
         'first_name': 'Sam',
         'last_name': 'Sched',
         'email': 'samsched@example.com',
         'role': 'viewer',
         'program': '',
+    })
+    assert res_bad.status_code == 400
+    assert 'Program is required' in res_bad.get_json().get('message', '')
+
+    # Edit Sam to Viewer with program BSIT -> success
+    res = client.post('/edit_user/sched-to-viewer-uuid', data={
+        'first_name': 'Sam',
+        'last_name': 'Sched',
+        'email': 'samsched@example.com',
+        'role': 'viewer',
+        'program': 'BSIT',
+        'program_id': '1',
     })
     assert res.status_code == 200
     data = json.loads(res.data.decode('utf-8'))
@@ -711,6 +732,18 @@ def test_edit_user_role_to_viewer_clears_program(mock_db):
 
     updated = next(u for u in mock_db['users'] if u.get('id') == 'sched-to-viewer-uuid')
     assert updated['role'] == 'viewer'
+    assert updated.get('program_id') == 1
+
+    # Edit to Admin -> program cleared to None (only Admin has NULL program)
+    res_admin = client.post('/edit_user/sched-to-viewer-uuid', data={
+        'first_name': 'Sam',
+        'last_name': 'Sched',
+        'email': 'samsched@example.com',
+        'role': 'admin',
+        'program': '',
+    })
+    assert res_admin.status_code == 200
+    assert updated['role'] == 'admin'
     assert updated.get('program_id') is None
 
 

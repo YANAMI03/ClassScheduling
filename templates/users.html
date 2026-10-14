@@ -257,26 +257,16 @@
                 <td>{{ user.last_name or '—' }}</td>
                 <td>{{ user.email or '—' }}</td>
                 <td>
-                    {% if user.role and user.role.lower() in ['admin', 'super_admin'] %}
+                    {% if user.role and normalize_role(user.role) == 'admin' %}
                     <span class="text-muted fst-italic">Global / All Programs</span>
                     {% else %}
                     {{ user.program or 'No program' }}
                     {% endif %}
                 </td>
                 <td>
-                    {% set role_lower = (user.role or 'viewer') | lower %}
-                    <span class="badge-custom badge-{{ role_lower if role_lower in ['admin', 'super_admin', 'dean', 'chair', 'viewer'] else 'unknown' }}">
-                        {% if role_lower in ['dean', 'chair'] %}
-                            Chair
-                        {% elif role_lower == 'super_admin' %}
-                            Super Admin
-                        {% elif role_lower == 'admin' %}
-                            Admin
-                        {% elif role_lower == 'viewer' %}
-                            Viewer
-                        {% else %}
-                            {{ user.role or 'Viewer' }}
-                        {% endif %}
+                    {% set role_canon = normalize_role(user.role) %}
+                    <span class="badge-custom badge-{{ role_canon if role_canon in ['admin', 'chair', 'viewer'] else 'unknown' }}">
+                        {{ role_label(user.role) }}
                     </span>
                 </td>
                 <td class="text-end">
@@ -349,8 +339,7 @@
                         <select class="form-control" id="editRole" onchange="toggleProgramRole('editRole', 'editProgram')" required>
                             <option value="viewer">Viewer</option>
                             <option value="chair">Chair</option>
-                            <option value="admin">Academic Admin</option>
-                            <option value="super_admin">Super Admin</option>
+                            <option value="admin">Admin</option>
                         </select>
                     </div>
                     <div class="mb-3" id="editProgramGroup">
@@ -388,13 +377,16 @@ function toggleProgramRole(roleSelectId, programSelectId) {
     const roleVal = (document.getElementById(roleSelectId).value || '').toLowerCase();
     const progSelect = document.getElementById(programSelectId);
     const helpText = document.getElementById('editProgramHelp');
-    const isScheduler = roleVal === 'chair';
+    const isAdmin = roleVal === 'admin';
     
-    if (!isScheduler) {
+    if (isAdmin) {
         progSelect.value = '';
         progSelect.disabled = true;
         progSelect.required = false;
-        if (helpText) helpText.classList.remove('d-none');
+        if (helpText) {
+            helpText.textContent = 'Admin has global access across all programs.';
+            helpText.classList.remove('d-none');
+        }
     } else {
         progSelect.disabled = false;
         progSelect.required = true;
@@ -418,25 +410,23 @@ document.getElementById('searchInput').addEventListener('keypress', function(e) 
     }
 });
 
+function normalizeRoleClient(role) {
+    const r = (role || '').toLowerCase().trim().replace(/-/g, '_').replace(/ /g, '_');
+    if (['admin', 'super_admin', 'superadmin', 'administrator', 'academic_admin'].includes(r)) return 'admin';
+    if (['chair', 'scheduler', 'program_scheduler', 'program_chair', 'department_head', 'dean', 'dean/chair'].includes(r)) return 'chair';
+    return 'viewer';
+}
+
 function openEditModal(userId, firstName, middleName, lastName, email, program, role) {
     document.getElementById('editUserId').value = userId;
     document.getElementById('editFirstName').value = firstName;
     document.getElementById('editMiddleName').value = middleName || '';
     document.getElementById('editLastName').value = lastName;
     document.getElementById('editEmail').value = email;
-    
+
     const roleSelect = document.getElementById('editRole');
-    let matchedRole = false;
-    for (let opt of roleSelect.options) {
-        if (opt.value.toLowerCase() === (role || '').toLowerCase()) {
-            roleSelect.value = opt.value;
-            matchedRole = true;
-            break;
-        }
-    }
-    if (!matchedRole) {
-        roleSelect.value = role;
-    }
+    const canonicalRole = normalizeRoleClient(role);
+    roleSelect.value = canonicalRole;
     
     document.getElementById('editProgram').value = program;
     toggleProgramRole('editRole', 'editProgram');
@@ -453,15 +443,16 @@ function saveUser() {
     const email = document.getElementById('editEmail').value.trim();
     const role = document.getElementById('editRole').value;
     const program = document.getElementById('editProgram').value;
-    const isScheduler = (role || '').toLowerCase() === 'chair';
+    const isProgramRequired = (role || '').toLowerCase() !== 'admin';
     
     if (!firstName || !lastName || !email || !role) {
         showToast('Please fill in all required fields.', 'warning');
         return;
     }
     
-    if (isScheduler && !program) {
-        showToast('Please select a program for Chair.', 'warning');
+    if (isProgramRequired && !program) {
+        const roleLabel = (role || '').toLowerCase() === 'chair' ? 'Chair' : 'Viewer';
+        showToast(`Please select a program for ${roleLabel}.`, 'warning');
         return;
     }
     
@@ -470,7 +461,7 @@ function saveUser() {
     formData.append('middle_name', middleName);
     formData.append('last_name', lastName);
     formData.append('email', email);
-    formData.append('program', isScheduler ? program : '');
+    formData.append('program', isProgramRequired ? program : '');
     formData.append('role', role);
     
     const saveBtn = document.getElementById('btnSubmitSaveUser');

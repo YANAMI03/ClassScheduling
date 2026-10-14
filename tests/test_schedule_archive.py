@@ -52,6 +52,11 @@ class FakeArchiveQuery:
         return self
 
     def execute(self):
+        # The RBAC middleware queries public.users to sync the session role. Return
+        # no row so the session role set by the test is authoritative (a default
+        # 'viewer' would otherwise be cached and wrongly deny Chair-only routes).
+        if self.table_name == 'users':
+            return FakeResponse([])
         if self.table_name in ('schedule_archive', 'schedule'):
             if self._filters.get('archive') is True or self._filters.get('batch_id') == 'batch-1' or self.table_name == 'schedule_archive':
                 if self._filters.get('batch_id') == 'batch-1' or self._filters.get('archive') is True:
@@ -458,6 +463,8 @@ def test_legacy_archived_rows_appear_as_single_legacy_archive_entry(monkeypatch)
 
     class FakeLegacyQuery(FakeArchiveQuery):
         def execute(self):
+            if self.table_name == 'users':
+                return FakeResponse([])
             # Return 5 legacy rows across 2 sections with no batch_id or timestamp
             return FakeResponse([
                 {'schedule_id': 1, 'semester': '1st Semester', 'section': '1A', 'archive': True, 'program_id': 1, 'program': {'program_name': 'BSIT'}},
@@ -581,6 +588,8 @@ def test_large_schedule_archive_pagination_not_capped_at_1000(monkeypatch):
             return self
 
         def execute(self):
+            if self.table_name == 'users':
+                return FakeResponse([])
             # Page 1 (0 to 999): 1000 rows
             # Page 2 (1000 to 1999): 1000 rows
             # Page 3 (2000 to 2999): 500 rows (total 2500 rows)
@@ -642,6 +651,8 @@ def test_two_archive_batches_same_day_distinct_entries(monkeypatch):
             self._range = (start, end)
             return self
         def execute(self):
+            if self.table_name == 'users':
+                return FakeResponse([])
             return FakeResponse(table_rows)
 
     class TableDirectSupabase:
@@ -696,6 +707,8 @@ def test_large_archive_5000_plus_classes_pagination(monkeypatch):
             return self
 
         def execute(self):
+            if self.table_name == 'users':
+                return FakeResponse([])
             start = getattr(self, '_start', 0)
             page_size = 1000
             end = min(start + page_size, total_classes)

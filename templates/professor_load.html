@@ -172,8 +172,8 @@
         <h1 class="page-title">Professors' Teaching Load & Course Assignments</h1>
         <p class="page-subtitle">Assign courses, set section counts, and monitor real-time weekly hours & unit workload capacities</p>
     </div>
-    {% set user_role_lower = (session.get('role', '') or '') | lower %}
-    {% if user_role_lower not in ['viewer', 'guest'] and user_role_lower in ['super admin', 'super_admin', 'admin', 'chair'] %}
+    {% set user_role_lower = current_user_role %}
+    {% if user_role_lower in ['admin', 'chair'] %}
     <div>
         <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2 shadow-sm" id="btn-open-import-modal" data-bs-toggle="modal" data-bs-target="#importLoadModal">
             <i class="bx bx-upload fs-5"></i>

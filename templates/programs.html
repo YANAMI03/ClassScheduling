@@ -17,8 +17,8 @@
     </div>
 </div>
 
-{% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_edit_programs = (user_role_lower in ['super_admin', 'admin']) %}
+{% set user_role_lower = current_user_role %}
+{% set can_edit_programs = (user_role_lower == 'admin') %}
 
 {% if can_edit_programs %}
 <div class="card-custom mb-4">

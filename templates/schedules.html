@@ -9,11 +9,11 @@
 {% endblock %}
 
 {% block content %}
-{% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_edit_schedule = user_role_lower in ['chair'] %}
-{% set is_admin = user_role_lower in ['super_admin', 'super admin', 'admin'] %}
-{% set is_viewer = user_role_lower in ['viewer'] %}
-{% set can_view_archive = user_role_lower in ['super_admin', 'super admin', 'admin', 'chair', 'dean', 'chair'] %}
+{% set user_role_lower = current_user_role %}
+{% set can_edit_schedule = user_role_lower == 'chair' %}
+{% set is_admin = user_role_lower == 'admin' %}
+{% set is_viewer = user_role_lower == 'viewer' %}
+{% set can_view_archive = user_role_lower in ['admin', 'chair'] %}
 <div class="page-header d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -60,10 +60,20 @@
     </div>
 </div>
 
+{% if no_program_assigned %}
+<div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+    <div>
+        <strong>Program Required:</strong> {{ no_program_message or "No program is assigned to your account. Please contact an administrator." }}
+    </div>
+</div>
+{% endif %}
+
 <!-- Filter Controls -->
 <div class="card-custom mb-4 p-3 bg-light-subtle">
     <form method="get" class="row g-2 align-items-end" id="sectionScheduleFilterForm" action="{{ url_for('schedules') }}">
-        <!-- Program Filter (defaults to the user's program) -->
+        <!-- Program Filter (only displayed if user has permission to switch programs, e.g. Admin) -->
+        {% if can_pick_program %}
         <div class="col-md-3 col-lg-2">
             <label class="form-label small fw-bold text-muted mb-1" for="programFilter">
                 <i class="bx bx-buildings me-1"></i>Program
@@ -78,6 +88,7 @@
                 {% endfor %}
             </select>
         </div>
+        {% endif %}
 
         <!-- Year Level Filter -->
         <div class="col-md-2 col-lg-2">

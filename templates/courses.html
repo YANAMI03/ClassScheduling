@@ -32,9 +32,9 @@
     </div>
 </div>
 
-{% set user_role_lower = (session.get('role', '') or '') | lower %}
-{% set can_add_courses = is_admin or (user_role_lower in ['super_admin', 'admin', 'super admin']) %}
-{% set can_edit_courses = is_admin or (user_role_lower in ['super_admin', 'admin', 'super admin']) %}
+{% set user_role_lower = current_user_role %}
+{% set can_add_courses = is_admin or (user_role_lower == 'admin') %}
+{% set can_edit_courses = is_admin or (user_role_lower == 'admin') %}
 
 {% if can_add_courses %}
 <div class="card-custom mb-4">
