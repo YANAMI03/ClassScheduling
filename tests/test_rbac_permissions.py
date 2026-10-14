@@ -73,7 +73,7 @@ class FakeSupabase:
             'academic_ranking': FakeTable('academic_ranking', []),
             'professor_load': FakeTable('professor_load', []),
             'schedule': FakeTable('schedule', []),
-            'program': FakeTable('program', [{'id': 1, 'program_name': 'BSIT'}]),
+            'program': FakeTable('program', [{'id': 1, 'program_code': 'BSIT'}]),
             'activity_log': FakeTable('activity_log', []),
             'delete_requests': FakeTable('delete_requests', []),
             'semester': FakeTable('semester', [{'id': 1, 'term': '1st Semester', 'is_active': True}]),

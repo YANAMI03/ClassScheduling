@@ -128,8 +128,8 @@ def test_setup(monkeypatch):
         {'id': 4, 'prof_id': 30, 'course_id': 201, 'sections': 1, 'professor': profs[2], 'course': courses[1]},
     ]
     programs = [
-        {'id': 1, 'program_name': 'BSIT', 'full_name': 'BS Information Tech'},
-        {'id': 2, 'program_name': 'BSDS', 'full_name': 'BS Data Science'},
+        {'id': 1, 'program_code': 'BSIT', 'full_name': 'BS Information Tech'},
+        {'id': 2, 'program_code': 'BSDS', 'full_name': 'BS Data Science'},
     ]
 
     mock_db = MockSupabase(
@@ -279,7 +279,7 @@ def test_change2_importer_rejects_out_of_program_prof(test_setup):
         all_courses_list=courses,
         all_professors_list=all_profs,
         allowed_prof_ids=allowed_pids,
-        target_program_name='BSIT'
+        target_program_code='BSIT'
     )
 
     assert result['rows'][0]['status'] == 'Error'

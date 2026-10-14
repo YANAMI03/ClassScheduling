@@ -219,8 +219,8 @@ def test_client():
 # -----------------------------------------------------------------------------
 def test_admin_programs_crud(test_client, monkeypatch):
     programs_data = [
-        {'id': 1, 'program_name': 'BSIT'},
-        {'id': 2, 'program_name': 'BSDS'},
+        {'id': 1, 'program_code': 'BSIT'},
+        {'id': 2, 'program_code': 'BSDS'},
     ]
     users_data = [{'id': 1, 'username': 'admin', 'role': 'Admin', 'program_id': 1}]
     courses_data = [{'course_id': 101, 'course_code': 'IT101', 'program_id': 1}]
@@ -245,19 +245,19 @@ def test_admin_programs_crud(test_client, monkeypatch):
     assert b'BSDS' in res.data
 
     # 2. Add Program
-    res_add = test_client.post('/add_program', data={'program_name': 'BSCS'}, follow_redirects=True)
+    res_add = test_client.post('/add_program', data={'program_code': 'BSCS', 'program_name': 'Bachelor of Science in Computer Science'}, follow_redirects=True)
     assert res_add.status_code == 200
-    assert any(p['program_name'] == 'BSCS' for p in mock_db.table('program').data)
+    assert any(p['program_code'] == 'BSCS' for p in mock_db.table('program').data)
 
     # 3. Add Duplicate Program (case-insensitive) should fail
-    res_dup = test_client.post('/add_program', data={'program_name': 'bscs'}, follow_redirects=True)
+    res_dup = test_client.post('/add_program', data={'program_code': 'bscs', 'program_name': 'Bachelor of Science in Computer Science'}, follow_redirects=True)
     assert b'already exists' in res_dup.data
 
     # 4. Edit Program (converts to uppercase)
-    res_edit = test_client.post('/edit_program/2', data={'program_name': 'BSDS - Data Science'}, follow_redirects=True)
+    res_edit = test_client.post('/edit_program/2', data={'program_code': 'BSDS - Data Science', 'program_name': 'Bachelor of Science in Data Science'}, follow_redirects=True)
     assert res_edit.status_code == 200
     bsds = next(p for p in mock_db.table('program').data if p['id'] == 2)
-    assert bsds['program_name'] == 'BSDS - DATA SCIENCE'
+    assert bsds['program_code'] == 'BSDS - DATA SCIENCE'
 
     # 5. Delete referenced Program 1 (referenced by Course 101 & User 1) should be blocked
     res_del_ref = test_client.post('/delete_program/1', follow_redirects=True)
@@ -265,10 +265,10 @@ def test_admin_programs_crud(test_client, monkeypatch):
     assert any(p['id'] == 1 for p in mock_db.table('program').data)
 
     # 6. Delete unreferenced Program (BSCS) should succeed
-    bscs_obj = next(p for p in mock_db.table('program').data if p['program_name'] == 'BSCS')
+    bscs_obj = next(p for p in mock_db.table('program').data if p['program_code'] == 'BSCS')
     res_del_ok = test_client.post(f"/delete_program/{bscs_obj['id']}", follow_redirects=True)
     assert res_del_ok.status_code == 200
-    assert not any(p['program_name'] == 'BSCS' for p in mock_db.table('program').data)
+    assert not any(p['program_code'] == 'BSCS' for p in mock_db.table('program').data)
 
 
 # -----------------------------------------------------------------------------
@@ -276,8 +276,8 @@ def test_admin_programs_crud(test_client, monkeypatch):
 # -----------------------------------------------------------------------------
 def test_courses_program_scoping_and_duplicate_rules(test_client, monkeypatch):
     programs_data = [
-        {'id': 1, 'program_name': 'BSIT'},
-        {'id': 2, 'program_name': 'BSDS'},
+        {'id': 1, 'program_code': 'BSIT'},
+        {'id': 2, 'program_code': 'BSDS'},
     ]
     courses_data = [
         {'course_id': 1, 'course_code': 'CS101', 'program_id': 1, 'semester': '1st Semester'},
@@ -375,7 +375,7 @@ def test_professor_load_cross_program_import_and_badge(test_client, monkeypatch)
         courses_list=target_program_courses,
         existing_loads_list=existing_loads,
         all_courses_list=all_institution_courses,
-        target_program_name='BSIT',
+        target_program_code='BSIT',
     )
 
     row_errors = [r['errors'] for r in val_res['rows']]
@@ -388,8 +388,8 @@ def test_professor_load_cross_program_import_and_badge(test_client, monkeypatch)
 def test_professor_load_view_cross_program_badge(test_client, monkeypatch):
     # Prof 1 teaches in BSIT (3 units, 1 sec) AND BSDS (3 units, 2 sec = 6 units)
     courses_data = [
-        {'course_id': 1, 'course_code': 'IT101', 'program_id': 1, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_name': 'BSIT'}},
-        {'course_id': 2, 'course_code': 'DS201', 'program_id': 2, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_name': 'BSDS'}},
+        {'course_id': 1, 'course_code': 'IT101', 'program_id': 1, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_code': 'BSIT'}},
+        {'course_id': 2, 'course_code': 'DS201', 'program_id': 2, 'units': 3.0, 'lecture_hours': 3.0, 'lab_hours': 0.0, 'ilp_hours': 0.0, 'program': {'program_code': 'BSDS'}},
     ]
     profs_data = [
         {'prof_id': 1, 'first_name': 'Grace', 'last_name': 'Hopper', 'specialization': 'CS', 'program_id': 1, 'academic_ranking': {'name': 'Prof', 'min_units': 6, 'max_units': 18, 'min_hours': 10, 'max_hours': 40}},
@@ -398,7 +398,7 @@ def test_professor_load_view_cross_program_badge(test_client, monkeypatch):
         {'id': 101, 'prof_id': 1, 'course_id': 1, 'sections': 1, 'course': courses_data[0], 'professor': profs_data[0]},
         {'id': 102, 'prof_id': 1, 'course_id': 2, 'sections': 2, 'course': courses_data[1], 'professor': profs_data[0]},
     ]
-    programs_data = [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}]
+    programs_data = [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}]
 
     mock_db = MockSupabaseClient({
         'program': programs_data,
@@ -430,7 +430,7 @@ def test_professor_load_view_cross_program_badge(test_client, monkeypatch):
 # 4. Schedule Views: Scheduler Program Tampering Rejected with 403
 # -----------------------------------------------------------------------------
 def test_scheduler_cannot_tamper_program_in_schedules(test_client, monkeypatch):
-    programs_data = [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}]
+    programs_data = [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}]
     mock_db = MockSupabaseClient({
         'program': programs_data,
         'schedule': [],
@@ -469,7 +469,7 @@ def test_room_and_professor_schedule_cross_program_masking(test_client, monkeypa
             'semester': '1st Semester',
             'archive': False,
             'session_type': 'Laboratory',
-            'program': {'program_name': 'BSIT'},
+            'program': {'program_code': 'BSIT'},
             'professor_load': {'professor_load_id': 1, 'prof_id': 1, 'course': {'course_code': 'IT-Net1'}, 'professor': profs_data[0]},
         },
         {
@@ -484,7 +484,7 @@ def test_room_and_professor_schedule_cross_program_masking(test_client, monkeypa
             'semester': '1st Semester',
             'archive': False,
             'session_type': 'Laboratory',
-            'program': {'program_name': 'BSDS'},
+            'program': {'program_code': 'BSDS'},
             'professor_load': {'professor_load_id': 2, 'prof_id': 1, 'course': {'course_code': 'DS-Math'}, 'professor': profs_data[0]},
         },
     ]
@@ -500,7 +500,7 @@ def test_room_and_professor_schedule_cross_program_masking(test_client, monkeypa
         'working_hours': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}])
 
     # Schedulers from BSIT viewing Room 101:
     with test_client.session_transaction() as sess:
@@ -616,10 +616,10 @@ def test_restore_schedule_cross_program_conflict(test_client, monkeypatch):
 
     mock_db = MockSupabaseClient({
         'schedule': [active_other_sched, archived_bsit_sched],
-        'program': [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}],
+        'program': [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}])
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 2
@@ -664,7 +664,7 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
                 'course_id': 10,
                 'course_code': 'IT101',
                 'program_id': 1,
-                'program': {'program_name': 'BSIT'},
+                'program': {'program_code': 'BSIT'},
                 'semester': '1st Semester',
                 'specialization': None,
             }
@@ -689,7 +689,7 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
                 'course_id': 20,
                 'course_code': 'DS101',
                 'program_id': 2,
-                'program': {'program_name': 'BSDS'},
+                'program': {'program_code': 'BSDS'},
                 'semester': '1st Semester',
                 'specialization': None,
             }
@@ -698,11 +698,11 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
 
     mock_db = MockSupabaseClient({
         'schedule': [bsit_sched, bsds_sched],
-        'program': [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}],
+        'program': [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}],
         'working_hours': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}])
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 1
@@ -760,7 +760,7 @@ def test_scheduler_schedule_viewing_isolated_to_program(test_client, monkeypatch
                 'course_id': 10,
                 'course_code': 'IT101',
                 'program_id': 1,
-                'program': {'program_name': 'BSIT'},
+                'program': {'program_code': 'BSIT'},
                 'semester': '1st Semester',
                 'specialization': None,
             }
@@ -785,7 +785,7 @@ def test_scheduler_schedule_viewing_isolated_to_program(test_client, monkeypatch
                 'course_id': 20,
                 'course_code': 'DS101',
                 'program_id': 2,
-                'program': {'program_name': 'BSDS'},
+                'program': {'program_code': 'BSDS'},
                 'semester': '1st Semester',
                 'specialization': None,
             }
@@ -794,11 +794,11 @@ def test_scheduler_schedule_viewing_isolated_to_program(test_client, monkeypatch
 
     mock_db = MockSupabaseClient({
         'schedule': [bsit_sched, bsds_sched],
-        'program': [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}],
+        'program': [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}],
         'working_hours': [],
     })
     monkeypatch.setattr(app_module, 'supabase', mock_db)
-    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_name': 'BSIT'}, {'id': 2, 'program_name': 'BSDS'}])
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_code': 'BSIT'}, {'id': 2, 'program_code': 'BSDS'}])
 
     with test_client.session_transaction() as sess:
         sess['user_id'] = 2

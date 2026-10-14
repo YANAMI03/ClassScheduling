@@ -185,7 +185,7 @@ def test_bsit_scheduler_archives_without_a_request(monkeypatch, test_setup):
                 'schedule_id': 10,
                 'program_id': 1,
                 'semester': '1st Semester',
-                'program_name': 'BSIT',
+                'program_code': 'BSIT',
                 'archive': False,
             }
         ]
@@ -233,7 +233,7 @@ def test_scheduler_cannot_see_or_call_permanent_delete(monkeypatch):
                 'schedule_id': 10,
                 'program_id': 1,
                 'semester': '1st Semester',
-                'program_name': 'BSIT',
+                'program_code': 'BSIT',
                 'archive': True,
                 'archive_batch_id': 'batch-bsit-1',
                 'archived_at': '2026-10-01T00:00:00Z',
@@ -288,7 +288,7 @@ def test_scheduler_restores_own_archive_success(monkeypatch, test_setup):
                 'schedule_id': 20,
                 'program_id': 1,
                 'semester': '1st Semester',
-                'program_name': 'BSIT',
+                'program_code': 'BSIT',
                 'archive': True,
                 'archive_batch_id': batch_uuid,
             }
@@ -360,7 +360,7 @@ def test_scheduler_restore_blocked_when_active_schedule_already_exists(monkeypat
                 'schedule_id': 20,
                 'program_id': 1,
                 'semester': '1st Semester',
-                'program_name': 'BSIT',
+                'program_code': 'BSIT',
                 'archive': True,
                 'archive_batch_id': batch_uuid,
             },
@@ -368,7 +368,7 @@ def test_scheduler_restore_blocked_when_active_schedule_already_exists(monkeypat
                 'schedule_id': 30,
                 'program_id': 1,
                 'semester': '1st Semester',
-                'program_name': 'BSIT',
+                'program_code': 'BSIT',
                 'archive': False,
             }
         ]
@@ -432,7 +432,7 @@ def test_scheduler_restore_blocked_on_cross_program_conflict(monkeypatch):
                 'schedule_id': 20,
                 'program_id': 1,
                 'semester': '1st Semester',
-                'program_name': 'BSIT',
+                'program_code': 'BSIT',
                 'archive': True,
                 'archive_batch_id': batch_uuid,
             }
@@ -481,7 +481,7 @@ def test_scheduler_cannot_archive_or_restore_bsds_data(monkeypatch):
                 'schedule_id': 50,
                 'program_id': 9,
                 'semester': '1st Semester',
-                'program_name': 'BSDS',
+                'program_code': 'BSDS',
                 'archive': True,
                 'archive_batch_id': bsds_batch_uuid,
             }
@@ -528,7 +528,7 @@ def test_admin_permanently_deletes_archived_batch(monkeypatch, test_setup):
                 'schedule_id': 88,
                 'program_id': 1,
                 'semester': '1st Semester',
-                'program_name': 'BSIT',
+                'program_code': 'BSIT',
                 'archive': True,
                 'archive_batch_id': batch_uuid,
             }

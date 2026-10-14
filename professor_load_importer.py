@@ -528,7 +528,7 @@ def validate_import_data(
     courses_list: List[Dict[str, Any]],
     existing_loads_list: List[Dict[str, Any]],
     all_courses_list: Optional[List[Dict[str, Any]]] = None,
-    target_program_name: Optional[str] = None,
+    target_program_code: Optional[str] = None,
     all_professors_list: Optional[List[Dict[str, Any]]] = None,
     allowed_prof_ids: Optional[Any] = None,
 ) -> Dict[str, Any]:
@@ -659,11 +659,11 @@ def validate_import_data(
                     has_key_match = bool(matched_key and matched_key in scoped_pids_set)
                     if not has_id_match and not has_key_match:
                         m_pid = matched_prof.get('program_id')
-                        if m_pid is not None and target_program_name:
+                        if m_pid is not None and target_program_code:
                             is_out_of_scope = True
 
                 if is_out_of_scope:
-                    pname = target_program_name or "Program"
+                    pname = target_program_code or "Program"
                     row_errors.append(f"Professor not in {pname}")
                 else:
                     prof_id = matched_id
@@ -706,7 +706,7 @@ def validate_import_data(
                     if all_resolved_code in all_courses_by_code or normalize_course_code(raw_course) in all_courses_by_code:
                         is_cross_program = True
                 if is_cross_program:
-                    pname = target_program_name or "program"
+                    pname = target_program_code or "program"
                     row_errors.append(f"Course not offered in {pname}")
                 else:
                     row_errors.append(f"Course not found in catalog: '{raw_course}'")

@@ -580,7 +580,7 @@
                     <ul class="signup-benefits" aria-label="Account benefits">
                         <li class="signup-benefit-item">
                             <span class="signup-benefit-icon" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
-                            <span>View the Section and Room schedules of your program</span>
+                            <span>View the Section and Room schedules across all programs</span>
                         </li>
                         <li class="signup-benefit-item">
                             <span class="signup-benefit-icon" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
@@ -596,7 +596,7 @@
                 <!-- View-only info note -->
                 <div class="signup-brand__notice" role="note">
                     <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
-                    <span>New accounts have view-only access to the Section and Room schedules of your program. An administrator can change your role or program.</span>
+                    <span>New accounts have view-only access to Section and Room schedules across all programs. An administrator can change your role and assign a program when you become a scheduler.</span>
                 </div>
             </aside>
 
@@ -674,30 +674,7 @@
                         </div>
                     </div>
 
-                    <!-- 2. PROGRAM FIELD -->
-                    <div class="signup-field">
-                        <label for="programSelect" class="signup-label">Program</label>
-                        <div class="input-icon-wrapper">
-                            <i class="bi bi-mortarboard input-leading-icon" aria-hidden="true"></i>
-                            <select id="programSelect"
-                                    name="program"
-                                    class="form-select"
-                                    required
-                                    aria-describedby="programErrorMsg"
-                                    aria-invalid="false">
-                                <option value="" disabled {% if not selected_program and not selected_program_id %}selected{% endif %}>Select your program</option>
-                                {% for p in programs %}
-                                <option value="{{ p.id }}" {% if selected_program_id and (p.id|string == selected_program_id|string) %}selected{% elif selected_program and (p.program_name == selected_program) %}selected{% endif %}>{{ p.program_name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="field-feedback error-feedback" id="programErrorMsg" role="alert">
-                            <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
-                            <span>Please select your program.</span>
-                        </div>
-                    </div>
-
-                    <!-- 3. EMAIL FIELD -->
+                    <!-- 2. EMAIL FIELD -->
                     <div class="signup-field">
                         <label for="email" class="signup-label">Email</label>
                         <div class="input-icon-wrapper">
@@ -838,7 +815,6 @@
 
             var form = document.getElementById('signupForm');
             var nameInput = document.getElementById('fullName');
-            var progSelect = document.getElementById('programSelect');
             var emailInput = document.getElementById('email');
             var passInput = document.getElementById('password');
             var confirmInput = document.getElementById('confirmPassword');
@@ -974,18 +950,6 @@
                 });
             }
 
-            if (progSelect) {
-                progSelect.addEventListener('change', function () {
-                    var errEl = document.getElementById('programErrorMsg');
-                    if (progSelect.value) {
-                        progSelect.classList.remove('is-invalid');
-                        progSelect.classList.add('is-valid');
-                        progSelect.setAttribute('aria-invalid', 'false');
-                        if (errEl) errEl.style.display = 'none';
-                    }
-                });
-            }
-
             if (emailInput) {
                 emailInput.addEventListener('blur', function () {
                     var val = emailInput.value.trim();
@@ -1023,7 +987,6 @@
                     var firstErrorField = null;
 
                     var nameVal = nameInput ? nameInput.value.trim() : '';
-                    var progVal = progSelect ? progSelect.value.trim() : '';
                     var emailVal = emailInput ? emailInput.value.trim() : '';
                     var passVal = passInput ? passInput.value : '';
                     var confirmVal = confirmInput ? confirmInput.value : '';
@@ -1040,19 +1003,7 @@
                         if (nameErr) nameErr.style.display = 'flex';
                     }
 
-                    // 2. Program Validation
-                    if (!progVal) {
-                        hasError = true;
-                        if (progSelect) {
-                            progSelect.classList.add('is-invalid');
-                            progSelect.setAttribute('aria-invalid', 'true');
-                            if (!firstErrorField) firstErrorField = progSelect;
-                        }
-                        var progErr = document.getElementById('programErrorMsg');
-                        if (progErr) progErr.style.display = 'flex';
-                    }
-
-                    // 3. Email Validation
+                    // 2. Email Validation
                     if (!emailVal || !validateEmailFormat(emailVal)) {
                         hasError = true;
                         if (emailInput) {

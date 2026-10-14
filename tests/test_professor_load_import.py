@@ -894,8 +894,8 @@ def test_scheduler_scoped_to_own_program_cross_program_error(test_client, monkey
             {'course_id': 201, 'course_code': 'BA-101', 'program_id': 2, 'program': 'BSBA', 'year_level': 1},
         ],
         programs=[
-            {'id': 1, 'program_name': 'BSIT'},
-            {'id': 2, 'program_name': 'BSBA'},
+            {'id': 1, 'program_code': 'BSIT'},
+            {'id': 2, 'program_code': 'BSBA'},
         ]
     )
     monkeypatch.setattr(app_module, 'supabase', mock_db)
@@ -938,7 +938,7 @@ def test_import_ilp_hours_parsing_and_validation(test_client, monkeypatch):
             {'course_id': 102, 'course_code': 'CS-102', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
             {'course_id': 103, 'course_code': 'CS-103', 'program_id': 1, 'program': 'BSIT', 'year_level': 1},
         ],
-        programs=[{'id': 1, 'program_name': 'BSIT'}]
+        programs=[{'id': 1, 'program_code': 'BSIT'}]
     )
     monkeypatch.setattr(app_module, 'supabase', mock_db)
 

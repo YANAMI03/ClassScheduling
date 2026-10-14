@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort, has_request_context, Response
+from flask import Flask, request, render_template, redirect, url_for, session, jsonify, flash, send_file, abort, has_request_context, Response, g
 from datetime import timedelta, datetime, timezone
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
@@ -14,6 +14,7 @@ import random
 import uuid
 import re
 import io
+import secrets
 from collections import Counter
 import threading
 import traceback
@@ -56,6 +57,13 @@ if not SUPABASE_URL or not SUPABASE_ANON_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+# Optional, SERVER-SIDE-ONLY admin client for the "Set temporary password"
+# action. The service-role key is never sent to the browser or templates.
+SUPABASE_SERVICE_ROLE_KEY: str = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+supabase_admin: Client = (
+    create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else None
+)
+
 # All database reads and writes go through the authenticated Supabase client
 # using the public/anon key with the user session JWT. Row Level Security (RLS)
 # is strictly enforced by PostgreSQL policies. No service role or secret key is used.
@@ -67,34 +75,20 @@ app.secret_key = os.environ.get('SECRET_KEY', 'scheduler-secret-key')
 MAX_TEACHING_HOURS = 40
 SEMESTER_CHOICES = ["1st Semester", "2nd Semester"]
 
-# ── Specialization stage (single source of truth) ──────────────────────────────
-# Specializations apply from 3rd Year 2nd Semester onward. BEFORE the cutoff,
-# every course is General (course.specialization_id IS NULL). This is the ONLY
-# place the stage/years/semesters are defined; backend and frontend both use it.
-SPECIALIZATION_STAGE = [(3, "2nd Semester"), (4, "1st Semester"), (4, "2nd Semester")]
+# "General" is the code rule for course.specialization_id IS NULL. It is not a
+# row in public.specializations.
 GENERAL_SPECIALIZATION_LABEL = "General"
-# TEMPORARY compatibility fallback for legacy code paths that still expect a list.
-# It is NOT the source of truth (that is public.specializations); it exists only
-# so unconverted code keeps working until every usage is migrated off it.
-SPECIALIZATION_CHOICES = ["Database Systems", "Web Systems", "Networking", "General"]
-# Backwards-compatible alias for older code paths.
-SPECIALIZED_TERMS = SPECIALIZATION_STAGE
-
-
-def is_specialization_stage(year_level, semester):
-    """Return True when (year_level, semester) is at/after the specialization stage."""
-    try:
-        yl = int(str(year_level).strip())
-    except (ValueError, TypeError):
-        return False
-    sem = str(semester or '').strip().casefold()
-    return any(yl == y and s.strip().casefold() == sem for y, s in SPECIALIZATION_STAGE)
 
 
 def specialization_stage_payload():
-    """Serializable stage config for the frontend."""
+    """Compatibility payload for /api/specialization-config.
+
+    Specializations are available to EVERY year level and semester, so there is
+    no stage/cutoff. `stage` is always empty and the frontend shows the
+    specialization picker unconditionally.
+    """
     return {
-        'stage': [{'year_level': y, 'semester': s} for y, s in SPECIALIZATION_STAGE],
+        'stage': [],
         'general_label': GENERAL_SPECIALIZATION_LABEL,
     }
 
@@ -128,20 +122,16 @@ def _specialization_name_by_id(spec_id):
         return None
 
 
-def _resolve_course_specialization_id(raw_spec_id, year_level, semester):
+def _resolve_course_specialization_id(raw_spec_id, year_level=None, semester=None):
     """Validate a submitted specialization for a course.
 
     Returns (specialization_id_or_None, error_message_or_None).
-    Rules:
-      * Before the specialization stage -> must be General (None).
-      * At/after the stage -> None (General) or any ACTIVE specialization
-        from the global specializations list.
+    Specializations are allowed for ANY year level and semester; the only rules
+    are that the chosen row must exist and must not be archived. A blank value
+    means General (specialization_id = NULL). year_level/semester are accepted
+    for backwards compatibility and intentionally ignored.
     """
     blank = raw_spec_id in (None, '', '0', 0)
-    if not is_specialization_stage(year_level, semester):
-        if not blank:
-            return None, 'This course is before the specialization stage; it must be General.'
-        return None, None
     if blank:
         return None, None
     try:
@@ -206,7 +196,7 @@ def _attach_schedule_program(row):
         row['program_id'] = course['program_id']
     if program:
         row['program'] = program
-        row['program_name'] = program.get('program_name')
+        row['program_code'] = program.get('program_code')
     if course.get('semester') is not None:
         row['semester'] = course['semester']
     if course.get('specialization') is not None:
@@ -538,7 +528,7 @@ def _user_to_dict(user):
     """Convert a database row or user object into the dict shape the templates expect."""
     if isinstance(user, dict):
         role = user.get('role', 'Chair') or 'Chair'
-        has_no_program = str(role).lower() in ('admin', 'super_admin', 'viewer')
+        has_no_program = str(role).lower() in ('admin', 'super_admin')
         email = user.get('email') or ''
         username = user.get('username') or (email.split('@')[0] if '@' in email else email)
         if has_no_program:
@@ -548,16 +538,16 @@ def _user_to_dict(user):
             p_val = user.get('program')
             prog_name = ''
             if isinstance(p_val, dict):
-                prog_name = p_val.get('program_name') or ''
+                prog_name = p_val.get('program_code') or ''
             elif isinstance(p_val, (list, tuple, set)):
                 prog_name = next(iter(p_val), '')
             elif p_val:
                 prog_name = str(p_val)
 
             if not prog_name:
-                p_n = user.get('program_name')
+                p_n = user.get('program_code')
                 if isinstance(p_n, dict):
-                    prog_name = p_n.get('program_name') or ''
+                    prog_name = p_n.get('program_code') or ''
                 elif p_n:
                     prog_name = str(p_n)
 
@@ -566,7 +556,7 @@ def _user_to_dict(user):
                 try:
                     p_obj = next((p for p in _get_programs() if p.get('id') == prog_id), None)
                     if p_obj:
-                        prog_name = p_obj.get('program_name') or ''
+                        prog_name = p_obj.get('program_code') or ''
                 except Exception:
                     pass
 
@@ -575,18 +565,17 @@ def _user_to_dict(user):
             'email': email,
             'username': username,
             'first_name': user.get('first_name', '') or '',
-            'middle_name': user.get('middle_name', '') or '',
+            'middle_initial': user.get('middle_initial', '') or '',
             'last_name': user.get('last_name', '') or '',
             'program_id': prog_id,
             'program': str(prog_name or ''),
             'role': role,
             'profile_picture': user.get('profile_picture'),
-            'created_at': user.get('created_at'),
             'disabled': bool(user.get('disabled')),
         }
     metadata = getattr(user, 'user_metadata', None) or {}
     role = metadata.get('role', 'Chair') or 'Chair'
-    has_no_program = str(role).lower() in ('admin', 'super_admin', 'viewer')
+    has_no_program = str(role).lower() in ('admin', 'super_admin')
     email = getattr(user, 'email', None) or ''
     username = metadata.get('username') or (email.split('@')[0] if '@' in email else email)
     if has_no_program:
@@ -596,7 +585,7 @@ def _user_to_dict(user):
         p_meta = metadata.get('program')
         meta_prog = ''
         if isinstance(p_meta, dict):
-            meta_prog = p_meta.get('program_name') or ''
+            meta_prog = p_meta.get('program_code') or ''
         elif p_meta:
             meta_prog = str(p_meta)
 
@@ -605,7 +594,7 @@ def _user_to_dict(user):
             try:
                 p_obj = next((p for p in _get_programs() if p.get('id') == meta_prog_id), None)
                 if p_obj:
-                    meta_prog = p_obj.get('program_name') or ''
+                    meta_prog = p_obj.get('program_code') or ''
             except Exception:
                 pass
 
@@ -614,13 +603,12 @@ def _user_to_dict(user):
         'email': email,
         'username': username,
         'first_name': metadata.get('first_name', ''),
-        'middle_name': metadata.get('middle_name', ''),
+        'middle_initial': metadata.get('middle_initial', ''),
         'last_name': metadata.get('last_name', ''),
         'program_id': meta_prog_id,
         'program': str(meta_prog or ''),
         'role': role,
         'profile_picture': metadata.get('profile_picture'),
-        'created_at': getattr(user, 'created_at', None),
         'disabled': False,
     }
 
@@ -628,15 +616,11 @@ def _user_to_dict(user):
 def _list_users():
     """Return all users from public.users as template-ready dicts, ordered newest first."""
     try:
-        res = supabase.table('users').select('*, program:program_id(id, program_name)').order('created_at', desc=True).execute()
+        res = supabase.table('users').select('*, program:program_id(id, program_code)').execute()
         raw_users = res.data or []
     except Exception:
-        try:
-            res = supabase.table('users').select('*, program:program_id(id, program_name)').execute()
-            raw_users = res.data or []
-        except Exception:
-            res = supabase.table('users').select('*').execute()
-            raw_users = res.data or []
+        res = supabase.table('users').select('*').execute()
+        raw_users = res.data or []
     if isinstance(raw_users, list):
         return [_user_to_dict(u) for u in raw_users]
     return []
@@ -747,7 +731,7 @@ def inject_auth_token():
     endpoint = request.endpoint
 
     # Public endpoints must never carry a stale Authorization header.
-    if endpoint in ('landing', 'login', 'signup', 'logout', 'static', 'auth_callback', 'resend_verification') or endpoint is None:
+    if endpoint in ('landing', 'login', 'signup', 'logout', 'static', 'auth_callback', 'resend_verification', 'forgot_password', 'reset_password') or endpoint is None:
         if hasattr(supabase, 'postgrest') and hasattr(supabase.postgrest, 'headers'):
             supabase.postgrest.headers.pop('Authorization', None)
         return
@@ -1037,6 +1021,10 @@ ROUTE_PERMISSIONS = {
     'static': None,
     'auth_callback': None,
     'resend_verification': None,
+    'forgot_password': None,
+    'reset_password': None,
+    'send_reset_link': {'admin'},
+    'set_temp_password': {'admin'},
 
     # Irregular students (disabled / 404)
     'irregular_students': None,
@@ -1194,7 +1182,9 @@ def roles_required(*allowed_roles):
                     update_info = _LIVE_USER_ROLE_UPDATES[uid_str]
                     session['role'] = _normalize_role(update_info['role'])
                     norm_r = session['role']
-                    if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
+                    # Only admins are global (no program). Chairs AND viewers are
+                    # program-scoped, so their program_id must NOT be cleared here.
+                    if norm_r == ROLE_ADMIN:
                         session['program_id'] = None
                         session['program'] = ''
                     else:
@@ -1205,7 +1195,8 @@ def roles_required(*allowed_roles):
             # comparisons) sees 'chair' even for a legacy 'scheduler' session.
             user_role = _normalize_role(raw_role)
             session['role'] = user_role or raw_role
-            if user_role in (ROLE_ADMIN, ROLE_VIEWER):
+            # Only admins are global. Chairs and viewers keep their program_id.
+            if user_role == ROLE_ADMIN:
                 session['program_id'] = None
                 session['program'] = ''
 
@@ -1253,7 +1244,8 @@ def enforce_rbac_permissions():
             account_disabled = bool(update_info.get('disabled'))
             session['role'] = _normalize_role(update_info['role'])
             norm_r = session['role']
-            if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
+            # Only admins are global; chairs and viewers keep their program scoping.
+            if norm_r == ROLE_ADMIN:
                 session['program_id'] = None
                 session['program'] = ''
             else:
@@ -1267,7 +1259,7 @@ def enforce_rbac_permissions():
                 cached = _USER_ROLE_CACHE.get(uid_str)
             if not cached or (now - cached.get('time', 0)) >= 5.0:
                 try:
-                    u_res = supabase.table('users').select('id, role, program_id, disabled, program:program_id(program_name)').eq('id', uid_str).limit(1).execute()
+                    u_res = supabase.table('users').select('id, role, program_id, disabled, program:program_id(program_code)').eq('id', uid_str).limit(1).execute()
                     matching_row = None
                     if u_res.data and len(u_res.data) > 0:
                         for r_item in u_res.data:
@@ -1282,7 +1274,7 @@ def enforce_rbac_permissions():
                         u_row = matching_row
                         db_role = _normalize_role(u_row.get('role')) or ROLE_VIEWER
                         p_id = u_row.get('program_id')
-                        p_name = (_rel(u_row, 'program') or {}).get('program_name') or ''
+                        p_name = (_rel(u_row, 'program') or {}).get('program_code') or ''
                         account_disabled = bool(u_row.get('disabled'))
                         with _USER_ROLE_CACHE_LOCK:
                             _USER_ROLE_CACHE[uid_str] = {
@@ -1294,7 +1286,8 @@ def enforce_rbac_permissions():
                             }
                         session['role'] = db_role
                         norm_r = db_role
-                        if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
+                        # Only admins are global; chairs and viewers keep program scoping.
+                        if norm_r == ROLE_ADMIN:
                             session['program_id'] = None
                             session['program'] = ''
                         else:
@@ -1307,7 +1300,7 @@ def enforce_rbac_permissions():
                 cached_role = _normalize_role(cached.get('role')) or ROLE_VIEWER
                 session['role'] = cached_role
                 norm_r = cached_role
-                if norm_r in (ROLE_ADMIN, ROLE_VIEWER):
+                if norm_r == ROLE_ADMIN:
                     session['program_id'] = None
                     session['program'] = ''
                 else:
@@ -1326,7 +1319,8 @@ def enforce_rbac_permissions():
     raw_role = session.get('role', '')
     user_role = _normalize_role(raw_role)
     session['role'] = user_role or raw_role
-    if user_role in (ROLE_ADMIN, ROLE_VIEWER):
+    # Only admins are global. Chairs and viewers keep their program_id.
+    if user_role == ROLE_ADMIN:
         session['program_id'] = None
         session['program'] = ''
 
@@ -1411,7 +1405,7 @@ def _get_programs(include_archived=True, archived_only=False):
         if cached is not None:
             return cached
     try:
-        query = supabase.table('program').select('*').order('program_name')
+        query = supabase.table('program').select('*').order('program_code')
         if archived_only:
             query = query.eq('archive', True)
         elif not include_archived:
@@ -1429,9 +1423,9 @@ def _get_programs(include_archived=True, archived_only=False):
     return programs
 
 
-def _find_program_archive_state(program_name, exclude_id=None):
+def _find_program_archive_state(program_code, exclude_id=None):
     """Return 'active', 'archived', or None for a program name (case-insensitive)."""
-    value = str(program_name or '').strip().casefold()
+    value = str(program_code or '').strip().casefold()
     if not value:
         return None
     active_found = False
@@ -1439,7 +1433,7 @@ def _find_program_archive_state(program_name, exclude_id=None):
     for program in _get_programs(include_archived=True):
         if exclude_id is not None and str(program.get('id')) == str(exclude_id):
             continue
-        if str(program.get('program_name') or '').strip().casefold() == value:
+        if str(program.get('program_code') or '').strip().casefold() == value:
             if program.get('archive'):
                 archived_found = True
             else:
@@ -1450,16 +1444,16 @@ def _find_program_archive_state(program_name, exclude_id=None):
         return 'archived'
     return None
 
-def _find_program_id_by_name(program_name):
+def _find_program_id_by_name(program_code):
     """Resolve a program name or numeric ID to public.program.id."""
-    value = str(program_name or '').strip()
+    value = str(program_code or '').strip()
     if not value:
         return None
 
     for program in _get_programs():
         if value.isdigit() and str(program.get('id')) == value:
             return program.get('id')
-        if str(program.get('program_name') or '').strip().casefold() == value.casefold():
+        if str(program.get('program_code') or '').strip().casefold() == value.casefold():
             return program.get('id')
 
     # Fallback for canonical baseline programs if table/mock query returned empty
@@ -1471,13 +1465,13 @@ def _find_program_id_by_name(program_name):
         return 9
     return None
 
-def _find_program_name_by_id(program_id):
-    """Resolve a numeric program id or string to its canonical program_name."""
+def _find_program_code_by_id(program_id):
+    """Resolve a numeric program id or string to its canonical program_code."""
     if not program_id:
         return ''
     for program in _get_programs():
         if str(program.get('id')) == str(program_id):
-            return program.get('program_name') or ''
+            return program.get('program_code') or ''
     pid_str = str(program_id).strip()
     if pid_str == '1':
         return 'BSIT'
@@ -1487,47 +1481,62 @@ def _find_program_name_by_id(program_id):
         return 'BSDS'
     return f'Program {program_id}'
 
+_UNSET = object()
+
+
 def _get_user_program_id(user_id=None):
-    """Return the program_id for the current user or specified user_id."""
+    """Resolve a user's program_id — the single source of truth for every role.
+
+    * admin -> None (admins are global and have no program).
+    * chair / viewer -> the program_id on public.users. It is refreshed at login
+      and by the RBAC middleware into the session; when the session has no value
+      we read it fresh from the database.
+
+    The database result is cached once per request (``flask.g``) to avoid
+    repeated queries.
+    """
     has_ctx = has_request_context()
-    if has_ctx and not user_id:
+    explicit = user_id is not None
+
+    if has_ctx and not explicit:
         role = _normalize_role(session.get('role', ''))
         if role == ROLE_ADMIN:
             return None
-        if session.get('program_id'):
+        # Chairs AND viewers use their (freshly refreshed) session value.
+        if session.get('program_id') is not None:
             return session.get('program_id')
+    else:
+        role = ''
 
-    uid = user_id or (session.get('user_id') if has_ctx else None)
+    if has_ctx and not explicit:
+        cached = getattr(g, '_user_program_id_cache', _UNSET)
+        if cached is not _UNSET:
+            return cached
+
+    uid = user_id if explicit else (session.get('user_id') if has_ctx else None)
+    pid = None
     if uid:
         try:
             res = supabase.table('users').select('program_id').eq('id', str(uid)).limit(1).execute()
-            if res.data and res.data[0].get('program_id'):
-                pid = res.data[0]['program_id']
-                if has_ctx and not user_id:
-                    session['program_id'] = pid
-                return pid
+            row = res.data[0] if res.data else None
+            if row is not None:
+                pid = row.get('program_id')
         except Exception as err:
             logging.debug(f"Error fetching user program_id: {err}")
 
-    # Fallback by program name in session
-    prog_name = session.get('program') if has_ctx else None
-    if prog_name:
+    # Legacy fallback: resolve by the program code cached in the session.
+    if pid is None and has_ctx and not explicit and role != ROLE_ADMIN and session.get('program'):
+        pid = _find_program_id_by_name(session.get('program'))
+
+    if has_ctx and not explicit:
+        if pid is not None:
+            session['program_id'] = pid
         try:
-            res = supabase.table('program').select('id').eq('program_name', prog_name).limit(1).execute()
-            if res.data and res.data[0].get('id'):
-                pid = res.data[0]['id']
-                if has_ctx and not user_id:
-                    session['program_id'] = pid
-                return pid
+            g._user_program_id_cache = pid
         except Exception:
             pass
-        pid = _find_program_id_by_name(prog_name)
-        if pid:
-            if has_ctx and not user_id:
-                session['program_id'] = pid
-            return pid
 
-    return None
+    return pid
 
 def _get_professor_program_ids(prof_identifier):
     """Return the set of program_ids a professor is linked to (via professor_load or legacy tables)."""
@@ -1618,9 +1627,12 @@ def _get_session_user_row():
 def _viewer_name_variants(user_row):
     """Candidate full-name strings for matching a user to a professor_load name."""
     first = (user_row.get('first_name') or '').strip()
-    middle = (user_row.get('middle_name') or '').strip()
+    middle = (user_row.get('middle_initial') or '').strip()
     last = (user_row.get('last_name') or '').strip()
     variants = []
+    if middle:
+        # Render the stored single letter as an initial, e.g. "S.".
+        middle = f"{middle[0].upper()}."
     with_middle = ' '.join(p for p in (first, middle, last) if p)
     if with_middle:
         variants.append(with_middle)
@@ -1820,7 +1832,7 @@ def _resolve_professor_info(prof_identifier):
     try:
         pl_rows = supabase.table('professor_load').select(
             'id, course_id, professor_name, '
-            'course(course_id, course_code, program_id, program:program_id(id, program_name))'
+            'course(course_id, course_code, program_id, program:program_id(id, program_code))'
         ).execute().data or []
     except Exception:
         try:
@@ -1841,7 +1853,7 @@ def _resolve_professor_info(prof_identifier):
     # 2. Fetch legacy professor table if available
     prof_table_rows = []
     try:
-        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, specialization, time_designation, program_id, program:program_id(id, program_name)').execute()
+        prof_res = supabase.table('professor').select('prof_id, first_name, last_name, specialization, time_designation, program_id, program:program_id(id, program_code)').execute()
         prof_table_rows = prof_res.data or []
     except Exception:
         pass
@@ -1953,7 +1965,7 @@ def _resolve_professor_info(prof_identifier):
 
     prof_pc_ids = set()
     pc_course_codes = {}
-    program_names = set()
+    program_codes = set()
     program_ids = set()
 
     for r in matched_loads:
@@ -1964,19 +1976,19 @@ def _resolve_professor_info(prof_identifier):
         if lid and c.get('course_code'):
             pc_course_codes[lid] = c.get('course_code')
         prog = _rel(c, 'program') or {}
-        if prog.get('program_name'):
-            program_names.add(prog.get('program_name'))
+        if prog.get('program_code'):
+            program_codes.add(prog.get('program_code'))
         if c.get('program_id'):
             program_ids.add(c.get('program_id'))
 
     if legacy_prof_record:
         p_prog = _rel(legacy_prof_record, 'program') or {}
-        if p_prog.get('program_name'):
-            program_names.add(p_prog.get('program_name'))
+        if p_prog.get('program_code'):
+            program_codes.add(p_prog.get('program_code'))
         if legacy_prof_record.get('program_id'):
             program_ids.add(legacy_prof_record.get('program_id'))
 
-    primary_prog_name = sorted(program_names)[0] if program_names else ''
+    primary_prog_name = sorted(program_codes)[0] if program_codes else ''
     primary_prog_id = sorted(program_ids)[0] if program_ids else None
 
     if legacy_prof_record and legacy_prof_record.get('first_name'):
@@ -2004,7 +2016,7 @@ def _resolve_professor_info(prof_identifier):
         'specialization': specialization,
         'time_designation': time_designation,
         'program_id': primary_prog_id,
-        'program_name': primary_prog_name,
+        'program_code': primary_prog_name,
         'department': (legacy_prof_record.get('department') if legacy_prof_record else None) or primary_prog_name or 'N/A',
         'program': primary_prog_name,
         'program_ids': program_ids,
@@ -2015,22 +2027,22 @@ def _resolve_professor_info(prof_identifier):
 def _get_active_semester(program_id=None):
     """Return the currently active semester record, optionally scoped by program_id."""
     try:
-        q = supabase.table('semester').select('*, program:program_id(program_name)').eq('is_active', True)
+        q = supabase.table('semester').select('*, program:program_id(program_code)').eq('is_active', True)
         if program_id:
             q = q.eq('program_id', program_id)
         res = q.order('updated_at', desc=True).limit(1).execute()
         if res.data and len(res.data) > 0:
             sem = res.data[0]
             prog = _rel(sem, 'program') or {}
-            sem['program_name'] = prog.get('program_name') or ''
+            sem['program_code'] = prog.get('program_code') or ''
             return sem
 
         # Fallback: if no active semester specifically for this program_id, fetch any active semester
-        res_any = supabase.table('semester').select('*, program:program_id(program_name)').eq('is_active', True).limit(1).execute()
+        res_any = supabase.table('semester').select('*, program:program_id(program_code)').eq('is_active', True).limit(1).execute()
         if res_any.data and len(res_any.data) > 0:
             sem = res_any.data[0]
             prog = _rel(sem, 'program') or {}
-            sem['program_name'] = prog.get('program_name') or ''
+            sem['program_code'] = prog.get('program_code') or ''
             return sem
     except Exception as err:
         logging.debug(f"Error fetching active semester: {err}")
@@ -2099,14 +2111,14 @@ def get_school_year_options(ref_date=None):
 def _get_semesters(program_id=None):
     """Return all semester records, optionally filtered by program_id."""
     try:
-        q = supabase.table('semester').select('*, program:program_id(program_name)')
+        q = supabase.table('semester').select('*, program:program_id(program_code)')
         if program_id:
             q = q.eq('program_id', program_id)
         res = q.order('school_year', desc=True).order('term').execute()
         rows = res.data or []
         for r in rows:
             prog = _rel(r, 'program') or {}
-            r['program_name'] = prog.get('program_name') or ''
+            r['program_code'] = prog.get('program_code') or ''
         return rows
     except Exception as err:
         logging.debug(f"Error fetching semesters: {err}")
@@ -2128,8 +2140,12 @@ def _get_section_configs(semester_id):
         return {}
 
 
-def log_activity(action, target_type, target_detail=''):
-    """Write one row to activity_log. Never raises — logging must not break the main action."""
+def log_activity(action, target_type, target_detail='', user_id=None):
+    """Write one row to activity_log. Never raises — logging must not break the main action.
+
+    `user_id` defaults to the signed-in user; pass it explicitly for actions
+    (e.g. a password reset) that concern a different account.
+    """
     try:
         first_name = session.get('first_name', '')
         last_name = session.get('last_name', '')
@@ -2137,7 +2153,8 @@ def log_activity(action, target_type, target_detail=''):
         if not full_name:
             full_name = session.get('username', '')
 
-        user_id = session.get('user_id')
+        if user_id is None and has_request_context():
+            user_id = session.get('user_id')
         payload = {
             'username': full_name,
             'action': action,
@@ -2432,9 +2449,9 @@ def _get_department(program=None):
             logging.error(f"Error retrieving program for user_id {session.get('user_id')}: {err}")
         if not user_program:
             try:
-                u_res = supabase.table('users').select('program_id, program:program_id(program_name)').eq('id', session.get('user_id')).single().execute()
+                u_res = supabase.table('users').select('program_id, program:program_id(program_code)').eq('id', session.get('user_id')).single().execute()
                 if u_res.data:
-                    u_prog = (_rel(u_res.data, 'program') or {}).get('program_name') or u_res.data.get('program')
+                    u_prog = (_rel(u_res.data, 'program') or {}).get('program_code') or u_res.data.get('program')
                     if u_prog:
                         user_program = u_prog
                         session['program'] = user_program
@@ -2570,6 +2587,55 @@ def _normalize_major_key(major):
     return str(major).strip()
 
 
+_ORDINAL_SUFFIXES = {1: 'st', 2: 'nd', 3: 'rd'}
+
+
+def _year_label(year_level):
+    """Human-readable year label for ANY year level (1st, 2nd, 5th, ...)."""
+    try:
+        y = int(str(year_level).strip())
+    except (ValueError, TypeError):
+        return f"{year_level} Year" if year_level not in (None, '') else 'Year'
+    if 10 <= (y % 100) <= 20:
+        suffix = 'th'
+    else:
+        suffix = _ORDINAL_SUFFIXES.get(y % 10, 'th')
+    return f"{y}{suffix} Year"
+
+
+def _course_specialization_name(course, specs_by_id=None):
+    """Resolve a course's specialization name from data, never hard-coded.
+
+    Prefers course.specialization_id (mapped through public.specializations),
+    then an embedded `spec` join, then the legacy course.specialization text.
+    Returns None for General / blank.
+    """
+    if not isinstance(course, dict):
+        return None
+    spec_id = course.get('specialization_id')
+    if spec_id not in (None, '', 0, '0'):
+        if specs_by_id:
+            if spec_id in specs_by_id and specs_by_id[spec_id]:
+                return specs_by_id[spec_id]
+            try:
+                sid_int = int(spec_id)
+                if sid_int in specs_by_id and specs_by_id[sid_int]:
+                    return specs_by_id[sid_int]
+            except (ValueError, TypeError):
+                pass
+        rel = course.get('spec') or course.get('specialization_ref')
+        if isinstance(rel, dict) and rel.get('name'):
+            return str(rel['name']).strip()
+        if isinstance(rel, list) and rel and isinstance(rel[0], dict) and rel[0].get('name'):
+            return str(rel[0]['name']).strip()
+    text_keys = ('specialization', 'major')
+    for text_key in text_keys:
+        text = course.get(text_key)
+        if isinstance(text, str) and text.strip() and text.strip().casefold() not in ('general', 'none', 'null', ''):
+            return text.strip()
+    return None
+
+
 def _to_norm_tuple(row):
     """Normalize a schedule row into a standard tuple for invariant comparison."""
     sec = str(row.get('section') or '').strip()
@@ -2583,48 +2649,56 @@ def _to_norm_tuple(row):
 
 
 def _derive_section_track(section_name, entries=None):
+    """Derive the specialization track for a section, from data only.
+
+    Preference order:
+      1. The suffix after '-' matched against public.specializations (name/code).
+      2. The specialization of the courses in `entries` (specialization_id).
+    Returns the canonical specialization name, or None for General.
     """
-    Derives the specialization track for a section string (e.g. '3A-Database Systems' -> 'Database Systems',
-    '3A-DST' -> 'Database Systems', '3A-Web Systems' -> 'Web Systems', etc.).
-    If the section name does not contain track tokens, inspects entries (if provided) for non-General course specializations.
-    Returns canonical track name ('Database Systems', 'Web Systems', 'Networking') or None.
-    """
-    if not section_name:
+    sec_str = str(section_name or '').strip()
+    if not sec_str:
         return None
-    sec_str = str(section_name).strip()
-    sec_upper = sec_str.upper()
 
-    if any(tok in sec_upper for tok in ['DATABASE SYSTEMS', 'DATABASE SYSTEM', 'DATABASE', '-DST', ' DST', '-DB', ' DB']):
-        return 'Database Systems'
-    if any(tok in sec_upper for tok in ['WEB SYSTEMS', 'WEB SYSTEM', 'WEB DEVELOPMENT', 'WEB DEV', '-WST', ' WST', '-WEB', ' WEB']):
-        return 'Web Systems'
-    if any(tok in sec_upper for tok in ['NETWORK SYSTEMS', 'NETWORK SYSTEM', 'NETWORKING', 'NETWORK', '-NST', ' NST', '-NET', ' NET']):
-        return 'Networking'
+    specs = _get_specializations(include_archived=True)
+    by_token = {}
+    specs_by_id = {}
+    for s in specs:
+        name = (s.get('name') or '').strip()
+        if not name:
+            continue
+        by_token[name.casefold()] = name
+        code = str(s.get('code') or '').strip()
+        if code:
+            by_token[code.casefold()] = name
+        sid = s.get('specialization_id')
+        if sid is not None:
+            specs_by_id[sid] = name
+            try:
+                specs_by_id[int(sid)] = name
+            except (ValueError, TypeError):
+                pass
 
+    suffix = None
     if '-' in sec_str:
         suffix = sec_str.split('-', 1)[1].strip()
-        if suffix:
-            canonical = _canonical_major_name(suffix)
-            if canonical and canonical.lower() not in ('general', 'none', ''):
-                if 'web' in canonical.lower():
-                    return 'Web Systems'
-                return canonical
+        if suffix and suffix.casefold() in by_token:
+            return by_token[suffix.casefold()]
 
     if entries:
         for e in entries:
-            c_spec = e.get('specialization') or e.get('major')
-            if not c_spec and isinstance(e.get('professor_load'), dict):
-                c = _rel(e['professor_load'], 'course') or {}
-                c_spec = c.get('specialization') or c.get('major')
+            if not isinstance(e, dict):
+                continue
+            c_spec = _course_specialization_name(e, specs_by_id)
+            if not c_spec:
+                pl = e.get('professor_load')
+                c = (_rel(pl, 'course') if isinstance(pl, dict) else None) or {}
+                c_spec = _course_specialization_name(c, specs_by_id)
             if c_spec:
-                c_spec_str = str(c_spec).strip()
-                if c_spec_str.lower() not in ('general', 'none', 'null', ''):
-                    canon = _canonical_major_name(c_spec_str)
-                    if canon and canon.lower() not in ('general', 'none', ''):
-                        if 'web' in canon.lower():
-                            return 'Web Systems'
-                        return canon
+                return c_spec
 
+    if suffix and suffix.casefold() not in ('general', 'none', 'null', ''):
+        return suffix
     return None
 
 
@@ -2696,174 +2770,123 @@ def verify_staged_vs_saved_schedule(staged_rows, saved_rows, rows_payload=None):
 
 
 def _group_preview_sections(sections_with_entries, year_filter=None, major_filter=None):
-    """Group sections_with_entries into year level and track accordion blocks for schedule preview & section schedule."""
-    groups = [
-        {
-            'id': '1st-year',
-            'title': '1st Year Schedules',
-            'year_level': '1',
-            'track': None,
-            'sections': [],
-        },
-        {
-            'id': '2nd-year',
-            'title': '2nd Year Schedules',
-            'year_level': '2',
-            'track': None,
-            'sections': [],
-        },
-        {
-            'id': '3rd-year',
-            'title': '3rd Year Schedules',
-            'year_level': '3',
-            'track': None,
-            'sections': [],
-        },
-        {
-            'id': '3rd-year-wst',
-            'title': '3rd Year Schedules — WST',
-            'year_level': '3',
-            'track': 'WST',
-            'sections': [],
-        },
-        {
-            'id': '3rd-year-dst',
-            'title': '3rd Year Schedules — DST',
-            'year_level': '3',
-            'track': 'DST',
-            'sections': [],
-        },
-        {
-            'id': '3rd-year-nst',
-            'title': '3rd Year Schedules — NST',
-            'year_level': '3',
-            'track': 'NST',
-            'sections': [],
-        },
-        {
-            'id': '4th-year',
-            'title': '4th Year Schedules',
-            'year_level': '4',
-            'track': None,
-            'sections': [],
-        },
-        {
-            'id': '4th-year-wst',
-            'title': '4th Year Schedules — WST',
-            'year_level': '4',
-            'track': 'WST',
-            'sections': [],
-        },
-        {
-            'id': '4th-year-dst',
-            'title': '4th Year Schedules — DST',
-            'year_level': '4',
-            'track': 'DST',
-            'sections': [],
-        },
-        {
-            'id': '4th-year-nst',
-            'title': '4th Year Schedules — NST',
-            'year_level': '4',
-            'track': 'NST',
-            'sections': [],
-        },
-    ]
+    """Group sections into year-level / specialization accordion blocks.
 
-    other_group = {
-        'id': 'other-schedules',
-        'title': 'Other Schedules',
-        'year_level': 'Other',
-        'track': None,
-        'sections': [],
-    }
+    Year levels and specialization groups are derived from the sections present
+    (which come from the course/professor-load data). No fixed list of years and
+    no fixed set of specializations is assumed.
+    """
+    specs = _get_specializations(include_archived=True)
+    code_by_name = {}
+    name_by_token = {}
+    specs_by_id = {}
+    for s in specs:
+        name = (s.get('name') or '').strip()
+        if not name:
+            continue
+        code = str(s.get('code') or '').strip()
+        code_by_name[name.casefold()] = code or name
+        name_by_token[name.casefold()] = name
+        if code:
+            name_by_token[code.casefold()] = name
+        sid = s.get('specialization_id')
+        if sid is not None:
+            specs_by_id[sid] = name
+            try:
+                specs_by_id[int(sid)] = name
+            except (ValueError, TypeError):
+                pass
 
-    group_map = {g['id']: g for g in groups}
-
-    for item in sections_with_entries:
+    def _item_year(item):
         sec_info = item.get('section') or {}
         sec_name = str(sec_info.get('section_name') or sec_info.get('section') or '').strip()
-        sec_major = str(sec_info.get('major') or '').strip()
-        entries = item.get('entries') or []
+        if sec_name and sec_name[0].isdigit():
+            return sec_name[0]
+        for entry in item.get('entries') or []:
+            yr = str(entry.get('year_level') or '').strip()
+            if yr:
+                return yr
+        return ''
 
-        # Determine year level
-        year_level = None
-        if sec_name and sec_name[0] in ('1', '2', '3', '4'):
-            year_level = sec_name[0]
-        else:
-            for entry in entries:
-                yr = str(entry.get('year_level') or '')
-                if yr in ('1', '2', '3', '4'):
-                    year_level = yr
-                    break
+    def _item_track(item):
+        sec_info = item.get('section') or {}
+        track = _normalize_major_key(sec_info.get('major') or sec_info.get('specialization'))
+        if track:
+            return name_by_token.get(str(track).casefold(), str(track).strip())
+        sec_name = str(sec_info.get('section_name') or sec_info.get('section') or '').strip()
+        if '-' in sec_name:
+            suffix = sec_name.split('-', 1)[1].strip()
+            if suffix and suffix.casefold() not in ('general', 'none', 'null', ''):
+                return name_by_token.get(suffix.casefold(), suffix)
+        for entry in item.get('entries') or []:
+            if not isinstance(entry, dict):
+                continue
+            name = _course_specialization_name(entry, specs_by_id)
+            if not name:
+                pl = entry.get('professor_load')
+                c = (_rel(pl, 'course') if isinstance(pl, dict) else None) or {}
+                name = _course_specialization_name(c, specs_by_id)
+            if name:
+                return name
+        return None
 
-        combined_str = f"{sec_name} {sec_major}".upper()
-        for entry in entries:
-            combined_str += f" {entry.get('course_code', '')} {entry.get('major', '')}".upper()
-
-        if year_level == '1':
-            group_map['1st-year']['sections'].append(item)
-        elif year_level == '2':
-            group_map['2nd-year']['sections'].append(item)
-        elif year_level == '3':
-            if any(k in combined_str for k in ['WST', 'WEB', 'WEB DEVELOPMENT']) or sec_name.endswith('WST') or sec_name.endswith('WEB') or ' WST' in combined_str or ' W ' in f" {combined_str} ":
-                group_map['3rd-year-wst']['sections'].append(item)
-            elif any(k in combined_str for k in ['DST', 'DB', 'DATABASE', 'DATABASE SYSTEMS']) or sec_name.endswith('DST') or sec_name.endswith('DB') or ' DST' in combined_str or ' D ' in f" {combined_str} ":
-                group_map['3rd-year-dst']['sections'].append(item)
-            elif any(k in combined_str for k in ['NST', 'NET', 'NETWORKING', 'NETWORK', 'NETWORK SYSTEMS']) or sec_name.endswith('NST') or sec_name.endswith('NET') or ' NST' in combined_str or ' N ' in f" {combined_str} ":
-                group_map['3rd-year-nst']['sections'].append(item)
+    groups = {}
+    order = []
+    for item in sections_with_entries:
+        year = _item_year(item)
+        track = _item_track(item)
+        key = (year, track)
+        if key not in groups:
+            if year:
+                yl_name = _year_label(year)
+                prefix = yl_name.split(' ')[0].lower()
+                gid = f"{prefix}-year"
+                title = f"{yl_name} Schedules"
             else:
-                group_map['3rd-year']['sections'].append(item)
-        elif year_level == '4':
-            if any(k in combined_str for k in ['WST', 'WEB', 'WEB DEVELOPMENT']) or sec_name.endswith('WST') or sec_name.endswith('WEB') or ' WST' in combined_str or ' W ' in f" {combined_str} ":
-                group_map['4th-year-wst']['sections'].append(item)
-            elif any(k in combined_str for k in ['DST', 'DB', 'DATABASE', 'DATABASE SYSTEMS']) or sec_name.endswith('DST') or sec_name.endswith('DB') or ' DST' in combined_str or ' D ' in f" {combined_str} ":
-                group_map['4th-year-dst']['sections'].append(item)
-            elif any(k in combined_str for k in ['NST', 'NET', 'NETWORKING', 'NETWORK', 'NETWORK SYSTEMS']) or sec_name.endswith('NST') or sec_name.endswith('NET') or ' NST' in combined_str or ' N ' in f" {combined_str} ":
-                group_map['4th-year-nst']['sections'].append(item)
-            else:
-                group_map['4th-year']['sections'].append(item)
-        else:
-            other_group['sections'].append(item)
-
-    if other_group['sections']:
-        groups.append(other_group)
+                yl_name = 'Other'
+                prefix = 'other'
+                gid = 'other-schedules'
+                title = 'Other Schedules'
+            if track:
+                code = code_by_name.get(track.casefold(), track)
+                gid = f"{prefix}-year-{str(code).lower()}"
+                title = f"{yl_name} Schedules — {code}"
+            groups[key] = {
+                'id': gid,
+                'title': title,
+                'year_level': year or 'Other',
+                'track': track,
+                'sections': [],
+            }
+            order.append(key)
+        groups[key]['sections'].append(item)
 
     active_groups = []
-    for g in groups:
-        # Only display a schedule block if it contains at least one section
+    for key in order:
+        g = groups[key]
         if not g.get('sections'):
             continue
 
         if year_filter and str(g['year_level']) != str(year_filter):
             continue
 
-        if major_filter and g['year_level'] in ('3', '4'):
-            m_str = str(major_filter).strip().upper()
-            g_track = str(g['track'] or '').upper()
-            g_title = str(g['title']).upper()
-            match = False
-            if g_track:
-                if 'WST' in g_track or 'WST' in g_title:
-                    if any(k in m_str for k in ['WST', 'WEB']):
-                        match = True
-                if 'DST' in g_track or 'DST' in g_title:
-                    if any(k in m_str for k in ['DST', 'DB', 'DATABASE']):
-                        match = True
-                if 'NST' in g_track or 'NST' in g_title:
-                    if any(k in m_str for k in ['NST', 'NET', 'NETWORK']):
-                        match = True
-            else:
-                if any(k in m_str for k in ['GENERAL', 'NONE', 'ALL', '']):
-                    match = True
-            if not match and g['sections']:
-                for sec_item in g['sections']:
-                    s_maj = str((sec_item.get('section') or {}).get('major') or '').upper()
-                    if m_str in s_maj or s_maj in m_str:
-                        match = True
-                        break
-            if not match:
-                continue
+        if major_filter:
+            m_str = str(major_filter).strip().casefold()
+            if m_str and m_str != 'all':
+                g_track = str(g.get('track') or '').strip().casefold()
+                if g_track:
+                    g_code = str(code_by_name.get(g_track, g_track)).casefold()
+                    match = (m_str == g_track or m_str == g_code)
+                    if not match:
+                        for sec_item in g['sections']:
+                            s_maj = str((sec_item.get('section') or {}).get('major') or '').strip().casefold()
+                            if m_str == s_maj or m_str in s_maj:
+                                match = True
+                                break
+                    if not match:
+                        continue
+                elif m_str not in ('general', 'none', ''):
+                    continue
 
         active_groups.append(g)
 
@@ -3028,73 +3051,88 @@ def _build_preview_context(preview_entries=None):
     }
 
 
-def _generate_mock_registrar_data(semester=None):
+def _course_years_and_specializations(semester, program_id=None):
+    """Return {year_level: [specialization names]} derived from course data.
+
+    Year levels and the specializations per year level come from the
+    non-archived courses of the chosen semester (and program when provided).
+    Nothing about how many years or specializations exist is assumed.
+    """
+    rows = []
+    for select_expr in ('*, spec:specialization_id(specialization_id, name)', '*'):
+        try:
+            q = supabase.table('course').select(select_expr).eq('semester', semester)
+            rows = q.execute().data or []
+            if rows:
+                break
+        except Exception:
+            rows = []
+    rows = [r for r in rows if not r.get('archive')]
+    if program_id:
+        rows = [r for r in rows if r.get('program_id') is None or str(r.get('program_id')) == str(program_id)]
+
+    specs_by_id = {}
+    for s in _get_specializations(include_archived=True):
+        sid = s.get('specialization_id')
+        name = (s.get('name') or '').strip()
+        if sid is not None:
+            specs_by_id[sid] = name
+            try:
+                specs_by_id[int(sid)] = name
+            except (ValueError, TypeError):
+                pass
+
+    result = {}
+    for r in rows:
+        try:
+            y = int(r.get('year_level') or 1)
+        except (ValueError, TypeError):
+            y = 1
+        bucket = result.setdefault(y, set())
+        name = _course_specialization_name(r, specs_by_id)
+        if name:
+            bucket.add(name)
+    return {y: sorted(names) for y, names in result.items()}
+
+
+def _generate_mock_registrar_data(semester=None, program_id=None):
     """Generate mock registrar data with proportional section scaling.
-    
-    Rule:
-      - When semester is 2nd Semester:
-          - Only 1st, 2nd, and 3rd year levels are populated. 4th year is 0.
-          - 3rd year separates sections per major: Database, Web, Networking.
-      - Otherwise (1st Semester / all): 1st, 2nd, 3rd, and 4th year levels are populated.
-      - Random number of students between 300 and 400 for active years.
-      - Proportional section count formula: math.ceil(students / 30).
+
+    Year levels, and the specializations per year level, are derived from the
+    non-archived courses that exist for the chosen semester/program. No fixed
+    1st-4th year list and no fixed specialization count is assumed.
     """
     years_data = {}
     total_students = 0
     total_sections = 0
 
-    is_second_sem = str(semester or '').strip().lower() in ('2nd semester', '2nd', '2')
-    max_year = 3 if is_second_sem else 4
+    year_specs = _course_years_and_specializations(semester, program_id) if semester else {}
+    year_levels = sorted(year_specs.keys()) if year_specs else [1, 2, 3, 4]
 
-    for y in range(1, 5):
-        y_str = str(y)
-        if y > max_year:
-            years_data[y_str] = {
-                'student_count': 0,
-                'section_count': 0,
+    for y in year_levels:
+        students = random.randint(300, 400)
+        sections = math.ceil(students / 30)
+        y_info = {
+            'student_count': students,
+            'section_count': sections,
+        }
+        specs = year_specs.get(y) or []
+        if specs:
+            # Distribute sections across however many specializations this year
+            # level actually has (could be 1, 2, 3, or more).
+            n = len(specs)
+            base_sec = sections // n
+            rem_sec = sections % n
+            breakdown = {
+                name: max(1, base_sec + (1 if i < rem_sec else 0))
+                for i, name in enumerate(specs)
             }
-        else:
-            students = random.randint(300, 400)
-            sections = math.ceil(students / 30)
-            y_info = {
-                'student_count': students,
-                'section_count': sections,
-            }
+            y_info['specializations'] = breakdown
+            y_info['sections_by_specialization'] = breakdown
 
-            if is_second_sem and y == 3:
-                # Distribute sections across Database, Web, Networking
-                base_sec = sections // 3
-                rem_sec = sections % 3
-                db_sec = max(1, base_sec + (1 if rem_sec > 0 else 0))
-                web_sec = max(1, base_sec + (1 if rem_sec > 1 else 0))
-                net_sec = max(1, base_sec)
-                
-                majors_breakdown = {
-                    'database': db_sec,
-                    'web': web_sec,
-                    'networking': net_sec,
-                }
-                y_info['majors'] = majors_breakdown
-                y_info['sections_by_major'] = majors_breakdown
-            elif not is_second_sem and y == 4:
-                # Distribute 4th year sections across Database, Web, Networking in 1st Semester
-                base_sec = sections // 3
-                rem_sec = sections % 3
-                db_sec = max(1, base_sec + (1 if rem_sec > 0 else 0))
-                web_sec = max(1, base_sec + (1 if rem_sec > 1 else 0))
-                net_sec = max(1, base_sec)
-                
-                majors_breakdown = {
-                    'database': db_sec,
-                    'web': web_sec,
-                    'networking': net_sec,
-                }
-                y_info['majors'] = majors_breakdown
-                y_info['sections_by_major'] = majors_breakdown
-
-            years_data[y_str] = y_info
-            total_students += students
-            total_sections += sections
+        years_data[str(y)] = y_info
+        total_students += students
+        total_sections += sections
 
     return {
         'years': years_data,
@@ -3103,9 +3141,9 @@ def _generate_mock_registrar_data(semester=None):
     }
 
 
-def _get_registrar_counts_for_year(year_level=None, semester=None):
+def _get_registrar_counts_for_year(year_level=None, semester=None, program_id=None):
     """Return registrar counts for year levels using proportional mock data."""
-    data = _generate_mock_registrar_data(semester=semester)
+    data = _generate_mock_registrar_data(semester=semester, program_id=program_id)
     year_key = str(year_level or '').strip()
     if year_key in data['years']:
         return data['years'][year_key]
@@ -3115,7 +3153,9 @@ def _get_registrar_counts_for_year(year_level=None, semester=None):
             'section_count': data['total_sections'],
             'years': data['years'],
         }
-    return data['years']['1']
+    if data['years']:
+        return next(iter(data['years'].values()))
+    return {'student_count': 0, 'section_count': 0, 'years': data['years']}
 
 
 @app.route('/api/registrar-counts')
@@ -3124,9 +3164,10 @@ def registrar_counts():
     """Return registrar mock data for year levels as JSON."""
     year_level = request.args.get('year_level', '')
     semester = request.args.get('semester', '')
+    program_id = _get_user_program_id()
     if year_level and year_level.lower() not in ('all', 'batch'):
-        return jsonify(_get_registrar_counts_for_year(year_level, semester=semester))
-    return jsonify(_generate_mock_registrar_data(semester=semester))
+        return jsonify(_get_registrar_counts_for_year(year_level, semester=semester, program_id=program_id))
+    return jsonify(_generate_mock_registrar_data(semester=semester, program_id=program_id))
 
 
 def calculate_semester_section_counts(program_id=None, semester=None, department=None, school_year=None):
@@ -3146,30 +3187,30 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
     errors = []
     warnings = []
 
-    # 1. Fetch curriculum courses for this semester & program
-    try:
-        c_query = supabase.table('course').select(
-            'course_id, course_code, year_level, semester, specialization, program_id, lecture_hours, lab_hours, ilp_hours'
-        ).eq('semester', semester).eq('archive', False)
-        if program_id:
-            c_query = c_query.eq('program_id', program_id)
-        courses_data = c_query.execute().data or []
-    except Exception:
+    # 1. Fetch curriculum courses for this semester. Year levels and
+    #    specializations are derived entirely from the courses that exist; the
+    #    function assumes nothing about which years/specializations are present.
+    courses_data = []
+    for select_expr in (
+        '*, spec:specialization_id(specialization_id, name)',
+        '*',
+    ):
         try:
-            c_query = supabase.table('course').select('*').eq('semester', semester).eq('archive', False)
-            if program_id:
-                c_query = c_query.eq('program_id', program_id)
+            c_query = supabase.table('course').select(select_expr).eq('semester', semester)
             courses_data = c_query.execute().data or []
+            if courses_data:
+                break
         except Exception:
             courses_data = []
 
-    if not courses_data and program_id:
-        try:
-            fb_c = supabase.table('course').select('*').eq('semester', semester).eq('archive', False).execute().data or []
-            if fb_c:
-                courses_data = [c for c in fb_c if c.get('program_id') is None or str(c.get('program_id')) == str(program_id)]
-        except Exception:
-            pass
+    # Archive + program scoping are applied here so the function is independent
+    # of optional columns that older schemas (or test doubles) may omit.
+    courses_data = [c for c in courses_data if not c.get('archive')]
+    if program_id:
+        courses_data = [
+            c for c in courses_data
+            if c.get('program_id') is None or str(c.get('program_id')) == str(program_id)
+        ]
 
     if not courses_data:
         return {
@@ -3255,7 +3296,20 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
             'sections': sec
         })
 
-    # Group courses by year_level
+    # Specialization names come from public.specializations and are matched to
+    # courses via specialization_id (legacy text used only as a fallback).
+    specs_by_id = {}
+    for s in _get_specializations(include_archived=True):
+        sid = s.get('specialization_id')
+        name = (s.get('name') or '').strip()
+        if sid is not None:
+            specs_by_id[sid] = name
+            try:
+                specs_by_id[int(sid)] = name
+            except (ValueError, TypeError):
+                pass
+
+    # Group courses by year_level, derived entirely from the course data.
     courses_by_year = {}
     for c in courses_data:
         try:
@@ -3265,15 +3319,22 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
         courses_by_year.setdefault(yl, []).append(c)
 
     breakdown = []
-    year_names = {1: '1st Year', 2: '2nd Year', 3: '3rd Year', 4: '4th Year'}
 
     for yl in sorted(courses_by_year.keys()):
         yl_courses = courses_by_year[yl]
-        yl_name = year_names.get(yl, f'{yl}th Year')
-        is_spec_term = is_specialization_stage(yl, semester)
+        yl_name = _year_label(yl)
 
-        if not is_spec_term:
-            # Regular (non-specialized) term
+        # The specializations present are the distinct specializations of this
+        # year level's courses. No year level and no count of specializations is
+        # assumed; a year with only General courses groups nothing.
+        spec_groups = {}
+        for c in yl_courses:
+            spec_name = _course_specialization_name(c, specs_by_id)
+            if spec_name:
+                spec_groups.setdefault(spec_name, []).append(c)
+
+        if not spec_groups:
+            # Regular (all-General) year level
             course_counts = {}
             course_details = []
             for c in yl_courses:
@@ -3311,31 +3372,9 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
                 'courses': course_details
             })
         else:
-            # Specialized term: groups come from the global specializations
-            # table. A NULL/"General" course fits any group.
-            db_specs = _get_specializations(include_archived=True)
-            spec_groups = {
-                (s.get('name') or '').strip(): []
-                for s in db_specs
-                if (s.get('name') or '').strip()
-                and (s.get('name') or '').strip().casefold() != GENERAL_SPECIALIZATION_LABEL.casefold()
-            }
-            general_courses = []
-            allowed_spec_names = sorted(spec_groups.keys())
-
-            for c in yl_courses:
-                raw_spec = (c.get('specialization') or c.get('major') or '')
-                spec = raw_spec.strip() if isinstance(raw_spec, str) else ''
-                if spec in spec_groups:
-                    spec_groups[spec].append(c)
-                elif spec == '' or spec.casefold() == GENERAL_SPECIALIZATION_LABEL.casefold():
-                    general_courses.append(c)
-                else:
-                    errors.append(
-                        f"{c['course_code']} in {yl_name} {semester} has invalid or missing specialization ('{spec}'). "
-                        f"Allowed values are {', '.join(allowed_spec_names) if allowed_spec_names else '(none declared)'} (or {GENERAL_SPECIALIZATION_LABEL}). "
-                        "Please contact an Administrator to correct this course in the Courses tab."
-                    )
+            # Specialized year level: one group per distinct specialization that
+            # actually appears among this year's courses.
+            general_courses = [c for c in yl_courses if not _course_specialization_name(c, specs_by_id)]
 
             group_counts = {}
             group_breakdown = []
@@ -3468,7 +3507,7 @@ def calculate_semester_section_counts(program_id=None, semester=None, department
         try:
             p_obj = next((p for p in _get_programs() if p.get('id') == program_id), None)
             if p_obj:
-                prog_name = p_obj.get('program_name')
+                prog_name = p_obj.get('program_code')
         except Exception:
             pass
 
@@ -3609,7 +3648,7 @@ def _establish_authenticated_session(session_data):
 
     # Refresh role, program_id, and program directly from database profile
     try:
-        u_res = supabase.table('users').select('*, program:program_id(id, program_name)').eq('id', str(auth_user.id)).limit(1).execute()
+        u_res = supabase.table('users').select('*, program:program_id(id, program_code)').eq('id', str(auth_user.id)).limit(1).execute()
         if u_res.data and len(u_res.data) > 0:
             u_row = u_res.data[0]
             if u_row.get('disabled'):
@@ -3620,8 +3659,8 @@ def _establish_authenticated_session(session_data):
             if u_row.get('program_id'):
                 session['program_id'] = u_row['program_id']
             p_rel = _rel(u_row, 'program') or {}
-            if p_rel.get('program_name'):
-                session['program'] = str(p_rel['program_name'])
+            if p_rel.get('program_code'):
+                session['program'] = str(p_rel['program_code'])
             if u_row.get('first_name'):
                 session['first_name'] = u_row['first_name']
             if u_row.get('last_name'):
@@ -3629,8 +3668,19 @@ def _establish_authenticated_session(session_data):
             if u_row.get('username'):
                 session['username'] = u_row['username']
         else:
-            # Self-heal missing profile row in public.users if trigger was delayed or bypassed
+            # Self-heal a missing profile row. Use ignore_duplicates so a
+            # transient read miss can NEVER overwrite an existing row (which
+            # would wipe role/program_id). Seed program_id from the signup
+            # metadata so a viewer created before the trigger still gets one.
             try:
+                heal_program_id = None
+                raw_pid = metadata.get('program_id')
+                if isinstance(raw_pid, int):
+                    heal_program_id = raw_pid
+                elif isinstance(raw_pid, str) and raw_pid.strip().isdigit():
+                    heal_program_id = int(raw_pid)
+                elif metadata.get('program'):
+                    heal_program_id = _find_program_id_by_name(str(metadata.get('program')))
                 supabase.table('users').upsert({
                     'id': str(auth_user.id),
                     'email': user_email,
@@ -3638,8 +3688,8 @@ def _establish_authenticated_session(session_data):
                     'first_name': metadata.get('first_name', ''),
                     'last_name': metadata.get('last_name', ''),
                     'role': 'viewer',
-                    'program_id': None
-                }, on_conflict='id').execute()
+                    'program_id': heal_program_id,
+                }, on_conflict='id', ignore_duplicates=True).execute()
             except Exception as ins_err:
                 logging.debug(f"User profile auto-insert notice: {ins_err}")
     except Exception as u_err:
@@ -3647,7 +3697,9 @@ def _establish_authenticated_session(session_data):
 
     norm_role = _normalize_role(session.get('role', ''))
     session['role'] = norm_role or ROLE_VIEWER
-    if norm_role in (ROLE_ADMIN, ROLE_VIEWER):
+    # Only admins are global. Chairs and viewers are program-scoped, so refresh
+    # their program_id from public.users (falls back to the session value).
+    if norm_role == ROLE_ADMIN:
         session['program_id'] = None
         session['program'] = ''
     else:
@@ -3658,7 +3710,7 @@ def _establish_authenticated_session(session_data):
         if session.get('program_id') and (not session.get('program') or not isinstance(session.get('program'), str)):
             p_obj = next((p for p in _get_programs() if p.get('id') == session.get('program_id')), None)
             if p_obj:
-                session['program'] = p_obj.get('program_name') or ''
+                session['program'] = p_obj.get('program_code') or ''
 
     return True
 
@@ -3758,6 +3810,32 @@ def _check_and_record_signup_throttle(ip, email):
         return True
 
 
+_password_reset_throttles = {}
+_password_reset_throttles_lock = threading.Lock()
+PASSWORD_RESET_WINDOW_SECONDS = 900  # 15 minutes
+PASSWORD_RESET_MAX_ATTEMPTS = 5
+
+
+def _check_and_record_password_reset_throttle(ip, email):
+    """Throttle forgot-password requests to 5 per 15 minutes per IP and per email."""
+    now = time.time()
+    cutoff = now - PASSWORD_RESET_WINDOW_SECONDS
+    with _password_reset_throttles_lock:
+        for key in list(_password_reset_throttles.keys()):
+            _password_reset_throttles[key] = [t for t in _password_reset_throttles[key] if t > cutoff]
+            if not _password_reset_throttles[key]:
+                del _password_reset_throttles[key]
+
+        ip_key = f"ip:{ip}"
+        email_key = f"email:{email}"
+        if (len(_password_reset_throttles.get(ip_key, [])) >= PASSWORD_RESET_MAX_ATTEMPTS
+                or len(_password_reset_throttles.get(email_key, [])) >= PASSWORD_RESET_MAX_ATTEMPTS):
+            return False
+        _password_reset_throttles.setdefault(ip_key, []).append(now)
+        _password_reset_throttles.setdefault(email_key, []).append(now)
+        return True
+
+
 def _get_signup_programs():
     """Fetch active programs for the public signup dropdown using get_public_programs RPC."""
     try:
@@ -3768,7 +3846,7 @@ def _get_signup_programs():
         logging.debug(f"[signup] get_public_programs RPC unavailable, falling back: {err}")
     try:
         raw_list = _get_programs(include_archived=False)
-        return [{'id': p.get('id'), 'program_name': p.get('program_name')} for p in raw_list if p.get('id') and p.get('program_name')]
+        return [{'id': p.get('id'), 'program_code': p.get('program_code')} for p in raw_list if p.get('id') and p.get('program_code')]
     except Exception:
         return []
 
@@ -3810,12 +3888,12 @@ def _validate_and_normalize_signup_name(full_name_str):
     first_tokens = [t for t in first.split() if t]
     if len(first_tokens) >= 2:
         first_name = first_tokens[0][:100]
-        middle_name = (' '.join(first_tokens[1:]))[:100]
+        middle_initial = (' '.join(first_tokens[1:]))[:1].upper()
     else:
         first_name = first[:100]
-        middle_name = ''
+        middle_initial = ''
 
-    return normalized_full, first_name, middle_name, last_name, None
+    return normalized_full, first_name, middle_initial, last_name, None
 
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -3828,15 +3906,11 @@ def signup():
     success_message = None
     full_name = ''
     email = ''
-    selected_program_id = None
-    selected_program_name = None
-
-    programs = _get_signup_programs()
 
     if request.method == 'POST':
         # Request size sanity check (10 KB max for signup form)
         if request.content_length and request.content_length > 10000:
-            return render_template('signup.html', error="Request payload too large.", full_name='', email='', programs=programs)
+            return render_template('signup.html', error="Request payload too large.", full_name='', email='')
 
         # Anti-bot honeypot field check (bots fill it, humans do not)
         honeypot = (request.form.get('website') or '').strip()
@@ -3855,16 +3929,6 @@ def signup():
         email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
         confirm_password = request.form.get('confirm_password') or ''
-        program_input = (request.form.get('program') or request.form.get('program_id') or '').strip()
-
-        # Resolve chosen program
-        for p in programs:
-            p_id_str = str(p.get('id') or '')
-            p_name = str(p.get('program_name') or '').strip()
-            if program_input and (program_input == p_id_str or program_input.casefold() == p_name.casefold()):
-                selected_program_id = p.get('id')
-                selected_program_name = p_name
-                break
 
         if is_legacy:
             if not first_name_input or not last_name_input or not password or not confirm_password:
@@ -3880,19 +3944,13 @@ def signup():
                     email = f"{username.lower()}@example.com"
                 full_name = f"{last_name_input}, {first_name_input}".strip()
                 first_name = first_name_input[:100]
-                middle_name = ''
+                middle_initial = ''
                 last_name = last_name_input[:100]
-                # If no program provided in legacy, default to first available program
-                if not selected_program_id and programs:
-                    selected_program_id = programs[0].get('id')
-                    selected_program_name = programs[0].get('program_name')
         else:
             full_name = full_name_input
-            norm_name, f_name, m_name, l_name, name_err = _validate_and_normalize_signup_name(full_name)
+            norm_name, f_name, m_initial, l_name, name_err = _validate_and_normalize_signup_name(full_name)
             if name_err:
                 error = name_err
-            elif not selected_program_id:
-                error = 'Please select your program.'
             elif not email or len(email) > 254 or not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email):
                 error = 'Please enter a valid email address.'
             elif len(password) < 8:
@@ -3902,7 +3960,7 @@ def signup():
             else:
                 full_name = norm_name
                 first_name = f_name
-                middle_name = m_name
+                middle_initial = m_initial
                 last_name = l_name
                 allowed_domains_str = os.environ.get('ALLOWED_SIGNUP_EMAIL_DOMAINS', '').strip()
                 if allowed_domains_str:
@@ -3925,7 +3983,7 @@ def signup():
                 # Role is strictly forced to Viewer. Client-supplied roles are completely ignored.
                 # Program is stored in metadata and validated/stored by the database trigger.
                 redirect_to = f"{_get_site_url()}/auth/callback"
-                logging.info(f"[signup] Calling supabase.auth.sign_up for '{email}' as viewer (program: {selected_program_name})")
+                logging.info(f"[signup] Calling supabase.auth.sign_up for '{email}' as viewer")
 
                 res = supabase.auth.sign_up({
                     'email': email,
@@ -3935,10 +3993,8 @@ def signup():
                         'data': {
                             'full_name': full_name,
                             'first_name': first_name,
-                            'middle_name': middle_name,
+                            'middle_initial': middle_initial,
                             'last_name': last_name,
-                            'program_id': selected_program_id,
-                            'program': selected_program_name,
                         }
                     }
                 })
@@ -3954,7 +4010,7 @@ def signup():
                     else:
                         # Record signup activity
                         try:
-                            act_detail = f'Self-registered: {email} (Program: {selected_program_name})'
+                            act_detail = f'Self-registered: {email}'
                             supabase.table('activity_log').insert({
                                 'username': full_name or email,
                                 'action': 'signup',
@@ -3987,8 +4043,6 @@ def signup():
                     error = "Please enter a valid email address."
                 elif 'smtp' in err_lower:
                     error = "Confirmation email could not be sent. Please contact the administrator."
-                elif 'program' in err_lower and ('valid' in err_lower or 'required' in err_lower):
-                    error = "Please select your program."
                 else:
                     error = "Unable to create account. Please check your details and try again."
 
@@ -3999,9 +4053,6 @@ def signup():
         success_message=success_message,
         full_name=full_name,
         email=email,
-        programs=programs,
-        selected_program_id=selected_program_id,
-        selected_program=selected_program_name,
         active_tab='signup'
     )
 
@@ -4151,6 +4202,239 @@ def auth_callback():
     # 3. Client-side hash fragment landing page for implicit flow (#access_token=...)
     return render_template('auth_callback.html')
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Password reset (Supabase Auth built-in recovery)
+# ──────────────────────────────────────────────────────────────────────────────
+FORGOT_PASSWORD_GENERIC_MESSAGE = (
+    'If an account exists for that email, a reset link has been sent.'
+)
+
+
+def _clear_recovery_session():
+    for _k in ('recovery_access_token', 'recovery_refresh_token', 'recovery_user_id'):
+        session.pop(_k, None)
+
+
+def _render_reset_password_page(error=None):
+    """Render /reset-password with no-cache headers (never cache token pages)."""
+    resp = Response(render_template('reset_password.html', error=error), mimetype='text/html')
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+
+def _begin_recovery_session(access_token=None, refresh_token=None, code=None, token_hash=None, otp_type=None):
+    """Establish a Supabase recovery session server-side. Returns True on success.
+
+    Tokens live in the signed Flask session (never in the URL, never logged).
+    """
+    try:
+        session_data = None
+        user_obj = None
+        if access_token:
+            if refresh_token and hasattr(supabase.auth, 'set_session'):
+                res = supabase.auth.set_session(access_token, refresh_token)
+                session_data = getattr(res, 'session', None)
+                user_obj = getattr(res, 'user', None)
+            if not session_data:
+                # Keep the raw tokens; update_user() re-establishes the session later.
+                session['recovery_access_token'] = access_token
+                session['recovery_refresh_token'] = refresh_token or ''
+                return True
+        elif code:
+            res = supabase.auth.exchange_code_for_session({'auth_code': code})
+            session_data = getattr(res, 'session', None)
+            user_obj = getattr(res, 'user', None)
+        elif token_hash:
+            res = supabase.auth.verify_otp({'token_hash': token_hash, 'type': otp_type or 'recovery'})
+            session_data = getattr(res, 'session', None)
+            user_obj = getattr(res, 'user', None)
+        if not session_data:
+            return False
+        session['recovery_access_token'] = session_data.access_token
+        session['recovery_refresh_token'] = getattr(session_data, 'refresh_token', '') or ''
+        if user_obj is None:
+            user_obj = getattr(session_data, 'user', None)
+        if user_obj is not None and getattr(user_obj, 'id', None):
+            session['recovery_user_id'] = str(user_obj.id)
+        return True
+    except Exception as err:
+        # Log only the error type; never the token or the full URL.
+        logging.error(f"[reset_password] recovery token handling failed: {type(err).__name__}")
+        return False
+
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """Request a Supabase password-reset email (generic response either way)."""
+    if request.method == 'GET':
+        return render_template('forgot_password.html')
+
+    email = (request.form.get('email') or '').strip().lower()
+    if not email or '@' not in email or '.' not in email.split('@')[-1] or len(email) > 254:
+        flash('Please enter a valid email address.', 'danger')
+        return render_template('forgot_password.html', email=email), 400
+
+    client_ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '127.0.0.1').split(',')[0].strip()
+    if not _check_and_record_password_reset_throttle(client_ip, email):
+        logging.warning(f"[forgot_password] Throttle exceeded (ip={client_ip})")
+        flash('Too many reset requests. Please wait a few minutes and try again.', 'warning')
+        return render_template('forgot_password.html', email=email), 429
+
+    # Look up the account so disabled users are skipped silently.
+    user_row = None
+    try:
+        res = supabase.table('users').select('id, username, disabled').ilike('email', email).limit(1).execute()
+        user_row = _first(res.data or [])
+    except Exception as err:
+        logging.debug(f"[forgot_password] user lookup failed: {type(err).__name__}")
+
+    if user_row and not user_row.get('disabled'):
+        try:
+            redirect_to = f"{_get_site_url()}/reset-password"
+            supabase.auth.reset_password_for_email(email, {'redirect_to': redirect_to})
+            log_activity('password_reset_requested', 'auth',
+                         user_row.get('username') or email, user_id=str(user_row.get('id')))
+        except Exception as err:
+            # Never reveal delivery failures to the requester.
+            logging.error(f"[forgot_password] reset email error: {type(err).__name__}")
+
+    flash(FORGOT_PASSWORD_GENERIC_MESSAGE, 'info')
+    return redirect(url_for('forgot_password'))
+
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    """Landing page for the Supabase recovery link, plus the new-password form."""
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or request.form or {}
+
+        # (a) Hash-fragment bridge: the browser POSTs access/refresh tokens here so
+        #     they never stay in the URL. Handled server-side, then discarded.
+        if data.get('access_token'):
+            ok = _begin_recovery_session(
+                access_token=data.get('access_token'),
+                refresh_token=data.get('refresh_token'),
+            )
+            if _is_ajax_request():
+                return jsonify({'success': bool(ok)})
+            return redirect(url_for('reset_password'))
+
+        # (b) New-password submission.
+        password = data.get('password') or ''
+        confirm = data.get('confirm_password') or ''
+        access = session.get('recovery_access_token')
+        if not access:
+            return _render_reset_password_page(
+                'Your password reset link is invalid or has expired. Please request a new one.')
+        if len(password) < 8:
+            return _render_reset_password_page('Password must be at least 8 characters long.')
+        if password != confirm:
+            return _render_reset_password_page('Passwords do not match.')
+
+        uid = session.get('recovery_user_id')
+        try:
+            refresh = session.get('recovery_refresh_token')
+            if refresh and hasattr(supabase.auth, 'set_session'):
+                supabase.auth.set_session(access, refresh)
+            supabase.auth.update_user({'password': password})
+        except Exception as err:
+            logging.error(f"[reset_password] password update failed: {type(err).__name__}")
+            _clear_recovery_session()
+            return _render_reset_password_page(
+                'Your password reset link is invalid or has expired. Please request a new link.')
+
+        _clear_recovery_session()
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
+        log_activity('password_changed', 'auth', 'Password reset via email link', user_id=uid)
+        flash('Your password has been updated. Please log in with your new password.', 'success')
+        return redirect(url_for('login'))
+
+    # GET
+    if request.args.get('error') or request.args.get('error_description'):
+        _clear_recovery_session()
+        return _render_reset_password_page(
+            'Your password reset link is invalid or has expired. Please request a new one.')
+
+    code = request.args.get('code')
+    token_hash = request.args.get('token_hash')
+    if code or token_hash:
+        _begin_recovery_session(
+            code=code,
+            token_hash=token_hash,
+            otp_type=request.args.get('type'),
+        )
+        # Strip the token from the URL with a redirect (PRG); the next GET reads
+        # the recovery state from the signed session.
+        return redirect(url_for('reset_password'))
+
+    if session.get('recovery_access_token'):
+        return _render_reset_password_page()
+
+    return _render_reset_password_page(
+        'Your password reset link is invalid or has expired. Please request a new one.')
+
+
+@app.route('/send_reset_link/<user_id>', methods=['POST'])
+@roles_required('admin')
+def send_reset_link(user_id):
+    """Admin: email a password-reset link to a specific account."""
+    try:
+        res = supabase.table('users').select('id, email, username, disabled').eq('id', user_id).limit(1).execute()
+        target = _first(res.data or [])
+        if not target:
+            return jsonify({'success': False, 'message': 'User not found.'}), 404
+        if target.get('disabled'):
+            return jsonify({'success': False, 'message': 'This account is disabled. Enable it first.'}), 400
+        email = (target.get('email') or '').strip()
+        if not email:
+            return jsonify({'success': False, 'message': 'This user has no email address on file.'}), 400
+
+        redirect_to = f"{_get_site_url()}/reset-password"
+        supabase.auth.reset_password_for_email(email, {'redirect_to': redirect_to})
+        log_activity('password_reset_requested', 'auth',
+                     target.get('username') or email, user_id=str(target.get('id')))
+        return jsonify({'success': True, 'message': 'Password reset link sent.'})
+    except Exception as err:
+        logging.error(f"[send_reset_link] {type(err).__name__}")
+        return jsonify({'success': False, 'message': 'Could not send the reset link.'}), 500
+
+
+@app.route('/set_temp_password/<user_id>', methods=['POST'])
+@roles_required('admin')
+def set_temp_password(user_id):
+    """Admin: set a random temporary password via the server-side service-role API."""
+    if not supabase_admin:
+        return jsonify({
+            'success': False,
+            'message': 'Temporary passwords are not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.',
+        }), 503
+    try:
+        res = supabase.table('users').select('id, username').eq('id', user_id).limit(1).execute()
+        target = _first(res.data or [])
+        if not target:
+            return jsonify({'success': False, 'message': 'User not found.'}), 404
+
+        temp_password = secrets.token_urlsafe(9)
+        supabase_admin.auth.admin.update_user_by_id(str(user_id), {'password': temp_password})
+        log_activity('password_changed', 'auth',
+                     f"Temporary password set for {target.get('username') or user_id}",
+                     user_id=str(user_id))
+        return jsonify({
+            'success': True,
+            'message': 'Temporary password set. Share it securely; it is shown only once.',
+            'temp_password': temp_password,
+        })
+    except Exception as err:
+        logging.error(f"[set_temp_password] {type(err).__name__}")
+        return jsonify({'success': False, 'message': 'Could not set a temporary password.'}), 500
+
+
 @app.route('/logout')
 def logout():
     try:
@@ -4277,19 +4561,14 @@ def set_admin_role(email):
         return f"Error: {err}"
 
 #-------------------------------------------------------User Management----------------------------------------------------------------------------------------------
-def _sort_users_newest_first(users_list):
-    """Sort user list so newest users appear first, falling back to name."""
+def _sort_users_by_name(users_list):
+    """Sort user list alphabetically by last name, then first name."""
     def _key(u):
-        c_at = u.get('created_at')
-        if c_at:
-            try:
-                dt = _to_datetime(c_at)
-                if dt:
-                    return (1, dt.timestamp(), str(u.get('last_name') or ''), str(u.get('first_name') or ''))
-            except Exception:
-                pass
-        return (0, 0, str(u.get('last_name') or ''), str(u.get('first_name') or ''))
-    users_list.sort(key=_key, reverse=True)
+        return (
+            str(u.get('last_name') or '').casefold(),
+            str(u.get('first_name') or '').casefold(),
+        )
+    users_list.sort(key=_key)
     return users_list
 
 
@@ -4305,11 +4584,11 @@ def users():
             q = search_query.lower()
             users_list = [
                 u for u in users_list
-                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'last_name', 'username', 'email', 'program', 'role'))
-                or q in f"{u.get('first_name', '')} {u.get('last_name', '')}".strip().lower()
+                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'middle_initial', 'last_name', 'username', 'email', 'program', 'role'))
+                or q in f"{u.get('first_name', '')} {u.get('middle_initial', '')} {u.get('last_name', '')}".strip().lower()
                 or (q in 'no program' and not u.get('program'))
             ]
-        users_list = _sort_users_newest_first(users_list)
+        users_list = _sort_users_by_name(users_list)
     except Exception as err:
         logging.error(f"Error fetching users: {err}")
         flash(f'Error fetching users: {err}', 'error')
@@ -4328,11 +4607,11 @@ def search_users():
             q = query_str.lower()
             users_list = [
                 u for u in users_list
-                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'last_name', 'username', 'email', 'program', 'role'))
-                or q in f"{u.get('first_name', '')} {u.get('last_name', '')}".strip().lower()
+                if any(q in (u.get(k) or '').lower() for k in ('first_name', 'middle_initial', 'last_name', 'username', 'email', 'program', 'role'))
+                or q in f"{u.get('first_name', '')} {u.get('middle_initial', '')} {u.get('last_name', '')}".strip().lower()
                 or (q in 'no program' and not u.get('program'))
             ]
-        users_list = _sort_users_newest_first(users_list)
+        users_list = _sort_users_by_name(users_list)
     except Exception as err:
         logging.error(f"Error fetching users: {err}")
         return jsonify({'users': [], 'error': str(err)}), 500
@@ -4352,7 +4631,13 @@ def edit_user(user_id):
 
         # Update user
         first_name = request.form.get('first_name', '').strip()
-        middle_name = request.form.get('middle_name', '').strip()
+        middle_initial = (request.form.get('middle_initial', '') or '').strip()
+        if middle_initial:
+            middle_initial = middle_initial[0].upper()
+            if not re.match(r'^[A-Z]$', middle_initial):
+                return jsonify({'success': False, 'message': 'Middle initial must be a single letter.'}), 400
+        else:
+            middle_initial = None
         last_name = request.form.get('last_name', '').strip()
         email = request.form.get('email', '').strip()
         role = request.form.get('role', '').strip()
@@ -4363,43 +4648,43 @@ def edit_user(user_id):
         if role_canon not in VALID_ROLES:
             return jsonify({'success': False, 'message': f"Invalid role '{role}'. Allowed roles are: Admin, Chair, Viewer."}), 400
 
-        is_program_required = role_canon in (ROLE_CHAIR, ROLE_VIEWER)
+        # A program is required ONLY for the scheduler (chair) role. Viewers and
+        # admins are global and must have program_id = NULL.
+        is_program_required = role_canon == ROLE_CHAIR
         program_input = request.form.get('program', '').strip() if is_program_required else None
         program_id_input = request.form.get('program_id', '').strip() if is_program_required else None
 
         if is_program_required and not (program_input or program_id_input):
-            role_label_str = ROLE_LABELS.get(role_canon, role_canon.title())
-            err_msg = f'Program is required for {role_label_str} role.'
+            err_msg = 'Program is required for the Chair (scheduler) role.'
             flash(err_msg, 'error')
             return jsonify({'success': False, 'message': err_msg}), 400
 
-        # Resolve program and program_id
+        # Resolve program and program_id (active, non-archived programs only).
         program_id = None
         if is_program_required:
             program_id = _find_program_id_by_name(program_id_input or program_input)
-            if program_id is None:
-                err_msg = f"Unknown program '{program_input or program_id_input}'. Please select a valid program."
+            active_ids = {str(p.get('id')) for p in _get_programs(include_archived=True) if p.get('id') is not None and not p.get('archive')}
+            if program_id is None or str(program_id) not in active_ids:
+                err_msg = f"Unknown or archived program '{program_input or program_id_input}'. Please select an active program."
                 flash(err_msg, 'error')
                 return jsonify({'success': False, 'message': err_msg}), 400
-        else:
-            # Admin role: program is strictly NULL
-            program_id = None
+        # else: viewer / admin -> program_id stays NULL
 
         # Fetch old user profile for detailed audit logging
         old_user = {}
         try:
-            old_res = supabase.table('users').select('*, program:program_id(program_name)').eq('id', user_id).limit(1).execute()
+            old_res = supabase.table('users').select('*, program:program_id(program_code)').eq('id', user_id).limit(1).execute()
             if old_res.data and len(old_res.data) > 0:
                 old_user = old_res.data[0]
         except Exception:
             pass
         old_role = old_user.get('role') or 'viewer'
         old_p_rel = _rel(old_user, 'program') or {}
-        old_prog = old_p_rel.get('program_name') or 'None'
+        old_prog = old_p_rel.get('program_code') or 'None'
 
         update_payload = {
             'first_name': first_name,
-            'middle_name': middle_name,
+            'middle_initial': middle_initial,
             'last_name': last_name,
             'role': role_canon,
             'program_id': program_id,
@@ -4414,7 +4699,7 @@ def edit_user(user_id):
 
         new_prog_name = 'None'
         if program_id:
-            new_prog_name = _find_program_name_by_id(program_id) or str(program_id)
+            new_prog_name = _find_program_code_by_id(program_id) or str(program_id)
 
         now = time.time()
         # Track live role update so it takes effect on the user's next request without restart
@@ -4445,7 +4730,9 @@ def edit_user(user_id):
 
         actor = session.get('username') or session.get('first_name') or 'Admin'
         target_name = f"{first_name} {last_name}".strip() or old_user.get('username') or str(user_id)
-        detail = f"Role change for {target_name} ({user_id}) by {actor}: old_role='{old_role}', new_role='{role_canon}', program='{new_prog_name}'"
+        detail = (f"Role/program change for {target_name} ({user_id}) by {actor}: "
+                  f"old_role='{old_role}', new_role='{role_canon}', "
+                  f"old_program='{old_prog}', new_program='{new_prog_name}'")
         log_activity('edit', 'user', detail)
         flash('Edited successfully', 'success')
         return jsonify({'success': True, 'message': 'User updated successfully.'})
@@ -4552,7 +4839,7 @@ def create_user():
 
     try:
         first_name = request.form.get('first_name', '').strip()
-        middle_name = request.form.get('middle_name', '').strip()
+        middle_initial = ((request.form.get('middle_initial', '') or '').strip()[:1].upper()) or None
         last_name  = request.form.get('last_name',  '').strip()
         email      = request.form.get('email', '').strip()
         password   = request.form.get('password', '')
@@ -4575,7 +4862,7 @@ def create_user():
             return jsonify({'success': False, 'message': 'Program is required for Chair role.'}), 400
 
         program_id   = None
-        program_name = None
+        program_code = None
         if is_scheduler:
             program_id = _find_program_id_by_name(program_id_input or program_input)
             if program_id is None:
@@ -4583,10 +4870,10 @@ def create_user():
                 return jsonify({'success': False, 'message': err_msg}), 400
             for p in _get_programs():
                 if p.get('id') == program_id:
-                    program_name = p.get('program_name')
+                    program_code = p.get('program_code')
                     break
-            if not program_name:
-                program_name = program_input or str(program_id)
+            if not program_code:
+                program_code = program_input or str(program_id)
         else:
             program_id = None
 
@@ -4624,7 +4911,7 @@ def create_user():
             try:
                 supabase.table('users').update({
                     'first_name': first_name,
-                    'middle_name': middle_name,
+                    'middle_initial': middle_initial,
                     'last_name':  last_name,
                     'role':       role,
                     'program_id': program_id,
@@ -4642,11 +4929,11 @@ def create_user():
                 'options': {
                     'data': {
                         'first_name': first_name,
-                        'middle_name': middle_name,
+                        'middle_initial': middle_initial,
                         'last_name':  last_name,
                         'username':   email.split('@')[0],
                         'program_id': program_id,
-                        'program':    program_name,
+                        'program':    program_code,
                         'role':       role,
                     }
                 }
@@ -4664,7 +4951,7 @@ def create_user():
             'email':      email,
             'username':   email.split('@')[0],
             'first_name': first_name,
-            'middle_name': middle_name,
+            'middle_initial': middle_initial,
             'last_name':  last_name,
             'role':       role,
             'program_id': program_id,
@@ -4764,7 +5051,7 @@ def create_test_accounts():
 
                 v_prog_id = None
                 try:
-                    p_res = supabase.table('program').select('id').eq('program_name', account['program']).limit(1).execute()
+                    p_res = supabase.table('program').select('id').eq('program_code', account['program']).limit(1).execute()
                     if p_res.data:
                         v_prog_id = p_res.data[0]['id']
                 except Exception:
@@ -4889,42 +5176,41 @@ def show_programs():
 @roles_required('admin')
 def add_program():
     is_ajax = _is_ajax_request()
-    program_name = (request.form.get('program_name') or '').strip().upper()
-    full_name = (request.form.get('full_name') or '').strip() or None
+    program_code = (request.form.get('program_code') or '').strip().upper()
+    program_name = (request.form.get('program_name') or '').strip() or None
+
+    if not program_code:
+        msg = "Program code is required."
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+        flash(msg, 'danger')
+        return redirect(url_for('show_programs'))
 
     if not program_name:
-        msg = "Program code/name is required."
+        msg = "Program name is required."
         if is_ajax:
             return jsonify({'success': False, 'message': msg, 'error': msg}), 400
         flash(msg, 'danger')
         return redirect(url_for('show_programs'))
 
     # Case-insensitive duplicate check (active vs archived)
-    state = _find_program_archive_state(program_name)
+    state = _find_program_archive_state(program_code)
     if state == 'active':
-        msg = f"Program '{program_name}' already exists."
+        msg = f"Program '{program_code}' already exists."
         if is_ajax:
             return jsonify({'success': False, 'message': msg, 'error': msg}), 400
         flash(msg, 'danger')
         return redirect(url_for('show_programs'))
     if state == 'archived':
-        msg = f"A program named '{program_name}' is archived. Restore it instead of creating a new one."
+        msg = f"A program named '{program_code}' is archived. Restore it instead of creating a new one."
         if is_ajax:
             return jsonify({'success': False, 'message': msg, 'error': msg}), 400
         flash(msg, 'danger')
         return redirect(url_for('show_programs'))
 
     try:
-        payload = {'program_name': program_name}
-        if full_name:
-            payload['full_name'] = full_name
-        try:
-            supabase.table('program').insert(payload).execute()
-        except Exception as e:
-            if 'full_name' in str(e):
-                supabase.table('program').insert({'program_name': program_name}).execute()
-            else:
-                raise e
+        payload = {'program_code': program_code, 'program_name': program_name}
+        supabase.table('program').insert(payload).execute()
 
         # Clear cached programs on Flask context
         from flask import g as _flask_g
@@ -4932,8 +5218,8 @@ def add_program():
             if hasattr(_flask_g, _cache_attr):
                 delattr(_flask_g, _cache_attr)
 
-        log_activity('create', 'program', program_name)
-        msg = f"Program '{program_name}' added successfully."
+        log_activity('create', 'program', program_code)
+        msg = f"Program '{program_code}' added successfully."
         if is_ajax:
             return jsonify({'success': True, 'message': msg}), 200
         flash(msg, 'success')
@@ -4951,11 +5237,18 @@ def add_program():
 @roles_required('admin')
 def edit_program(id):
     is_ajax = _is_ajax_request()
-    new_name = (request.form.get('program_name') or '').strip().upper()
-    new_full_name = (request.form.get('full_name') or '').strip() or None
+    new_name = (request.form.get('program_code') or '').strip().upper()
+    new_program_name = (request.form.get('program_name') or '').strip() or None
 
     if not new_name:
-        msg = "Program code/name cannot be empty."
+        msg = "Program code cannot be empty."
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg, 'error': msg}), 400
+        flash(msg, 'danger')
+        return redirect(url_for('show_programs'))
+
+    if not new_program_name:
+        msg = "Program name is required."
         if is_ajax:
             return jsonify({'success': False, 'message': msg, 'error': msg}), 400
         flash(msg, 'danger')
@@ -4977,16 +5270,8 @@ def edit_program(id):
         return redirect(url_for('show_programs'))
 
     try:
-        update_payload = {'program_name': new_name}
-        if new_full_name is not None:
-            update_payload['full_name'] = new_full_name
-        try:
-            supabase.table('program').update(update_payload).eq('id', id).execute()
-        except Exception as e:
-            if 'full_name' in str(e):
-                supabase.table('program').update({'program_name': new_name}).eq('id', id).execute()
-            else:
-                raise e
+        update_payload = {'program_code': new_name, 'program_name': new_program_name}
+        supabase.table('program').update(update_payload).eq('id', id).execute()
 
         # Clear cache
         from flask import g as _flask_g
@@ -5097,7 +5382,7 @@ def api_programs():
     return jsonify({
         'ok': True,
         'success': True,
-        'programs': [{'id': p['id'], 'program_name': p['program_name'], 'full_name': p.get('full_name')} for p in progs]
+        'programs': [{'id': p['id'], 'program_code': p['program_code'], 'program_name': p.get('program_name')} for p in progs]
     })
 
 
@@ -5123,21 +5408,60 @@ def _specialization_in_use_in_active_schedule(spec_id):
             loads = []
     load_ids = [r.get('professor_load_id') or r.get('id') for r in loads]
     load_ids = [l for l in load_ids if l is not None]
-    if load_ids:
-        try:
-            sched = supabase.table('schedule').select('schedule_id').in_('professor_load_id', load_ids).eq('archive', False).limit(1).execute()
-            if sched.data:
-                return True
-        except Exception:
-            pass
+    if load_ids and _has_active_schedule(professor_load_id=load_ids):
+        return True
     # TBA / direct course_id rows.
+    return _has_active_schedule(course_id=course_ids)
+
+
+def _has_active_schedule(**filters):
+    """True when at least one ACTIVE (archive = false) schedule row matches.
+
+    This is the single rule behind every "cannot archive because a schedule
+    references it" guard. Archived schedules (archive = true) are never
+    considered, so an entity used only by archived schedules can be archived.
+    """
     try:
-        sched = supabase.table('schedule').select('schedule_id').in_('course_id', course_ids).eq('archive', False).limit(1).execute()
-        if sched.data:
-            return True
+        q = supabase.table('schedule').select('schedule_id').eq('archive', False)
+        for col, val in filters.items():
+            if val is None:
+                continue
+            if isinstance(val, (list, tuple, set)):
+                vals = [v for v in val if v is not None]
+                if not vals:
+                    continue
+                q = q.in_(col, vals)
+            else:
+                q = q.eq(col, val)
+        return bool(q.limit(1).execute().data)
     except Exception:
-        pass
-    return False
+        return False
+
+
+def _archived_room_names(room_ids):
+    """Names of archived rooms among the given ids (empty when none).
+
+    Used to block restoring an archived schedule that points at an archived
+    room, so the user unarchives the room first instead of getting a schedule
+    that silently references a hidden room.
+    """
+    ids = set()
+    for r in room_ids or []:
+        if r in (None, '', 0, '0'):
+            continue
+        try:
+            ids.add(int(r))
+        except (ValueError, TypeError):
+            pass
+    if not ids:
+        return []
+    try:
+        rows = supabase.table('room').select('room_id, room_name').in_(
+            'room_id', sorted(ids)
+        ).eq('archive', True).execute().data or []
+    except Exception:
+        return []
+    return [str(r.get('room_name') or r.get('room_id')) for r in rows]
 
 
 def _spec_json_rows(specs):
@@ -5526,7 +5850,7 @@ def show_courses():
     _ensure_course_semester_column()
 
     all_programs = _get_programs(include_archived=False)
-    programs_map = {p.get('id'): p.get('program_name', '') for p in all_programs if isinstance(p, dict) and p.get('id') is not None}
+    programs_map = {p.get('id'): p.get('program_code', '') for p in all_programs if isinstance(p, dict) and p.get('id') is not None}
 
     # Schedulers are strictly locked to their program
     if not is_super_admin:
@@ -5551,7 +5875,7 @@ def show_courses():
             active_tab_program = 'all'
 
     try:
-        query = supabase.table('course').select('*, program:program_id(id, program_name), spec:specialization_id(specialization_id, name)').eq('archive', show_archived)
+        query = supabase.table('course').select('*, program:program_id(id, program_code), spec:specialization_id(specialization_id, name)').eq('archive', show_archived)
         if eff_prog_id:
             query = query.eq('program_id', eff_prog_id)
         all_courses = query.execute().data or []
@@ -5563,8 +5887,8 @@ def show_courses():
 
     for c in all_courses:
         p_rel = _rel(c, 'program') or {}
-        c['program_name'] = p_rel.get('program_name') or programs_map.get(c.get('program_id'), user_program or '')
-        c['program'] = c['program_name']
+        c['program_code'] = p_rel.get('program_code') or programs_map.get(c.get('program_id'), user_program or '')
+        c['program'] = c['program_code']
         # Specialization display: FK join first, legacy text fallback, else General.
         s_rel = _rel(c, 'spec') or {}
         text_spec = c.get('specialization') if isinstance(c.get('specialization'), str) else None
@@ -5600,11 +5924,31 @@ def show_courses():
     semesters = _get_semesters(program_id=eff_prog_id or user_prog_id)
     course_message = session.pop('course_message', None)
     spec_options = _get_specializations(include_archived=False)
+
+    # Year tabs are derived from the courses present, never a fixed 1-4 list.
+    courses_by_year = {}
+    for c in all_courses:
+        y = str(c.get('year_level') or '').strip()
+        if y:
+            courses_by_year.setdefault(y, []).append(c)
+
+    def _year_sort_key(y):
+        try:
+            return (0, int(y))
+        except (ValueError, TypeError):
+            return (1, y)
+
+    course_year_tabs = [
+        {'value': y, 'label': _year_label(y), 'courses': courses_by_year[y], 'count': len(courses_by_year[y])}
+        for y in sorted(courses_by_year.keys(), key=_year_sort_key)
+    ]
+
     return render_template(
         'courses.html',
         active_page='courses',
         courses=all_courses,
         counts=counts,
+        course_year_tabs=course_year_tabs,
         programs=all_programs,
         program_counts=program_counts,
         program=user_program,
@@ -5616,7 +5960,6 @@ def show_courses():
         semesters=semesters,
         specializations=spec_options,
         specialization_stage=specialization_stage_payload(),
-        specialization_choices=SPECIALIZATION_CHOICES,
         show_archived=show_archived,
     )
 
@@ -5649,7 +5992,7 @@ def search_courses():
         return jsonify({'courses': [], 'exact_match': False})
 
     try:
-        cols = 'course_id, course_code, course_name, program_id, program:program_id(id, program_name), year_level, specialization, semester, lecture_hours, lab_hours, ilp_hours'
+        cols = 'course_id, course_code, course_name, program_id, program:program_id(id, program_code), year_level, specialization, semester, lecture_hours, lab_hours, ilp_hours'
         try:
             query = supabase.table('course').select(cols)
         except Exception:
@@ -5675,8 +6018,8 @@ def search_courses():
 
         for c in matching_courses:
             p_rel = _rel(c, 'program') or {}
-            c['program_name'] = p_rel.get('program_name') or user_program or ''
-            c['program'] = c['program_name']
+            c['program_code'] = p_rel.get('program_code') or user_program or ''
+            c['program'] = c['program_code']
             c['major'] = c.get('specialization') or ''
 
         return jsonify({
@@ -5709,7 +6052,7 @@ def api_courses():
 
     try:
         try:
-            query = supabase.table('course').select('course_id, course_code, course_name, program_id, program:program_id(id, program_name), year_level, specialization, semester, lecture_hours, lab_hours, ilp_hours')
+            query = supabase.table('course').select('course_id, course_code, course_name, program_id, program:program_id(id, program_code), year_level, specialization, semester, lecture_hours, lab_hours, ilp_hours')
         except Exception:
             try:
                 query = supabase.table('course').select('course_id, course_code, course_name, program_id, year_level, specialization, semester, lecture_hours, lab_hours, ilp_hours')
@@ -5733,8 +6076,8 @@ def api_courses():
         courses = query.order('course_code').execute().data or []
         for c in courses:
             p_rel = _rel(c, 'program') or {}
-            c['program_name'] = p_rel.get('program_name') or user_program or ''
-            c['program'] = c['program_name']
+            c['program_code'] = p_rel.get('program_code') or user_program or ''
+            c['program'] = c['program_code']
             c['major'] = c.get('specialization') or ''
         return jsonify({'courses': courses})
     except Exception as err:
@@ -5748,15 +6091,9 @@ def archive_course(course_id):
     """Soft-delete a course (archive=true) after safety checks."""
     is_ajax = _is_ajax_request()
     try:
-        # Safety check: blocked when a teaching load for this course belongs to
-        # the current active schedule.
-        in_active_schedule = False
-        try:
-            sched_check = supabase.table('schedule').select('schedule_id').eq('course_id', course_id).eq('archive', False).limit(1).execute()
-            in_active_schedule = bool(sched_check.data)
-        except Exception:
-            in_active_schedule = False
-
+        # Safety check: only the currently ACTIVE schedule blocks. Archived
+        # schedules never do.
+        in_active_schedule = _has_active_schedule(course_id=course_id)
         if not in_active_schedule:
             try:
                 load_ids = [
@@ -5765,13 +6102,12 @@ def archive_course(course_id):
                 ]
                 load_ids = [lid for lid in load_ids if lid is not None]
                 if load_ids:
-                    sched_check = supabase.table('schedule').select('schedule_id').in_('professor_load_id', load_ids).eq('archive', False).limit(1).execute()
-                    in_active_schedule = bool(sched_check.data)
+                    in_active_schedule = _has_active_schedule(professor_load_id=load_ids)
             except Exception:
                 pass
 
         if in_active_schedule:
-            err_msg = 'Cannot archive course: it is used by a faculty teaching load in the current active schedule. Archive the schedule first.'
+            err_msg = 'Cannot archive course: it is used by a faculty teaching load in the currently active schedule. Archive the schedule first.'
             if is_ajax:
                 return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
             flash(err_msg, 'danger')
@@ -5884,9 +6220,8 @@ def edit_course(course_id):
                 logging.debug(f"Error checking load references on course edit: {e}")
 
             try:
-                sched_chk = supabase.table('schedule').select('schedule_id').eq('course_id', course_id).limit(1).execute()
-                if sched_chk.data:
-                    msg = "Cannot change program for a course with class schedule entries."
+                if _has_active_schedule(course_id=course_id):
+                    msg = "Cannot change program for a course that is used by the currently active schedule. Archive the schedule first."
                     if is_ajax:
                         return jsonify({'success': False, 'message': msg, 'error': msg}), 400
                     flash(msg, 'danger')
@@ -6143,16 +6478,12 @@ def archive_room(room_id):
         or 'application/json' in (request.headers.get('Accept') or '').lower()
     )
     try:
-        # Data protection: Check if room is referenced by active schedule rows
-        in_active_schedule = False
-        try:
-            sched_check = supabase.table('schedule').select('schedule_id').eq('room_id', room_id).eq('archive', False).limit(1).execute()
-            in_active_schedule = bool(sched_check.data)
-        except Exception:
-            in_active_schedule = False
-
-        if in_active_schedule:
-            err_msg = 'Cannot archive room: this room is used by a session in the active schedule. Remove the room assignment or archive the schedule first.'
+        # Data protection: only the currently ACTIVE schedule (archive = false)
+        # blocks a room. Rooms used exclusively by archived schedules can be
+        # archived.
+        if _has_active_schedule(room_id=room_id):
+            err_msg = ('Cannot archive room: this room is used by a session in the currently active schedule. '
+                       'Remove the room assignment or archive the schedule first.')
             if is_ajax:
                 return jsonify({'success': False, 'message': err_msg, 'error': err_msg}), 400
             flash(err_msg, 'danger')
@@ -6212,12 +6543,12 @@ def professor_load():
         try:
             p_obj = next((p for p in _get_programs() if p.get('id') == user_prog_id), None)
             if p_obj:
-                user_prog_name = p_obj.get('program_name')
+                user_prog_name = p_obj.get('program_code')
         except Exception:
             pass
 
     # 1. Fetch courses catalog first
-    cols_c = 'course_id, course_code, program_id, program:program_id(program_name), year_level, lecture_hours, lab_hours, ilp_hours, semester'
+    cols_c = 'course_id, course_code, program_id, program:program_id(program_code), year_level, lecture_hours, lab_hours, ilp_hours, semester'
     try:
         course_query = supabase.table('course').select(cols_c).eq('archive', False)
         if not is_super_admin and user_prog_id:
@@ -6233,8 +6564,8 @@ def professor_load():
             courses = []
     for c in courses:
         p_rel = _rel(c, 'program') or {}
-        c['program_name'] = p_rel.get('program_name') or user_prog_name or ''
-        c['program'] = c['program_name']
+        c['program_code'] = p_rel.get('program_code') or user_prog_name or ''
+        c['program'] = c['program_code']
     courses.sort(key=lambda c: str(c.get('course_code') or ''))
     courses_by_id = {c['course_id']: c for c in courses if isinstance(c, dict) and c.get('course_id')}
 
@@ -6271,7 +6602,7 @@ def professor_load():
         p_key = row.get('professor_key')
         if not p_key:
             continue
-        c_prog_name = (_rel(c, 'program') or {}).get('program_name') or c.get('program') or ''
+        c_prog_name = (_rel(c, 'program') or {}).get('program_code') or c.get('program') or ''
         c_prog_id = c.get('program_id')
 
         # Check if course belongs to a different program
@@ -6327,9 +6658,9 @@ def professor_load():
                     continue
 
         c = _rel(row, 'course') or courses_by_id.get(row.get('course_id')) or {}
-        c['program_name'] = c.get('program_name') or user_prog_name or ''
-        c['program'] = c['program_name']
-        dept_val = p_dept or c.get('program_name') or department or ''
+        c['program_code'] = c.get('program_code') or user_prog_name or ''
+        c['program'] = c['program_code']
+        dept_val = p_dept or c.get('program_code') or department or ''
 
         # Filter loads by course's program (professor load belongs to course's program)
         if not is_super_admin:
@@ -6603,7 +6934,7 @@ def professor_load_import_preview():
                 try:
                     p_obj = next((p for p in _get_programs() if p.get('id') == user_prog_id), None)
                     if p_obj:
-                        p_name = p_obj.get('program_name')
+                        p_name = p_obj.get('program_code')
                 except Exception:
                     pass
             if not p_name:
@@ -6614,7 +6945,7 @@ def professor_load_import_preview():
             all_courses_list=all_courses,
             all_professors_list=all_profs_list,
             allowed_prof_ids=allowed_pids,
-            target_program_name=p_name
+            target_program_code=p_name
         )
 
         token = str(uuid.uuid4())
@@ -6679,7 +7010,7 @@ def professor_load_import_confirm():
                 try:
                     p_obj = next((p for p in _get_programs() if p.get('id') == user_prog_id), None)
                     if p_obj:
-                        p_name = p_obj.get('program_name')
+                        p_name = p_obj.get('program_code')
                 except Exception:
                     pass
             if not p_name:
@@ -6690,7 +7021,7 @@ def professor_load_import_confirm():
             all_courses_list=all_courses,
             all_professors_list=all_profs_list,
             allowed_prof_ids=allowed_pids,
-            target_program_name=p_name
+            target_program_code=p_name
         )
 
         valid_rows = [r for r in validation_result['rows'] if r['status'] in ("Ready", "Updated", "Warning")]
@@ -6763,7 +7094,7 @@ def professor_load_import_error_report():
                 try:
                     p_obj = next((p for p in _get_programs() if p.get('id') == user_prog_id), None)
                     if p_obj:
-                        p_name = p_obj.get('program_name')
+                        p_name = p_obj.get('program_code')
                 except Exception:
                     pass
             if not p_name:
@@ -6774,7 +7105,7 @@ def professor_load_import_error_report():
             all_courses_list=all_courses,
             all_professors_list=all_profs_list,
             allowed_prof_ids=allowed_pids,
-            target_program_name=p_name
+            target_program_code=p_name
         )
 
         error_rows = [r for r in validation_result['rows'] if r['status'] == "Error"]
@@ -8062,17 +8393,22 @@ def _calculate_professor_availability(entries, working_hours=None, professor=Non
 @app.route('/my_schedule')
 @roles_required('viewer', 'admin', 'chair')
 def my_schedule():
-    """Viewer entry point: open the logged-in user's own professor schedule."""
+    """My Schedules: a Viewer's own schedule, matched by name across ALL programs.
+
+    The professor is resolved server-side from the logged-in account, so no
+    professor id is exposed in (or accepted from) the URL.
+    """
     norm_role = _normalize_role(session.get('role', ''))
-    if norm_role != 'viewer':
-        # Admins/chairs use the full Professor Schedule tab.
+    if norm_role != ROLE_VIEWER:
+        # Admins/Chairs use the full Professor Schedule tab.
         return redirect(url_for('professor_schedule'))
     key, _display_name = _find_viewer_professor_key(_get_session_user_row())
     if not key:
-        flash('We could not find a class schedule linked to your account. '
-              'Please ask the administrator to set your name (including middle name) to match your teaching load.', 'warning')
+        flash('No schedule found for your name. Please make sure your account name matches your name in the system.', 'warning')
         return redirect(url_for('schedules'))
-    return redirect(url_for('view_professor_schedule', prof_identifier=key))
+    # Render the schedule in place; the professor id never appears in the URL and
+    # view_professor_schedule enforces that a viewer can only see their own key.
+    return view_professor_schedule(key)
 
 
 @app.route('/professor_schedule')
@@ -8087,7 +8423,7 @@ def professor_schedule():
     program_filter = request.args.get('program', '').strip()
 
     program = session.get('program', '')
-    default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
+    default_prog = program or _find_program_code_by_id(user_prog_id) or (all_programs[0].get('program_code') if all_programs else '')
     if is_super_admin or is_viewer:
         if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
             program_filter = default_prog
@@ -8230,7 +8566,7 @@ def professor_schedule():
                 return q.range(off, off + size - 1).execute().data or []
             return q.execute().data or []
 
-        sched_cols = 'schedule_id, professor_load_id, section, day, class_start, class_end, session_type, room(room_name), professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_name), semester, specialization))'
+        sched_cols = 'schedule_id, professor_load_id, section, day, class_start, class_end, session_type, room(room_name), professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_code), semester, specialization))'
         sched_rows = []
         page_size = 1000
         if not is_super_admin and not is_viewer and user_prog_id:
@@ -8381,7 +8717,7 @@ def view_professor_schedule(prof_identifier):
     is_viewer = _viewer_check
     user_prog_id = _get_user_program_id()
     all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
+    default_prog = program or _find_program_code_by_id(user_prog_id) or (all_programs[0].get('program_code') if all_programs else '')
     if is_admin or is_viewer:
         if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
             program_filter = default_prog
@@ -8467,7 +8803,7 @@ def view_professor_schedule(prof_identifier):
 
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, section, session_type, '
-            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_name), semester, specialization)), '
+            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('archive', False)
         if prof_pc_ids:
@@ -8502,7 +8838,7 @@ def view_professor_schedule(prof_identifier):
 
             r_prog_id = row.get('program_id')
             p_info = _rel(row, 'program') or {}
-            r_prog_name = p_info.get('program_name') or row.get('program') or ''
+            r_prog_name = p_info.get('program_code') or row.get('program') or ''
 
             is_own = True
             if not is_admin:
@@ -8583,7 +8919,7 @@ def export_professor_schedule(prof_identifier):
         return _viewer_check
     is_viewer = _viewer_check
     all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
+    default_prog = program or _find_program_code_by_id(user_prog_id) or (all_programs[0].get('program_code') if all_programs else '')
     if is_admin or is_viewer:
         if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
             program_filter = default_prog
@@ -8664,7 +9000,7 @@ def export_professor_schedule(prof_identifier):
     else:
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, section, session_type, '
-            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_name), semester, specialization)), '
+            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('archive', False)
 
@@ -8710,7 +9046,7 @@ def export_professor_schedule(prof_identifier):
                 'start_time_raw': st_raw,
                 'end_time_raw': et_raw,
                 'section': row.get('section'),
-                'program': (_rel(row, 'program') or {}).get('program_name') or row.get('program_name') or program_filter or program or 'BSIT',
+                'program': (_rel(row, 'program') or {}).get('program_code') or row.get('program_code') or program_filter or program or 'BSIT',
                 'semester': row.get('semester'),
                 'major': row.get('major'),
                 'session_type': row.get('session_type') or 'Lecture',
@@ -8747,7 +9083,7 @@ def export_professor_schedule(prof_identifier):
     )
 
 
-def _preparer_display_details(user_or_row, program_name=None):
+def _preparer_display_details(user_or_row, program_code=None):
     """Build preparer name and title from a schedule row or user/session dictionary."""
     if not isinstance(user_or_row, dict):
         return 'Preparer account unavailable', 'Role/title unavailable'
@@ -8768,7 +9104,7 @@ def _preparer_display_details(user_or_row, program_name=None):
     if not name:
         name = 'Unknown user'
 
-    program = (program_name or '').strip() or 'Unknown Program'
+    program = (program_code or '').strip() or 'Unknown Program'
     raw_role = str(user_or_row.get('role') or '').strip().lower().replace('-', '_').replace(' ', '_')
     canonical = _normalize_role(raw_role)
     if canonical == ROLE_ADMIN:
@@ -8891,7 +9227,7 @@ def export_professor_schedule_pdf(prof_identifier):
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, section, session_type, '
             'prepared_by_name, prepared_by_title, '
-            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_name), semester, specialization)), '
+            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('archive', False)
 
@@ -8935,22 +9271,22 @@ def export_professor_schedule_pdf(prof_identifier):
                 'start_time_raw': st_raw,
                 'end_time_raw': et_raw,
                 'section': row.get('section'),
-                'program': (_rel(row, 'program') or {}).get('program_name') or row.get('program_name') or program_filter or program or 'BSIT',
+                'program': (_rel(row, 'program') or {}).get('program_code') or row.get('program_code') or program_filter or program or 'BSIT',
                 'semester': row.get('semester'),
                 'major': row.get('major'),
                 'session_type': row.get('session_type') or 'Lecture',
                 'preparer_name': _preparer_display_details(
                     row,
-                    (_rel(row, 'program') or {}).get('program_name') or program
+                    (_rel(row, 'program') or {}).get('program_code') or program
                 )[0],
                 'preparer_title': _preparer_display_details(
                     row,
-                    (_rel(row, 'program') or {}).get('program_name') or program
+                    (_rel(row, 'program') or {}).get('program_code') or program
                 )[1],
             })
 
     # Department and semester info
-    dept_label = professor.get('program_name') or program or 'Information Technology'
+    dept_label = professor.get('program_code') or program or 'Information Technology'
     active_sem = _get_active_semester(user_prog_id)
     sem_label = semester_filter or (active_sem.get('term') if active_sem else '') or '1st Semester'
     ay_label = (active_sem.get('academic_year') if active_sem else '') or ''
@@ -9174,34 +9510,34 @@ def room_schedule():
     is_viewer = norm_role == 'viewer'
     program = session.get('program', '')
     all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
+    default_prog = program or _find_program_code_by_id(user_prog_id) or (all_programs[0].get('program_code') if all_programs else '')
     program_filter = (request.args.get('program') or '').strip()
 
-    if is_viewer:
-        if not user_prog_id:
-            return render_template(
-                'room_schedule.html',
-                active_page='room_schedule',
-                no_program_assigned=True,
-                no_program_message="No program is assigned to your account. Please contact an administrator.",
-                all_room_options=[],
-                rooms=[],
-                year_options=[],
-                semester_options=[],
-                major_options=[],
-                programs=[],
-                program_filter="",
-                is_super_admin=False,
-                is_admin=False,
-                is_viewer=True
-            )
-        prog_name_str = _find_program_name_by_id(user_prog_id) or program or ''
-        programs = [{'id': user_prog_id, 'program_name': prog_name_str}]
-        program_filter = prog_name_str
-    elif is_super_admin:
+    if not (is_super_admin or is_viewer) and not user_prog_id:
+        # Scheduler (Chair) without a program -> error with a logout option.
+        return render_template(
+            'room_schedule.html',
+            active_page='room_schedule',
+            no_program_assigned=True,
+            no_program_message="No program is assigned to your account. Please contact an administrator.",
+            all_room_options=[],
+            rooms=[],
+            year_options=[],
+            semester_options=[],
+            major_options=[],
+            programs=[],
+            program_filter="",
+            is_super_admin=False,
+            is_admin=False,
+            is_viewer=False,
+            is_chair=True
+        )
+
+    if is_super_admin or is_viewer:
+        # Admin and Viewer: read-only across all programs; may narrow via the filter.
         programs = all_programs
         if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
-            program_filter = default_prog
+            program_filter = 'All Programs' if is_viewer else default_prog
     else:
         programs = []
         program_filter = default_prog
@@ -9368,7 +9704,7 @@ def view_room_schedule(room_id):
         flash("No program is assigned to your account. Please contact an administrator.", "warning")
         return redirect(url_for('room_schedule'))
     all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_name_by_id(user_prog_id) or (all_programs[0].get('program_name') if all_programs else '')
+    default_prog = program or _find_program_code_by_id(user_prog_id) or (all_programs[0].get('program_code') if all_programs else '')
     if is_viewer:
         program_filter = default_prog
     elif is_admin:
@@ -9444,7 +9780,7 @@ def view_room_schedule(room_id):
 
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, section, session_type, '
-            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(id, program_name), semester, specialization)), '
+            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(id, program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('room_id', room_id).eq('archive', False)
 
@@ -9475,7 +9811,7 @@ def view_room_schedule(room_id):
 
             r_prog_id = row.get('program_id')
             p_info = _rel(row, 'program') or {}
-            r_prog_name = p_info.get('program_name') or row.get('program') or ''
+            r_prog_name = p_info.get('program_code') or row.get('program') or ''
 
             norm_role = _normalize_role(user_role)
             is_viewer = norm_role == 'viewer'
@@ -9615,7 +9951,7 @@ def export_room_schedule(room_id):
     else:
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, section, session_type, '
-            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_name), semester, specialization)), '
+            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(id, program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('room_id', room_id).eq('archive', False)
 
@@ -9646,7 +9982,7 @@ def export_room_schedule(room_id):
             st_fmt = _format_time(st_raw) or str(st_raw or '')
             et_fmt = _format_time(et_raw) or str(et_raw or '')
             p_info = _rel(row, 'program') or {}
-            p_label = p_info.get('program_name') or row.get('program') or ''
+            p_label = p_info.get('program_code') or row.get('program') or ''
             entries.append({
                 'schedule_id': row.get('schedule_id'),
                 'course_code': c.get('course_code') or '',
@@ -9711,7 +10047,7 @@ def export_room_schedule_pdf(room_id):
     user_program_id = _get_user_program_id()
     is_admin = user_role in ('super_admin', 'admin')
     all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_name_by_id(user_program_id) or (all_programs[0].get('program_name') if all_programs else '')
+    default_prog = program or _find_program_code_by_id(user_program_id) or (all_programs[0].get('program_code') if all_programs else '')
     if is_admin:
         if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
             program_filter = default_prog
@@ -9784,7 +10120,7 @@ def export_room_schedule_pdf(room_id):
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, section, session_type, '
             'prepared_by_name, prepared_by_title, '
-            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(id, program_name), semester, specialization)), '
+            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(id, program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('room_id', room_id).eq('archive', False)
 
@@ -9818,7 +10154,7 @@ def export_room_schedule_pdf(room_id):
 
             r_prog_id = row.get('program_id')
             p_info = _rel(row, 'program') or {}
-            r_prog_name = p_info.get('program_name') or row.get('program') or ''
+            r_prog_name = p_info.get('program_code') or row.get('program') or ''
 
             norm_role = _normalize_role(user_role)
             is_viewer = norm_role == 'viewer'
@@ -10000,7 +10336,7 @@ def schedules():
     norm_role = _normalize_role(session.get('role', ''))
     is_admin = norm_role == ROLE_ADMIN
     is_viewer = norm_role == ROLE_VIEWER
-    can_pick_program = is_admin
+    can_pick_program = is_admin or is_viewer
     all_programs = _get_programs(include_archived=False)
     fetch_error = None
     no_active_schedule = False
@@ -10016,7 +10352,8 @@ def schedules():
     if not default_pid and all_programs:
         default_pid = all_programs[0].get('id')
 
-    if is_viewer:
+    if not can_pick_program:
+        # Scheduler (Chair): scoped to their own program; a program is REQUIRED.
         if not user_program_id:
             return render_template(
                 'schedules.html',
@@ -10031,17 +10368,10 @@ def schedules():
                 program_filter="",
                 can_pick_program=False,
                 is_admin=False,
-                is_viewer=True,
+                is_viewer=False,
+                is_chair=True,
                 schedule_metadata={}
             )
-        effective_program_id = user_program_id
-        if program_arg_present and program_filter and program_filter.lower() != 'all':
-            target_pid = _find_program_id_by_name(program_filter)
-            if target_pid and int(target_pid) != int(effective_program_id):
-                return access_denied({ROLE_VIEWER})
-        program_filter = _find_program_name_by_id(effective_program_id) or program
-        programs = [{'id': effective_program_id, 'program_name': program_filter}]
-    elif not can_pick_program:
         effective_program_id = default_pid
         if program_arg_present and program_filter and program_filter.lower() != 'all':
             target_pid = _find_program_id_by_name(program_filter)
@@ -10050,14 +10380,23 @@ def schedules():
                 return access_denied({ROLE_CHAIR})
             elif not effective_program_id and program and program_filter.strip().upper() != program.strip().upper():
                 return access_denied({ROLE_CHAIR})
-        program_filter = _find_program_name_by_id(effective_program_id) or program or (all_programs[0].get('program_name') if all_programs else '')
+        program_filter = _find_program_code_by_id(effective_program_id) or program or (all_programs[0].get('program_code') if all_programs else '')
         if effective_program_id:
             programs = [p for p in all_programs if str(p.get('id')) == str(effective_program_id)]
             if not programs:
-                programs = [{'id': effective_program_id, 'program_name': program_filter}]
+                programs = [{'id': effective_program_id, 'program_code': program_filter}]
         else:
             programs = []
+    elif is_viewer:
+        # Viewer: read-only across ALL programs; may narrow via the program filter.
+        if program_arg_present and program_filter and program_filter.lower() not in ('all', 'all programs', 'none', ''):
+            effective_program_id = _find_program_id_by_name(program_filter)
+        else:
+            effective_program_id = None
+        programs = all_programs
+        program_filter = _find_program_code_by_id(effective_program_id) if effective_program_id else 'All Programs'
     else:
+        # Admin: may pick any program (defaults to a single program).
         if program_arg_present and program_filter and program_filter.lower() != 'all':
             target_pid = _find_program_id_by_name(program_filter)
             if target_pid:
@@ -10066,7 +10405,7 @@ def schedules():
                 effective_program_id = default_pid
         else:
             effective_program_id = default_pid
-        program_filter = _find_program_name_by_id(effective_program_id) or (all_programs[0].get('program_name') if all_programs else '')
+        program_filter = _find_program_code_by_id(effective_program_id) or (all_programs[0].get('program_code') if all_programs else '')
         programs = all_programs
 
     # ------------------------------------------------------------------
@@ -10098,7 +10437,7 @@ def schedules():
         # Use outer join on professor_load so unplaced TBA rows (professor_load_id IS NULL) are included
         sched_cols = (
             'schedule_id, professor_load_id, section, day, class_start, class_end, session_type, room_id, archive_batch_id, school_year, is_used, '
-            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(program_name), semester, specialization)), '
+            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(program_code), semester, specialization)), '
             'room(room_name)'
         )
         query = supabase.table('schedule').select(sched_cols).eq('archive', False)
@@ -10106,6 +10445,8 @@ def schedules():
         # Backend program filter (via the linked course; no new schedule columns)
         if effective_program_id:
             query = query.eq('professor_load.course.program_id', effective_program_id)
+        elif is_viewer:
+            pass  # Viewer "All Programs": no program filter
         else:
             query = query.eq('professor_load.course.program_id', -1)
 
@@ -10349,7 +10690,7 @@ def view_schedule(section_name):
     else:
         query = supabase.table('schedule').select(
             'schedule_id, day, class_start, class_end, session_type, professor_load_id, room_id, '
-            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(program_name), semester, specialization)), '
+            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('section', section_name).eq('archive', False)
 
@@ -10425,7 +10766,7 @@ def view_schedule(section_name):
 
     user_prog_id = _get_user_program_id()
     try:
-        rooms = (supabase.table('room').select('room_id, room_name, room_type').execute().data) or []
+        rooms = (supabase.table('room').select('room_id, room_name, room_type').eq('archive', False).execute().data) or []
     except Exception:
         rooms = []
 
@@ -10539,7 +10880,7 @@ def export_section_schedule(section_name):
     else:
         query = supabase.table('schedule').select(
             'schedule_id, day, class_start, class_end, session_type, professor_load_id, room_id, '
-            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(program_name), semester, specialization)), '
+            'professor_load!inner(id, course_id, professor_name, course!inner(course_id, course_code, program_id, program:program_id(program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('section', section_name).eq('archive', False)
 
@@ -10695,7 +11036,7 @@ def export_section_schedule_pdf(section_name):
         query = supabase.table('schedule').select(
             'schedule_id, day, class_start, class_end, session_type, professor_load_id, room_id, '
             'prepared_by_name, prepared_by_title, '
-            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(program_name), semester, specialization)), '
+            'professor_load(id, course_id, professor_name, course(course_id, course_code, program_id, program:program_id(program_code), semester, specialization)), '
             'room(room_name)'
         ).eq('section', section_name).eq('archive', False)
 
@@ -10724,7 +11065,7 @@ def export_section_schedule_pdf(section_name):
             et_fmt = _format_time(et_raw) or str(et_raw or '')
             r_prog_id = row.get('program_id')
             p_info = _rel(row, 'program') or {}
-            r_prog_name = p_info.get('program_name') or row.get('program') or ''
+            r_prog_name = p_info.get('program_code') or row.get('program') or ''
 
             prep_name, prep_title = _preparer_display_details(row, r_prog_name or program)
 
@@ -11055,7 +11396,7 @@ def edit_schedule_entry(schedule_id):
     try:
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, session_type, section, '
-            'professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_name)))'
+            'professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_code)))'
         ).eq('schedule_id', schedule_id).eq('archive', False)
         user_prog_id = _get_user_program_id()
         if user_role not in ('super_admin', 'admin') and user_prog_id:
@@ -11289,15 +11630,14 @@ def archive_working_hours(working_hours_id):
         ts_row = ts_rows[0]
         day_name = ts_row.get('day') or ts_row.get('start_day')
 
-        # Safety check: block if the active schedule has sessions on this day
-        if day_name:
-            in_sched = supabase.table('schedule').select('schedule_id').eq('day', day_name).eq('archive', False).limit(1).execute()
-            if in_sched.data:
-                msg = f"Cannot archive {day_name} because the active schedule has sessions on this day."
-                if is_ajax:
-                    return jsonify({'success': False, 'message': msg}), 400
-                flash(msg, 'danger')
-                return redirect(url_for('working_hours'))
+        # Safety check: only the currently ACTIVE schedule blocks. Archived
+        # schedules never do.
+        if day_name and _has_active_schedule(day=day_name):
+            msg = f"Cannot archive {day_name} because the currently active schedule has sessions on this day."
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg}), 400
+            flash(msg, 'danger')
+            return redirect(url_for('working_hours'))
 
         supabase.table('working_hours').update({'archive': True}).eq('working_hours_id', working_hours_id).execute()
         _set_delete_request_status({'item_type': 'working_hours', 'item_id': str(working_hours_id), 'status': 'pending'}, 'approved')
@@ -11565,9 +11905,9 @@ def manage_irregular_student_schedule(student_id):
     # Available courses for the student's program, filtered in Python by semester/year level
     stud_prog_id = _find_program_id_by_name(student.get('program'))
     if stud_prog_id:
-        program_courses = (supabase.table('course').select('*, program:program_id(id, program_name)').eq('program_id', stud_prog_id).execute().data) or []
+        program_courses = (supabase.table('course').select('*, program:program_id(id, program_code)').eq('program_id', stud_prog_id).execute().data) or []
     else:
-        program_courses = (supabase.table('course').select('*, program:program_id(id, program_name)').execute().data) or []
+        program_courses = (supabase.table('course').select('*, program:program_id(id, program_code)').execute().data) or []
     available_courses = []
     for c in program_courses:
         if semester_filter:
@@ -12131,7 +12471,7 @@ def generate_schedule():
             return redirect(url_for('generate_schedule'))
 
         # Fetch curriculum for all four year levels for this semester
-        query = supabase.table('course').select('*, program:program_id(id, program_name)').eq('semester', standard_semester).eq('archive', False)
+        query = supabase.table('course').select('*, program:program_id(id, program_code)').eq('semester', standard_semester).eq('archive', False)
         if user_prog_id:
             query = query.eq('program_id', user_prog_id)
         elif program:
@@ -12141,7 +12481,7 @@ def generate_schedule():
 
         all_courses = query.order('year_level').order('course_code').execute().data or []
         if not all_courses:
-            all_c = (supabase.table('course').select('*, program:program_id(id, program_name)').eq('archive', False).execute().data) or []
+            all_c = (supabase.table('course').select('*, program:program_id(id, program_code)').eq('archive', False).execute().data) or []
             if user_prog_id:
                 all_courses = [c for c in all_c if str(c.get('semester') or '').strip().lower() == standard_semester.lower() and c.get('program_id') == user_prog_id]
             else:
@@ -12149,15 +12489,15 @@ def generate_schedule():
 
         for c in all_courses:
             p_rel = _rel(c, 'program') or {}
-            c['program_name'] = p_rel.get('program_name') or program or ''
-            c['program'] = c['program_name']
+            c['program_code'] = p_rel.get('program_code') or program or ''
+            c['program'] = c['program_code']
 
         if not all_courses:
             flash(f"No courses found for {standard_semester}. Please ask an Administrator to configure them.", 'warning')
             return redirect(url_for('generate_schedule'))
 
-        # Group and deduplicate courses by year_level (1, 2, 3, 4)
-        courses_by_year = {1: [], 2: [], 3: [], 4: []}
+        # Group and deduplicate courses by year_level, derived from the data.
+        courses_by_year = {}
         for c in all_courses:
             try:
                 yl = int(c.get('year_level') or 1)
@@ -12428,7 +12768,7 @@ def generate_schedule():
                 continue
             is_same = False
             ex_pid = existing.get('program_id')
-            ex_prog = existing.get('program') or existing.get('program_name')
+            ex_prog = existing.get('program') or existing.get('program_code')
             if current_program_id and ex_pid is not None:
                 is_same = (str(ex_pid) == str(current_program_id))
             elif program and ex_prog:
@@ -13887,7 +14227,7 @@ def confirm_preview():
             if not other_active_rows:
                 try:
                     other_active_q = supabase.table('schedule').select(
-                        'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load!inner(prof_id, professor_key, course!inner(program_id, semester, program:program_id(program_name)))'
+                        'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load!inner(prof_id, professor_key, course!inner(program_id, semester, program:program_id(program_code)))'
                     ).eq('archive', False)
                     raw_other = other_active_q.execute().data or []
                     for o in raw_other:
@@ -14176,7 +14516,7 @@ def archive_schedule():
     else:
         effective_prog_id = req_prog_id or user_prog_id
 
-    effective_prog_name = _find_program_name_by_id(effective_prog_id) if effective_prog_id else (user_program or 'All Programs')
+    effective_prog_name = _find_program_code_by_id(effective_prog_id) if effective_prog_id else (user_program or 'All Programs')
 
     archived_by = session.get('username') or session.get('first_name') or 'Chair'
     if session.get('last_name'):
@@ -14288,7 +14628,7 @@ def schedule_archive():
     user_program = session.get('program', '')
     all_programs = _get_programs(include_archived=False)
 
-    default_prog = user_program or (all_programs[0].get('program_name') if all_programs else 'BSIT')
+    default_prog = user_program or (all_programs[0].get('program_code') if all_programs else 'BSIT')
     if user_role not in ('super_admin', 'admin') and user_program:
         effective_program = user_program
     else:
@@ -14442,7 +14782,7 @@ def schedule_archive():
             while archive_pages < max_archive_pages:
                 archive_pages += 1
                 try:
-                    cols = 'schedule_id, semester, school_year, is_used, program_id, program_name, section, major, archive, archive_batch_id, archived_at, preparer_name, preparer_title'
+                    cols = 'schedule_id, semester, school_year, is_used, program_id, program_code, section, major, archive, archive_batch_id, archived_at, preparer_name, preparer_title'
                     query = supabase.table('schedule_with_semester').select(cols).eq('archive', True)
                     if effective_program_id:
                         query = query.eq('program_id', effective_program_id)
@@ -14460,7 +14800,7 @@ def schedule_archive():
                 except Exception as col_err:
                     logging.warning(f"schedule_with_semester fallback query warning ({col_err}); querying base schedule.")
                     try:
-                        base_cols = 'schedule_id, section, school_year, is_used, archive, archive_batch_id, archived_at, prepared_by_name, prepared_by_title, professor_load!inner(course!inner(program_id, program:program_id(program_name), semester, specialization))'
+                        base_cols = 'schedule_id, section, school_year, is_used, archive, archive_batch_id, archived_at, prepared_by_name, prepared_by_title, professor_load!inner(course!inner(program_id, program:program_id(program_code), semester, specialization))'
                         b_query = supabase.table('schedule').select(base_cols).eq('archive', True)
                         if effective_program_id:
                             b_query = b_query.eq('professor_load.course.program_id', effective_program_id)
@@ -14477,7 +14817,7 @@ def schedule_archive():
                             cr['major'] = cc.get('specialization') or ''
                             cr['preparer_name'], cr['preparer_title'] = _preparer_display_details(
                                 cr,
-                                (_rel(cr, 'program') or {}).get('program_name')
+                                (_rel(cr, 'program') or {}).get('program_code')
                             )
                         if semester_filter:
                             chunk_data = [cr for cr in chunk_data if cr.get('semester') == semester_filter]
@@ -14495,7 +14835,7 @@ def schedule_archive():
                 sem = r.get('semester') or '1st Semester'
                 sy = r.get('school_year') or '2026-2027'
                 is_u = _is_used_true(r.get('is_used'))
-                prog = (_rel(r, 'program') or {}).get('program_name') or r.get('program_name') or ''
+                prog = (_rel(r, 'program') or {}).get('program_code') or r.get('program_code') or ''
 
                 if raw_batch_id and str(raw_batch_id).strip() and str(raw_batch_id).strip() != 'None':
                     bid = str(raw_batch_id).strip()
@@ -14595,7 +14935,7 @@ def schedule_archive():
         count_not_used = count_all - count_used
 
         semester_options = list(SEMESTER_CHOICES)
-        program_options = [p['program_name'] for p in all_programs if p.get('program_name')]
+        program_options = [p['program_code'] for p in all_programs if p.get('program_code')]
         if not program_options:
             program_options = ['BSIT']
         if user_program and user_program not in program_options:
@@ -14607,7 +14947,7 @@ def schedule_archive():
         error_message = str(err)
         batches_list = []
         semester_options = list(SEMESTER_CHOICES)
-        program_options = [p['program_name'] for p in all_programs if p.get('program_name')] if all_programs else ['BSIT']
+        program_options = [p['program_code'] for p in all_programs if p.get('program_code')] if all_programs else ['BSIT']
         school_year_options = get_school_year_options()
         count_all = 0
         count_used = 0
@@ -14666,7 +15006,7 @@ def view_schedule_archive_batch(batch_id):
                     query = query.eq('archive_batch_id', batch_id)
             except Exception:
                 query = supabase.table('schedule').select(
-                    '*, professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_name), semester, specialization)), room(room_name)'
+                    '*, professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_code), semester, specialization)), room(room_name)'
                 ).eq('archive', True)
                 if batch_id == 'legacy':
                     query = query.is_('archive_batch_id', 'null')
@@ -14696,7 +15036,7 @@ def view_schedule_archive_batch(batch_id):
         if not rows:
             try:
                 base_q = supabase.table('schedule').select(
-                    '*, professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_name), semester, specialization)), room(room_name)'
+                    '*, professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_code), semester, specialization)), room(room_name)'
                 ).eq('archive', True)
                 if batch_id == 'legacy':
                     base_q = base_q.is_('archive_batch_id', 'null')
@@ -14716,7 +15056,7 @@ def view_schedule_archive_batch(batch_id):
                     _attach_schedule_program(r)
                     r['preparer_name'], r['preparer_title'] = _preparer_display_details(
                         r,
-                        (_rel(r, 'program') or {}).get('program_name')
+                        (_rel(r, 'program') or {}).get('program_code')
                     )
                     if not r.get('semester'):
                         cpl = _rel(r, 'professor_load') or {}
@@ -14737,7 +15077,7 @@ def view_schedule_archive_batch(batch_id):
         arch_at_raw = first_row.get('archived_at')
         arch_at_fmt = 'Legacy Archive' if batch_id == 'legacy' or not arch_at_raw else _format_pht_timestamp(arch_at_raw)
 
-        prog_name = (_rel(first_row, 'program') or {}).get('program_name') or first_row.get('program_name') or ''
+        prog_name = (_rel(first_row, 'program') or {}).get('program_code') or first_row.get('program_code') or ''
 
         batch_info = {
             'batch_id': batch_id,
@@ -14860,7 +15200,7 @@ def restore_schedule_archive(batch_id):
     try:
         # Query batch items to verify existence, program ownership, and conflicts
         items_q = supabase.table('schedule').select(
-            'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load!inner(id, professor_name, course!inner(program_id, program:program_id(program_name), semester))'
+            'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load!inner(id, professor_name, course!inner(program_id, program:program_id(program_code), semester))'
         ).eq('archive', True)
         if batch_id == 'legacy':
             items_q = items_q.is_('archive_batch_id', 'null')
@@ -14877,7 +15217,7 @@ def restore_schedule_archive(batch_id):
         if not batch_items and batch_id != 'legacy' and '__' not in batch_id:
             try:
                 batch_items = supabase.table('schedule').select(
-                    'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load!inner(id, professor_name, course!inner(program_id, program:program_id(program_name), semester))'
+                    'schedule_id, section, room_id, day, class_start, class_end, professor_load_id, professor_load!inner(id, professor_name, course!inner(program_id, program:program_id(program_code), semester))'
                 ).eq('archive', True).or_(f"archive_batch_id.eq.{batch_id},batch_id.eq.{batch_id}").execute().data or []
             except Exception:
                 pass
@@ -14887,6 +15227,20 @@ def restore_schedule_archive(batch_id):
             return redirect(url_for('schedule_archive'))
 
         batch_items = [_attach_schedule_program(row) for row in batch_items]
+
+        # A restored schedule must never silently reference an archived room.
+        # Block with a clear, actionable message rather than reactivating a
+        # schedule that points at a hidden room.
+        archived_room_names = _archived_room_names([b.get('room_id') for b in batch_items])
+        if archived_room_names:
+            names = ', '.join(archived_room_names[:5])
+            flash(
+                f"Cannot restore schedule: it uses archived room(s): {names}. "
+                "Unarchive the room(s) first, then restore this version.",
+                'warning'
+            )
+            return redirect(url_for('schedule_archive'))
+
         batch_scopes = {
             (
                 str(row.get('program_id')) if row.get('program_id') is not None else None,
@@ -14918,7 +15272,7 @@ def restore_schedule_archive(batch_id):
         # Conflict check against other programs' active schedules before restore
         try:
             other_act_q = supabase.table('schedule').select(
-                'schedule_id, section, room_id, day, class_start, class_end, professor_load!inner(id, professor_name, course!inner(program_id, program:program_id(program_name), semester))'
+                'schedule_id, section, room_id, day, class_start, class_end, professor_load!inner(id, professor_name, course!inner(program_id, program:program_id(program_code), semester))'
             ).eq('archive', False)
             other_act_rows = other_act_q.execute().data or []
             other_act_rows = [_attach_schedule_program(row) for row in other_act_rows]
@@ -14973,7 +15327,7 @@ def restore_schedule_archive(batch_id):
             logging.warning(f"Error checking conflicts in restore_schedule_archive: {conf_err}")
 
         # Resolve target semester and program name for this batch
-        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_name').eq('archive', True)
+        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_code').eq('archive', True)
         if batch_id == 'legacy':
             sample_q = sample_q.is_('archive_batch_id', 'null')
         elif '__' in batch_id:
@@ -14989,12 +15343,12 @@ def restore_schedule_archive(batch_id):
         sample_rows = (sample_q.limit(1).execute().data if hasattr(sample_q, 'limit') else sample_q.execute().data) or []
         target_sem = batch_semester
         target_prog_id = batch_prog_id or user_prog_id
-        target_prog_name = (sample_rows[0].get('program_name') if sample_rows else None) or ''
+        target_prog_name = (sample_rows[0].get('program_code') if sample_rows else None) or ''
         if target_prog_id is None:
             flash('Cannot restore schedule: Its program cannot be determined from the linked course.', 'warning')
             return redirect(url_for('schedule_archive'))
         if not target_prog_name and target_prog_id:
-            target_prog_name = _find_program_name_by_id(target_prog_id) or f"Program {target_prog_id}"
+            target_prog_name = _find_program_code_by_id(target_prog_id) or f"Program {target_prog_id}"
 
         # Rule: A restore must never leave two active schedules for the same program and semester.
         # If an active schedule already exists for that program and semester, block the restore with a clear message.
@@ -15205,7 +15559,7 @@ def delete_schedule_archive(batch_id):
 
     try:
         # Resolve batch details for logging
-        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_name').eq('archive', True)
+        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_code').eq('archive', True)
         if batch_id == 'legacy':
             sample_q = sample_q.is_('archive_batch_id', 'null')
         elif '__' in batch_id:
@@ -15219,7 +15573,7 @@ def delete_schedule_archive(batch_id):
 
         sample_rows = (sample_q.limit(1).execute().data if hasattr(sample_q, 'limit') else sample_q.execute().data) or []
         target_sem = (sample_rows[0].get('semester') if sample_rows else None) or 'Unknown Semester'
-        target_prog = (sample_rows[0].get('program_name') if sample_rows else None) or 'All Programs'
+        target_prog = (sample_rows[0].get('program_code') if sample_rows else None) or 'All Programs'
 
         del_q = supabase.table('schedule').delete().eq('archive', True)
         if batch_id == 'legacy':

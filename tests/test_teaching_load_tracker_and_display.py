@@ -88,7 +88,7 @@ def test_client_and_db(monkeypatch):
         {'id': 7, 'course_id': 103, 'sections': 1, 'professor_name': 'Grace Hopper', 'program_id': 1},
     ]
 
-    programs = [{'id': 1, 'program_name': 'BSIT'}]
+    programs = [{'id': 1, 'program_code': 'BSIT'}]
 
     tables = {
         'course': MockTable('course', courses),

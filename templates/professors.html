@@ -61,7 +61,7 @@
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="program_ids" value="{{ p.id }}" id="add_prog_{{ p.id }}" {% if loop.first %}checked{% endif %}>
                         <label class="form-check-label" for="add_prog_{{ p.id }}">
-                            {{ p.program_name }}
+                            {{ p.program_code }}
                         </label>
                     </div>
                     {% endfor %}
@@ -122,8 +122,8 @@
                             {% for lp in professor.linked_programs %}
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">{{ lp.name }}</span>
                             {% endfor %}
-                        {% elif professor.program_name %}
-                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">{{ professor.program_name }}</span>
+                        {% elif professor.program_code %}
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">{{ professor.program_code }}</span>
                         {% else %}
                             <span class="text-muted small">-</span>
                         {% endif %}
@@ -202,7 +202,7 @@
                             <div class="form-check">
                                 <input class="form-check-input edit-prog-checkbox" type="checkbox" name="program_ids" value="{{ p.id }}" id="edit_prog_{{ p.id }}">
                                 <label class="form-check-label" for="edit_prog_{{ p.id }}">
-                                    {{ p.program_name }}
+                                    {{ p.program_code }}
                                 </label>
                             </div>
                             {% endfor %}

@@ -107,8 +107,8 @@ class MockSupabase:
     def __init__(self):
         self.tables = {
             'program': MockTable('program', [
-                {'id': 1, 'program_name': 'BSIT'},
-                {'id': 2, 'program_name': 'BSBA'},
+                {'id': 1, 'program_code': 'BSIT'},
+                {'id': 2, 'program_code': 'BSBA'},
             ]),
             'room': MockTable('room', [
                 {'room_id': 1, 'room_name': 'Lab 101', 'room_type': 'Laboratory Room', 'program_id': 1},

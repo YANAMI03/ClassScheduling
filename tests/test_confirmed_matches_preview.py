@@ -132,12 +132,17 @@ def test_verify_staged_vs_saved_detects_section_renumbering():
 # 2. Specialized Term with 2 Tracks & IT-IAS Taught by 2 Professors
 # ---------------------------------------------------------------------------
 
-def test_specialized_term_dst_section_count_equals_two():
+def test_specialized_term_dst_section_count_equals_two(monkeypatch):
     """
     Test specialized term with DST (2 sections) and WST (3 sections),
     where IT-IAS02 (General) is taught across sections by 2 different professors.
     Assert that saved section count equals preview section count (DST=2, WST=3).
     """
+    monkeypatch.setattr(app_module, '_get_specializations', lambda include_archived=True: [
+        {'specialization_id': 1, 'name': 'Database Systems', 'code': 'DST', 'archive': False},
+        {'specialization_id': 2, 'name': 'Web Systems', 'code': 'WST', 'archive': False},
+        {'specialization_id': 3, 'name': 'Networking', 'code': 'NST', 'archive': False},
+    ])
     # 2 sections for Database Systems: 3A-Database Systems, 3B-Database Systems
     # 3 sections for Web Systems: 3A-Web Systems, 3B-Web Systems, 3C-Web Systems
     staged_preview = []

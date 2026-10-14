@@ -9,21 +9,6 @@
 {% endblock %}
 
 {% block content %}
-{% set year1 = [] %}
-{% set year2 = [] %}
-{% set year3 = [] %}
-{% set year4 = [] %}
-{% for c in courses %}
-    {% if c.year_level|string == '1' %}
-        {% set _ = year1.append(c) %}
-    {% elif c.year_level|string == '2' %}
-        {% set _ = year2.append(c) %}
-    {% elif c.year_level|string == '3' %}
-        {% set _ = year3.append(c) %}
-    {% elif c.year_level|string == '4' %}
-        {% set _ = year4.append(c) %}
-    {% endif %}
-{% endfor %}
 
 <div class="page-header">
     <div>
@@ -86,7 +71,7 @@
                 <select name="program_id" id="add_program_id" class="form-select" required>
                     <option value="" disabled {% if not active_program_id %}selected{% endif %}>Select Program</option>
                     {% for p in programs %}
-                    <option value="{{ p.id }}" {% if active_program_id and active_program_id|string == p.id|string %}selected{% endif %}>{{ p.program_name }}</option>
+                    <option value="{{ p.id }}" {% if active_program_id and active_program_id|string == p.id|string %}selected{% endif %}>{{ p.program_code }}</option>
                     {% endfor %}
                 </select>
                 {% else %}
@@ -98,7 +83,7 @@
                 {% endfor %}
                 <input type="hidden" name="program_id" value="{{ user_program_id or '' }}">
                 <select class="form-select" disabled>
-                    <option selected>{{ sched_p.program_name if sched_p else (program or 'Assigned Program') }}</option>
+                    <option selected>{{ sched_p.program_code if sched_p else (program or 'Assigned Program') }}</option>
                 </select>
                 {% endif %}
             </div>
@@ -166,7 +151,7 @@
             <li class="nav-item">
                 <a class="nav-link {% if selected_program == p.id|string %}active{% endif %}" 
                    href="/courses?program={{ p.id }}" id="program-tab-{{ p.id }}">
-                    <i class="bx bx-book-open me-1"></i> {{ p.program_name }}
+                    <i class="bx bx-book-open me-1"></i> {{ p.program_code }}
                     <span class="badge ms-1">{{ program_counts.get(p.id|string, 0) }}</span>
                 </a>
             </li>
@@ -180,7 +165,7 @@
             {% endfor %}
             <li class="nav-item">
                 <span class="nav-link active" id="program-tab-scheduler" style="cursor: default;">
-                    <i class="bx bx-book-open me-1"></i> {{ sched_p.program_name if sched_p else (program or 'Assigned Program') }}
+                    <i class="bx bx-book-open me-1"></i> {{ sched_p.program_code if sched_p else (program or 'Assigned Program') }}
                     <span class="badge ms-1">{{ program_counts.get(user_program_id|string, counts.all) }}</span>
                 </span>
             </li>
@@ -196,30 +181,14 @@
                     <span class="badge ms-1">{{ counts.all }}</span>
                 </button>
             </li>
+            {% for yt in course_year_tabs %}
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-year1-btn" data-bs-toggle="pill" data-bs-target="#tab-year1" type="button" role="tab" aria-controls="tab-year1" aria-selected="false">
-                    <i class="bx bx-layer me-1"></i> 1st Year
-                    <span class="badge ms-1">{{ counts["1st"] }}</span>
+                <button class="nav-link" id="tab-year{{ yt.value }}-btn" data-bs-toggle="pill" data-bs-target="#tab-year{{ yt.value }}" type="button" role="tab" aria-controls="tab-year{{ yt.value }}" aria-selected="false">
+                    <i class="bx bx-layer me-1"></i> {{ yt.label }}
+                    <span class="badge ms-1">{{ yt.count }}</span>
                 </button>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-year2-btn" data-bs-toggle="pill" data-bs-target="#tab-year2" type="button" role="tab" aria-controls="tab-year2" aria-selected="false">
-                    <i class="bx bx-layer me-1"></i> 2nd Year
-                    <span class="badge ms-1">{{ counts["2nd"] }}</span>
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-year3-btn" data-bs-toggle="pill" data-bs-target="#tab-year3" type="button" role="tab" aria-controls="tab-year3" aria-selected="false">
-                    <i class="bx bx-layer me-1"></i> 3rd Year
-                    <span class="badge ms-1">{{ counts["3rd"] }}</span>
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-year4-btn" data-bs-toggle="pill" data-bs-target="#tab-year4" type="button" role="tab" aria-controls="tab-year4" aria-selected="false">
-                    <i class="bx bx-layer me-1"></i> 4th Year
-                    <span class="badge ms-1">{{ counts["4th"] }}</span>
-                </button>
-            </li>
+            {% endfor %}
         </ul>
 
         <div class="d-flex flex-wrap align-items-center gap-2">
@@ -228,7 +197,7 @@
                 <select id="programFilter" class="form-select form-select-sm" onchange="location.href='/courses?program=' + encodeURIComponent(this.value)">
                     <option value="all" {% if not selected_program or selected_program.lower() == 'all' %}selected{% endif %}>All Programs</option>
                     {% for p in programs %}
-                    <option value="{{ p.id }}" {% if selected_program == p.id|string or selected_program == p.program_name %}selected{% endif %}>{{ p.program_name }}</option>
+                    <option value="{{ p.id }}" {% if selected_program == p.id|string or selected_program == p.program_code %}selected{% endif %}>{{ p.program_code }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -306,7 +275,7 @@
                     <td>{{ course.semester or '—' }}</td>
                     {% if can_edit_courses %}
                     <td class="text-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_code}}" data-course-code="{{course.course_code}}" data-course-name="{{course.course_name or ''}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program-id="{{course.program_id or ''}}" data-program="{{course.program or course.program_name or ''}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-specialization-id="{{course.specialization_id or ''}}" data-semester="{{course.semester or ''}}">
+                        <button type="button" class="btn btn-outline-secondary btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#editModal" data-id="{{course.course_id}}" data-name="{{course.course_code}}" data-course-code="{{course.course_code}}" data-course-name="{{course.course_name or ''}}" data-units="{{course.units if course.units is not none else ''}}" data-lecture="{{course.lecture_hours}}" data-lab="{{course.lab_hours}}" data-ilp="{{course.ilp_hours or 0}}" data-program-id="{{course.program_id or ''}}" data-program="{{course.program or course.program_code or ''}}" data-yearlevel="{{course.year_level}}" data-specialization="{{course.specialization or course.major or ''}}" data-specialization-id="{{course.specialization_id or ''}}" data-semester="{{course.semester or ''}}">
                             <i class="bx bx-edit"></i> Edit
                         </button>
                         {% if show_archived %}
@@ -354,18 +323,11 @@
         <div class="tab-pane fade show active" id="tab-all" role="tabpanel" aria-labelledby="tab-all-btn">
             {{ render_course_table(courses, "No courses added yet", show_major=True) }}
         </div>
-        <div class="tab-pane fade" id="tab-year1" role="tabpanel" aria-labelledby="tab-year1-btn">
-            {{ render_course_table(year1, "No 1st year courses found", show_major=False) }}
+        {% for yt in course_year_tabs %}
+        <div class="tab-pane fade" id="tab-year{{ yt.value }}" role="tabpanel" aria-labelledby="tab-year{{ yt.value }}-btn">
+            {{ render_course_table(yt.courses, "No " ~ yt.label|lower ~ " courses found", show_major=True) }}
         </div>
-        <div class="tab-pane fade" id="tab-year2" role="tabpanel" aria-labelledby="tab-year2-btn">
-            {{ render_course_table(year2, "No 2nd year courses found", show_major=False) }}
-        </div>
-        <div class="tab-pane fade" id="tab-year3" role="tabpanel" aria-labelledby="tab-year3-btn">
-            {{ render_course_table(year3, "No 3rd year courses found", show_major=True) }}
-        </div>
-        <div class="tab-pane fade" id="tab-year4" role="tabpanel" aria-labelledby="tab-year4-btn">
-            {{ render_course_table(year4, "No 4th year courses found", show_major=True) }}
-        </div>
+        {% endfor %}
     </div>
 </div>
 {% endblock %}
@@ -402,7 +364,7 @@
                             <select name="program_id" id="edit_program_id" class="form-select" required>
                                 <option value="" disabled>Select Program</option>
                                 {% for p in programs %}
-                                <option value="{{ p.id }}">{{ p.program_name }}</option>
+                                <option value="{{ p.id }}">{{ p.program_code }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -466,40 +428,15 @@ $(function(){
     $('#editModal').appendTo("body");
     {% endif %}
     
-    // Specialization stage comes from the backend (single source of truth).
+    // Specializations are available at every year level and semester, so the
+    // picker is always shown. Blank means General (specialization_id = NULL).
     var SPEC_STAGE = {{ specialization_stage|tojson }};
     var GENERAL_LABEL = (SPEC_STAGE && SPEC_STAGE.general_label) || 'General';
-    function isSpecializationRequired(year, semester) {
-        year = String(year || '').trim();
-        semester = String(semester || '').trim().toLowerCase();
-        return ((SPEC_STAGE && SPEC_STAGE.stage) || []).some(function (s) {
-            return String(s.year_level) === year && String(s.semester).trim().toLowerCase() === semester;
-        });
-    }
-    
+
     function toggleSpecializationField(yearSelect, semesterSelect, specField, preserveValue) {
-        var year = String(yearSelect.val() || '').trim();
-        var semester = String(semesterSelect.val() || '').trim();
-        var required = isSpecializationRequired(year, semester);
         var selectEl = specField.find('select');
         selectEl.prop('required', false);
-        
-        if (required) {
-            specField.show();
-        } else {
-            if (preserveValue && selectEl.val()) {
-                specField.show();
-            } else if (year === '1' || year === '2') {
-                specField.hide();
-                selectEl.val('');
-            } else {
-                if (selectEl.val()) {
-                    specField.show();
-                } else {
-                    specField.hide();
-                }
-            }
-        }
+        specField.show();
     }
     
     // Add Course form

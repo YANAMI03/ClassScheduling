@@ -356,14 +356,22 @@ def test_generate_schedule_first_semester_with_4th_year_major_sections(monkeypat
         assert 'Networking' in majors
 
 
-def test_group_preview_sections_collapsible_blocks():
+_TEST_SPECS = [
+    {'specialization_id': 1, 'name': 'Database Systems', 'code': 'DST', 'archive': False},
+    {'specialization_id': 2, 'name': 'Web Systems', 'code': 'WST', 'archive': False},
+    {'specialization_id': 3, 'name': 'Networking', 'code': 'NST', 'archive': False},
+]
+
+
+def test_group_preview_sections_collapsible_blocks(monkeypatch):
+    monkeypatch.setattr(app_module, '_get_specializations', lambda include_archived=True: _TEST_SPECS)
     sections_with_entries = [
         {'section': {'section_name': '1A', 'major': None}, 'entries': []},
         {'section': {'section_name': '1B', 'major': None}, 'entries': []},
         {'section': {'section_name': '2A', 'major': None}, 'entries': []},
         {'section': {'section_name': '3A', 'major': None}, 'entries': []},
         {'section': {'section_name': '4A WST', 'major': 'WST'}, 'entries': []},
-        {'section': {'section_name': '4B WST', 'major': 'Web Development'}, 'entries': []},
+        {'section': {'section_name': '4B WST', 'major': 'Web Systems'}, 'entries': []},
         {'section': {'section_name': '4A DST', 'major': 'DST'}, 'entries': []},
         {'section': {'section_name': '4A NST', 'major': 'NST'}, 'entries': []},
     ]
@@ -402,14 +410,15 @@ def test_time_formatting_preserves_pm_and_am():
     assert app_module._format_time('00:00:00') == '12:00 AM'
 
 
-def test_group_preview_sections_filter_by_year_and_major():
+def test_group_preview_sections_filter_by_year_and_major(monkeypatch):
+    monkeypatch.setattr(app_module, '_get_specializations', lambda include_archived=True: _TEST_SPECS)
     sections_with_entries = [
         {'section': {'section_name': '1A', 'major': None}, 'entries': []},
         {'section': {'section_name': '2A', 'major': None}, 'entries': []},
         {'section': {'section_name': '3A', 'major': None}, 'entries': []},
-        {'section': {'section_name': '4A WST', 'major': 'Web Development'}, 'entries': []},
+        {'section': {'section_name': '4A WST', 'major': 'Web Systems'}, 'entries': []},
         {'section': {'section_name': '4A DST', 'major': 'Database Systems'}, 'entries': []},
-        {'section': {'section_name': '4A NST', 'major': 'Network Systems'}, 'entries': []},
+        {'section': {'section_name': '4A NST', 'major': 'Networking'}, 'entries': []},
     ]
 
     g_yr1 = app_module._group_preview_sections(sections_with_entries, year_filter='1')
@@ -522,7 +531,8 @@ def test_confirm_preview_fallback_deletes_scope_and_inserts(monkeypatch):
         assert session['generated_sections'][0]['major'] == 'Database Systems'
 
 
-def test_group_preview_sections_third_year_majors():
+def test_group_preview_sections_third_year_majors(monkeypatch):
+    monkeypatch.setattr(app_module, '_get_specializations', lambda include_archived=True: _TEST_SPECS)
     sample_sections = [
         {
             'section': {'section': '1A', 'section_name': '1A', 'major': None},
@@ -533,8 +543,8 @@ def test_group_preview_sections_third_year_majors():
             'entries': [{'section': '2A', 'course_code': 'IT201', 'year_level': '2'}]
         },
         {
-            'section': {'section': '3A-WEB', 'section_name': '3A-WEB', 'major': 'Web Development'},
-            'entries': [{'section': '3A-WEB', 'course_code': 'IT301-WEB', 'year_level': '3', 'major': 'Web Development'}]
+            'section': {'section': '3A-WEB', 'section_name': '3A-WEB', 'major': 'Web Systems'},
+            'entries': [{'section': '3A-WEB', 'course_code': 'IT301-WEB', 'year_level': '3', 'major': 'Web Systems'}]
         },
         {
             'section': {'section': '3A-DB', 'section_name': '3A-DB', 'major': 'Database Systems'},
