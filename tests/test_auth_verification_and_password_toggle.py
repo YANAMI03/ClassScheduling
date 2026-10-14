@@ -315,7 +315,7 @@ def test_auth_callback_client_hash_post(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_password_eye_toggles_structure_in_login_template():
-    """Verify HTML structure, button type, Boxicons, accessibility, and autocomplete attributes."""
+    """Verify HTML structure, button type, Bootstrap Icons, accessibility, and autocomplete attributes."""
     client = app_module.app.test_client()
     resp = client.get('/login')
     assert resp.status_code == 200
@@ -336,7 +336,7 @@ def test_password_eye_toggles_structure_in_login_template():
     assert login_btn.get('type') == 'button'  # Never submits form
     assert login_btn.get('aria-label') == 'Show password'
     assert login_btn.get('aria-pressed') == 'false'
-    assert login_btn.find('i', class_='bx-show') is not None
+    assert login_btn.find('i', class_='bi-eye') is not None
 
     # 2. Signup password
     signup_pwd = soup.find('input', {'id': 'signupPassword'})
@@ -349,7 +349,7 @@ def test_password_eye_toggles_structure_in_login_template():
     signup_btn = signup_wrapper.find('button', class_='password-toggle-btn')
     assert signup_btn is not None
     assert signup_btn.get('type') == 'button'
-    assert signup_btn.find('i', class_='bx-show') is not None
+    assert signup_btn.find('i', class_='bi-eye') is not None
 
     # 3. Signup confirm password
     confirm_pwd = soup.find('input', {'id': 'confirmPassword'})
@@ -362,7 +362,7 @@ def test_password_eye_toggles_structure_in_login_template():
     confirm_btn = confirm_wrapper.find('button', class_='password-toggle-btn')
     assert confirm_btn is not None
     assert confirm_btn.get('type') == 'button'
-    assert confirm_btn.find('i', class_='bx-show') is not None
+    assert confirm_btn.find('i', class_='bi-eye') is not None
 
 
 def test_login_unconfirmed_email_displays_resend_option(monkeypatch):

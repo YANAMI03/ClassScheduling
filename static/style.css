@@ -694,6 +694,16 @@ a {
     white-space: nowrap;
 }
 
+/*
+ * Used-status badge. Intentionally NOT a Bootstrap display utility: those use
+ * `!important`, which would override the conditional inline `display: none`
+ * and make the "Used" badge visible on schedules that are not used.
+ */
+.badge-used-inline {
+    display: inline-flex;
+    align-items: center;
+}
+
 .badge-primary {
     background: rgba(79, 70, 229, 0.1);
     color: var(--primary);

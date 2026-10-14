@@ -4,565 +4,423 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - Scheduler</title>
+    <title>Login | ClassScheduling | NEUST CICT</title>
+    <meta name="description" content="Sign in to ClassScheduling to manage class schedules, faculty loads, and room allocation.">
+
+    <!-- Fonts: Plus Jakarta Sans (same as the landing page) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/boxicons@latest/css/boxicons.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
-    <style>
-        .login-wrapper {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--body-bg);
-            padding: 1rem;
-        }
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 
-        .login-card {
-            background: var(--card-bg);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow-lg);
-            padding: 2.5rem;
-            width: 100%;
-            max-width: 420px;
-        }
+    <!-- Shared schedule preview card (also used on the landing page) -->
+    <link href="{{ url_for('static', filename='schedule_preview.css') }}" rel="stylesheet">
 
-        .login-card__brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            justify-content: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .login-card__brand i {
-            font-size: 2rem;
-            color: var(--primary);
-        }
-
-        .login-card__brand h3 {
-            font-weight: 700;
-            margin: 0;
-            color: var(--text-primary);
-        }
-
-        .login-card__subtitle {
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            margin-bottom: 1.75rem;
-        }
-
-        .login-card .form-label {
-            font-weight: 500;
-            font-size: 0.875rem;
-            color: var(--text-primary);
-            margin-bottom: 0.375rem;
-        }
-
-        .login-card .form-control {
-            padding: 0.625rem 0.875rem;
-            border-radius: var(--radius-sm);
-            border-color: var(--border-color);
-            font-size: 0.938rem;
-            transition: var(--transition);
-        }
-
-        .login-card .form-control:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-        }
-
-        .login-card .btn-primary {
-            width: 100%;
-            padding: 0.625rem;
-            font-weight: 600;
-            border-radius: var(--radius-sm);
-            font-size: 0.938rem;
-        }
-
-        .login-card .form-control.is-invalid {
-            border-color: #dc2626;
-        }
-
-        .login-helper-text {
-            font-size: 0.8125rem;
-            color: var(--text-secondary);
-            margin-top: -0.5rem;
-            margin-bottom: 0.875rem;
-        }
-
-        .login-error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #dc2626;
-            padding: 0.625rem 1rem;
-            border-radius: var(--radius-sm);
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .login-error i {
-            font-size: 1.125rem;
-            flex-shrink: 0;
-        }
-
-        .login-alert {
-            padding: 0.625rem 1rem;
-            border-radius: var(--radius-sm);
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .login-alert i {
-            font-size: 1.125rem;
-            flex-shrink: 0;
-        }
-
-        .login-alert-success {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            color: #166534;
-        }
-
-        .login-alert-warning {
-            background: #fffbeb;
-            border: 1px solid #fef3c7;
-            color: #92400e;
-        }
-
-        .login-alert-info {
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            color: #1e40af;
-        }
-
-        .login-alert-danger,
-        .login-alert-error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #dc2626;
-        }
-
-        /* Password field with inside toggle button */
-        .password-field-wrapper {
-            position: relative;
-            display: flex;
-            align-items: center;
-            width: 100%;
-        }
-
-        .password-field-wrapper .form-control {
-            padding-right: 2.75rem !important;
-        }
-
-        .password-toggle-btn {
-            position: absolute;
-            right: 0.625rem;
-            top: 50%;
-            transform: translateY(-50%);
-            background: transparent;
-            border: none;
-            padding: 0.25rem;
-            margin: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-secondary);
-            cursor: pointer;
-            border-radius: var(--radius-sm);
-            transition: color 0.15s ease, background-color 0.15s ease;
-            z-index: 5;
-            line-height: 1;
-        }
-
-        .password-toggle-btn:hover {
-            color: var(--text-primary);
-            background-color: rgba(0, 0, 0, 0.04);
-        }
-
-        .password-toggle-btn:focus-visible {
-            outline: 2px solid var(--primary);
-            outline-offset: 2px;
-            color: var(--primary);
-        }
-
-        .password-toggle-btn i {
-            font-size: 1.25rem;
-        }
-
-        .login-toggle {
-            text-align: center;
-            margin-top: 1rem;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-
-        .login-toggle a {
-            color: var(--primary);
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .login-toggle a:hover {
-            text-decoration: underline;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-    </style>
+    <!-- Login page styles -->
+    <link href="{{ url_for('static', filename='login.css') }}" rel="stylesheet">
 </head>
 
 <body>
-    <div class="login-wrapper">
+    <div class="login-page">
         <div class="login-card">
-            <div class="login-card__brand">
-                <i class="bx bx-calendar-alt"></i>
-                <h3>Scheduler</h3>
-            </div>
-            <p class="login-card__subtitle" id="formSubtitle">
-                {% if active_tab == 'signup' %}
-                Create a new account
-                {% elif active_tab == 'resend' %}
-                Request a new verification link
-                {% else %}
-                Login to manage class schedules
+        <div class="row g-0 login-card__row">
+        <!-- ============================= LEFT: FORM ============================= -->
+        <section class="col-12 col-lg-5 login-panel login-panel--form" aria-label="Sign in to ClassScheduling">
+            <a href="{{ url_for('landing') }}" class="login-brand" aria-label="ClassScheduling Home">
+                <span class="login-brand__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                </span>
+                <img src="{{ url_for('static', filename='images/cict_logo.png') }}"
+                     alt="NEUST CICT Logo"
+                     class="login-brand__logo"
+                     onerror="this.style.display='none';"
+                     onload="this.style.display='inline-block'; var prev = this.previousElementSibling; if (prev) prev.style.display='none';">
+                <span class="login-brand__name">ClassScheduling</span>
+            </a>
+
+            <div class="login-panel__content">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                {% set cat = 'danger' if category in ('error', 'danger') else category %}
+                {% if cat not in ('success', 'info', 'warning', 'danger') %}{% set cat = 'info' %}{% endif %}
+                <div class="alert alert-{{ cat }}" role="alert">
+                    <i class="bi {% if cat == 'success' %}bi-check-circle{% elif cat == 'warning' %}bi-exclamation-triangle{% elif cat == 'danger' %}bi-exclamation-circle{% else %}bi-info-circle{% endif %}" aria-hidden="true"></i>
+                    <span>{{ message }}</span>
+                </div>
+                {% endfor %}
                 {% endif %}
-            </p>
+                {% endwith %}
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="login-alert login-alert-{{ category if category != 'error' else 'danger' }}">
-                <i class="bx {% if category in ('success', 'info') %}bx-check-circle{% elif category == 'warning' %}bx-info-circle{% else %}bx-error-circle{% endif %}"></i>
-                <span>{{ message }}</span>
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                    <span>{{ error }}</span>
+                </div>
+                {% endif %}
+
+                <!-- Login Form -->
+                <form method="post" action="{{ url_for('login') }}" id="loginForm" class="{% if active_tab in ('signup', 'resend') %}hidden{% endif %}">
+                    <h1 class="login-title">Welcome back</h1>
+                    <p class="login-subtitle">Sign in to manage class schedules</p>
+
+                    <div class="login-field">
+                        <label for="username" class="login-label">Username or Email</label>
+                        <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username or email"
+                            required autofocus value="{{ request.form.get('username', '') }}">
+                    </div>
+
+                    <div class="login-field">
+                        <label for="password" class="login-label">Password</label>
+                        <div class="password-field-wrapper">
+                            <input type="password" id="password" name="password" class="form-control"
+                                placeholder="Enter your password" autocomplete="current-password" required>
+                            <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary login-submit" data-loading-text="Signing in...">
+                        <i class="bi bi-box-arrow-in-right"></i> Login
+                    </button>
+
+                    <p class="login-toggle">
+                        Don't have an account? <a href="{{ url_for('signup') }}">Sign up</a>
+                    </p>
+                </form>
+
+                <!-- Sign Up Form (legacy inline flow) -->
+                <form method="post" action="{{ url_for('signup') }}" id="signupForm" class="{% if active_tab != 'signup' %}hidden{% endif %}">
+                    <h1 class="login-title">Create your account</h1>
+                    <p class="login-subtitle">Set up your ClassScheduling account</p>
+
+                    <div class="alert alert-danger hidden" id="signupError" role="alert">
+                        <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                        <span id="signupErrorText">Please provide an email, a username, or both.</span>
+                    </div>
+
+                    <div class="login-field">
+                        <label for="firstName" class="login-label">First Name</label>
+                        <input type="text" id="firstName" name="first_name" class="form-control"
+                            placeholder="Enter your first name" required value="{{ request.form.get('first_name', '') }}">
+                    </div>
+                    <div class="login-field">
+                        <label for="lastName" class="login-label">Last Name</label>
+                        <input type="text" id="lastName" name="last_name" class="form-control"
+                            placeholder="Enter your last name" required value="{{ request.form.get('last_name', '') }}">
+                    </div>
+                    <div class="login-field">
+                        <label for="signupEmail" class="login-label">Email</label>
+                        <input type="email" id="signupEmail" name="email" class="form-control" placeholder="Enter your email"
+                            value="{{ request.form.get('email', '') }}">
+                    </div>
+                    <div class="login-helper-text">
+                        Provide an email, a username, or both.
+                    </div>
+                    <div class="login-field">
+                        <label for="signupUsername" class="login-label">Username</label>
+                        <input type="text" id="signupUsername" name="username" class="form-control" placeholder="Choose a username"
+                            value="{{ request.form.get('username', '') }}">
+                    </div>
+                    <div class="login-field">
+                        <label for="signupPassword" class="login-label">Password</label>
+                        <div class="password-field-wrapper">
+                            <input type="password" id="signupPassword" name="password" class="form-control"
+                                placeholder="Choose a password" autocomplete="new-password" required>
+                            <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="login-field">
+                        <label for="confirmPassword" class="login-label">Confirm Password</label>
+                        <div class="password-field-wrapper">
+                            <input type="password" id="confirmPassword" name="confirm_password" class="form-control"
+                                placeholder="Confirm your password" autocomplete="new-password" required>
+                            <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary login-submit" data-loading-text="Signing up...">
+                        <i class="bi bi-person-plus"></i> Sign Up
+                    </button>
+
+                    <p class="login-toggle">
+                        Already have an account? <a href="#" id="showLogin">Login</a>
+                    </p>
+                    <p class="login-toggle">
+                        Didn't receive verification email? <a href="#" id="showResendFromSignup">Resend Verification</a>
+                    </p>
+                </form>
+
+                <!-- Resend Verification Form -->
+                <form method="post" action="{{ url_for('resend_verification') }}" id="resendForm" class="{% if active_tab != 'resend' %}hidden{% endif %}">
+                    <h1 class="login-title">Verify your email</h1>
+                    <p class="login-subtitle">Request a new verification link</p>
+
+                    <div class="login-field">
+                        <label for="resendEmail" class="login-label">Email Address</label>
+                        <input type="email" id="resendEmail" name="email" class="form-control"
+                            placeholder="Enter your registered email" required value="{{ unconfirmed_email or '' }}">
+                    </div>
+                    <div class="login-helper-text">
+                        Enter your email to receive a new confirmation link.
+                    </div>
+
+                    <button type="submit" class="btn btn-primary login-submit" id="resendBtn" data-loading-text="Sending...">
+                        <i class="bi bi-envelope"></i> Send Verification Link
+                    </button>
+
+                    <p class="login-toggle">
+                        <a href="#" id="backToLoginFromResend">Back to Login</a>
+                    </p>
+                </form>
             </div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
+        </section>
 
-            {% if error %}
-            <div class="login-error">
-                <i class="bx bx-error-circle"></i>
-                <span>{{ error }}</span>
+        <!-- ============================ RIGHT: VISUAL ============================ -->
+        <aside class="col-12 col-lg-7 login-panel login-panel--visual">
+            <div class="login-visual">
+                <p class="login-visual__tagline">
+                    Conflict-free class schedules, <span>generated in seconds.</span>
+                </p>
+                <div class="login-visual__card">
+                    {% with schedule_preview_hidden = true %}
+                    {% include 'partials/schedule_preview.html' %}
+                    {% endwith %}
+                    <div class="login-visual__chip" aria-hidden="true">
+                        <span class="login-visual__chip-dot"></span>
+                        No conflicts detected
+                    </div>
+                </div>
             </div>
-            {% endif %}
-
-            <!-- Login Form -->
-            <form method="post" action="{{ url_for('login') }}" id="loginForm" class="{% if active_tab in ('signup', 'resend') %}hidden{% endif %}">
-                <div class="mb-3">
-                    <label for="username" class="form-label">Username or Email</label>
-                    <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username or email"
-                        required autofocus value="{{ request.form.get('username', '') }}">
-                </div>
-                <div class="mb-3">
-                    <label for="password" class="form-label">Password</label>
-                    <div class="password-field-wrapper">
-                        <input type="password" id="password" name="password" class="form-control"
-                            placeholder="Enter your password" autocomplete="current-password" required>
-                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
-                            <i class="bx bx-show"></i>
-                        </button>
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="bx bx-log-in me-2"></i> Login
-                </button>
-                <div class="login-toggle">
-                    Don't have an account? <a href="{{ url_for('signup') }}" id="showSignup">Sign up</a>
-                </div>
-                <div class="login-toggle mt-2">
-                    Didn't receive verification email? <a href="#" id="showResend">Resend Verification</a>
-                </div>
-            </form>
-
-            <!-- Sign Up Form -->
-            <form method="post" action="{{ url_for('signup') }}" id="signupForm" class="{% if active_tab != 'signup' %}hidden{% endif %}">
-                <div class="login-error hidden" id="signupError">
-                    <i class="bx bx-error-circle"></i>
-                    <span id="signupErrorText">Please provide an email, a username, or both.</span>
-                </div>
-                <div class="mb-3">
-                    <label for="firstName" class="form-label">First Name</label>
-                    <input type="text" id="firstName" name="first_name" class="form-control"
-                        placeholder="Enter your first name" required value="{{ request.form.get('first_name', '') }}">
-                </div>
-                <div class="mb-3">
-                    <label for="lastName" class="form-label">Last Name</label>
-                    <input type="text" id="lastName" name="last_name" class="form-control"
-                        placeholder="Enter your last name" required value="{{ request.form.get('last_name', '') }}">
-                </div>
-                <div class="mb-3">
-                    <label for="signupEmail" class="form-label">Email</label>
-                    <input type="email" id="signupEmail" name="email" class="form-control" placeholder="Enter your email"
-                        value="{{ request.form.get('email', '') }}">
-                </div>
-                <div class="login-helper-text">
-                    Provide an email, a username, or both.
-                </div>
-                <div class="mb-3">
-                    <label for="signupUsername" class="form-label">Username</label>
-                    <input type="text" id="signupUsername" name="username" class="form-control" placeholder="Choose a username"
-                        value="{{ request.form.get('username', '') }}">
-                </div>
-                <div class="mb-3">
-                    <label for="signupPassword" class="form-label">Password</label>
-                    <div class="password-field-wrapper">
-                        <input type="password" id="signupPassword" name="password" class="form-control"
-                            placeholder="Choose a password" autocomplete="new-password" required>
-                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
-                            <i class="bx bx-show"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label for="confirmPassword" class="form-label">Confirm Password</label>
-                    <div class="password-field-wrapper">
-                        <input type="password" id="confirmPassword" name="confirm_password" class="form-control"
-                            placeholder="Confirm your password" autocomplete="new-password" required>
-                        <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
-                            <i class="bx bx-show"></i>
-                        </button>
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="bx bx-user-plus me-2"></i> Sign Up
-                </button>
-                <div class="login-toggle">
-                    Already have an account? <a href="#" id="showLogin">Login</a>
-                </div>
-                <div class="login-toggle mt-2">
-                    Didn't receive verification email? <a href="#" id="showResendFromSignup">Resend Verification</a>
-                </div>
-            </form>
-
-            <!-- Resend Verification Form -->
-            <form method="post" action="{{ url_for('resend_verification') }}" id="resendForm" class="{% if active_tab != 'resend' %}hidden{% endif %}">
-                <div class="mb-3">
-                    <label for="resendEmail" class="form-label">Email Address</label>
-                    <input type="email" id="resendEmail" name="email" class="form-control"
-                        placeholder="Enter your registered email" required value="{{ unconfirmed_email or '' }}">
-                </div>
-                <div class="login-helper-text">
-                    Enter your email to receive a new confirmation link.
-                </div>
-                <button type="submit" class="btn btn-primary" id="resendBtn">
-                    <i class="bx bx-envelope me-2"></i> Send Verification Link
-                </button>
-                <div class="login-toggle mt-3">
-                    <a href="#" id="backToLoginFromResend">Back to Login</a>
-                </div>
-            </form>
+        </aside>
+        </div>
         </div>
     </div>
-    <script>
-        // Reusable Password Visibility Toggle
-        function initPasswordToggle(wrapper) {
-            if (!wrapper) return;
-            var input = wrapper.querySelector('input');
-            var btn = wrapper.querySelector('.password-toggle-btn');
-            if (!input || !btn) return;
 
-            function setVisibility(show) {
-                input.type = show ? 'text' : 'password';
-                btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-                btn.setAttribute('aria-pressed', show ? 'true' : 'false');
-                var icon = btn.querySelector('i');
-                if (icon) {
-                    icon.className = show ? 'bx bx-hide' : 'bx bx-show';
+    <script>
+        (function () {
+            "use strict";
+
+            // Reusable password visibility toggle
+            function initPasswordToggle(wrapper) {
+                if (!wrapper) return;
+                var input = wrapper.querySelector('input');
+                var btn = wrapper.querySelector('.password-toggle-btn');
+                if (!input || !btn) return;
+
+                function setVisibility(show) {
+                    input.type = show ? 'text' : 'password';
+                    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                    btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+                    var icon = btn.querySelector('i');
+                    if (icon) {
+                        icon.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+                    }
+                }
+
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    setVisibility(input.type === 'password');
+                });
+
+                var form = wrapper.closest('form');
+                if (form) {
+                    form.addEventListener('submit', function () {
+                        setVisibility(false);
+                    });
+                }
+
+                setVisibility(false);
+            }
+
+            document.querySelectorAll('.password-field-wrapper').forEach(initPasswordToggle);
+
+            var emailInput = document.getElementById('signupEmail');
+            var usernameInput = document.getElementById('signupUsername');
+            var signupError = document.getElementById('signupError');
+            var signupErrorText = document.getElementById('signupErrorText');
+            var loginForm = document.getElementById('loginForm');
+            var signupForm = document.getElementById('signupForm');
+            var resendForm = document.getElementById('resendForm');
+
+            function showSignupError(msg) {
+                if (signupError && signupErrorText) {
+                    signupErrorText.textContent = msg;
+                    signupError.classList.remove('hidden');
+                } else {
+                    alert(msg);
                 }
             }
 
-            btn.addEventListener('click', function (e) {
-                e.preventDefault();
-                var isCurrentlyPassword = (input.type === 'password');
-                setVisibility(isCurrentlyPassword);
-            });
+            function clearIdentifierErrors() {
+                if (signupError) {
+                    signupError.classList.add('hidden');
+                }
+                if (emailInput) {
+                    emailInput.classList.remove('is-invalid');
+                }
+                if (usernameInput) {
+                    usernameInput.classList.remove('is-invalid');
+                }
+            }
 
-            var form = wrapper.closest('form');
-            if (form) {
-                form.addEventListener('submit', function () {
-                    setVisibility(false);
+            function setView(view) {
+                clearIdentifierErrors();
+
+                // Reset all password toggles to hidden
+                document.querySelectorAll('.password-field-wrapper').forEach(function (w) {
+                    var inp = w.querySelector('input');
+                    var btn = w.querySelector('.password-toggle-btn');
+                    if (inp && btn) {
+                        inp.type = 'password';
+                        btn.setAttribute('aria-label', 'Show password');
+                        btn.setAttribute('aria-pressed', 'false');
+                        var icon = btn.querySelector('i');
+                        if (icon) icon.className = 'bi bi-eye';
+                    }
+                });
+
+                if (!loginForm || !signupForm || !resendForm) return;
+
+                if (view === 'signup') {
+                    loginForm.classList.add('hidden');
+                    resendForm.classList.add('hidden');
+                    signupForm.classList.remove('hidden');
+                } else if (view === 'resend') {
+                    loginForm.classList.add('hidden');
+                    signupForm.classList.add('hidden');
+                    resendForm.classList.remove('hidden');
+                } else {
+                    signupForm.classList.add('hidden');
+                    resendForm.classList.add('hidden');
+                    loginForm.classList.remove('hidden');
+                }
+            }
+
+            if (emailInput) {
+                emailInput.addEventListener('input', function () {
+                    if (emailInput.value.trim() || (usernameInput && usernameInput.value.trim())) {
+                        clearIdentifierErrors();
+                    }
                 });
             }
 
-            setVisibility(false);
-        }
-
-        document.querySelectorAll('.password-field-wrapper').forEach(initPasswordToggle);
-
-        var emailInput = document.getElementById('signupEmail');
-        var usernameInput = document.getElementById('signupUsername');
-        var signupError = document.getElementById('signupError');
-        var signupErrorText = document.getElementById('signupErrorText');
-        var loginForm = document.getElementById('loginForm');
-        var signupForm = document.getElementById('signupForm');
-        var resendForm = document.getElementById('resendForm');
-        var formSubtitle = document.getElementById('formSubtitle');
-
-        function showSignupError(msg) {
-            if (signupError && signupErrorText) {
-                signupErrorText.textContent = msg;
-                signupError.classList.remove('hidden');
-            } else {
-                alert(msg);
-            }
-        }
-
-        function clearIdentifierErrors() {
-            if (signupError) {
-                signupError.classList.add('hidden');
-            }
-            if (emailInput) {
-                emailInput.classList.remove('is-invalid');
-            }
             if (usernameInput) {
-                usernameInput.classList.remove('is-invalid');
+                usernameInput.addEventListener('input', function () {
+                    if (usernameInput.value.trim() || (emailInput && emailInput.value.trim())) {
+                        clearIdentifierErrors();
+                    }
+                });
             }
-        }
 
-        function setView(view) {
-            clearIdentifierErrors();
-            // Reset all password toggles to hidden
-            document.querySelectorAll('.password-field-wrapper').forEach(function(w) {
-                var inp = w.querySelector('input');
-                var btn = w.querySelector('.password-toggle-btn');
-                if (inp && btn) {
-                    inp.type = 'password';
-                    btn.setAttribute('aria-label', 'Show password');
-                    btn.setAttribute('aria-pressed', 'false');
-                    var icon = btn.querySelector('i');
-                    if (icon) icon.className = 'bx bx-show';
-                }
-            });
-
-            if (view === 'signup') {
-                loginForm.classList.add('hidden');
-                resendForm.classList.add('hidden');
-                signupForm.classList.remove('hidden');
-                formSubtitle.textContent = 'Create a new account';
-            } else if (view === 'resend') {
-                loginForm.classList.add('hidden');
-                signupForm.classList.add('hidden');
-                resendForm.classList.remove('hidden');
-                formSubtitle.textContent = 'Request a new verification link';
-            } else {
-                signupForm.classList.add('hidden');
-                resendForm.classList.add('hidden');
-                loginForm.classList.remove('hidden');
-                formSubtitle.textContent = 'Login to manage class schedules';
+            var showLogin = document.getElementById('showLogin');
+            if (showLogin) {
+                showLogin.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    setView('login');
+                });
             }
-        }
 
-        if (emailInput) {
-            emailInput.addEventListener('input', function () {
-                if (emailInput.value.trim() || (usernameInput && usernameInput.value.trim())) {
+            var showResend = document.getElementById('showResend');
+            if (showResend) {
+                showResend.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    setView('resend');
+                });
+            }
+
+            var showResendFromSignup = document.getElementById('showResendFromSignup');
+            if (showResendFromSignup) {
+                showResendFromSignup.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    setView('resend');
+                });
+            }
+
+            var backToLogin = document.getElementById('backToLoginFromResend');
+            if (backToLogin) {
+                backToLogin.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    setView('login');
+                });
+            }
+
+            // Cooldown timer handler for resend
+            var initialCooldown = parseInt("{{ cooldown or 0 }}", 10);
+            if (initialCooldown > 0) {
+                startCooldownTimer(initialCooldown);
+            }
+
+            function startCooldownTimer(seconds) {
+                var btn = document.getElementById('resendBtn');
+                if (!btn) return;
+                btn.disabled = true;
+                var count = seconds;
+                btn.innerHTML = '<i class="bi bi-clock"></i> Resend in ' + count + 's';
+                var interval = setInterval(function () {
+                    count--;
+                    if (count <= 0) {
+                        clearInterval(interval);
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-envelope"></i> Send Verification Link';
+                    } else {
+                        btn.innerHTML = '<i class="bi bi-clock"></i> Resend in ' + count + 's';
+                    }
+                }, 1000);
+            }
+
+            if (signupForm) {
+                signupForm.addEventListener('submit', function (e) {
+                    var email = emailInput ? emailInput.value.trim() : '';
+                    var username = usernameInput ? usernameInput.value.trim() : '';
+                    var signupPassword = document.getElementById('signupPassword');
+                    var confirmPassword = document.getElementById('confirmPassword');
+                    var password = signupPassword ? signupPassword.value : '';
+                    var confirmPasswordValue = confirmPassword ? confirmPassword.value : '';
+
                     clearIdentifierErrors();
-                }
-            });
-        }
 
-        if (usernameInput) {
-            usernameInput.addEventListener('input', function () {
-                if (usernameInput.value.trim() || (emailInput && emailInput.value.trim())) {
-                    clearIdentifierErrors();
-                }
-            });
-        }
+                    if (!email && !username) {
+                        e.preventDefault();
+                        showSignupError('Please provide an email, a username, or both.');
+                        if (emailInput) emailInput.classList.add('is-invalid');
+                        if (usernameInput) usernameInput.classList.add('is-invalid');
+                        if (emailInput) emailInput.focus();
+                        return false;
+                    }
 
-        document.getElementById('showSignup').addEventListener('click', function (e) {
-            e.preventDefault();
-            setView('signup');
-        });
+                    if (email && (!email.includes('@') || !email.split('@')[1] || !email.split('@')[1].includes('.'))) {
+                        e.preventDefault();
+                        showSignupError('Please enter a valid email address.');
+                        if (emailInput) {
+                            emailInput.classList.add('is-invalid');
+                            emailInput.focus();
+                        }
+                        return false;
+                    }
 
-        document.getElementById('showLogin').addEventListener('click', function (e) {
-            e.preventDefault();
-            setView('login');
-        });
-
-        document.getElementById('showResend').addEventListener('click', function (e) {
-            e.preventDefault();
-            setView('resend');
-        });
-
-        var showResendFromSignup = document.getElementById('showResendFromSignup');
-        if (showResendFromSignup) {
-            showResendFromSignup.addEventListener('click', function (e) {
-                e.preventDefault();
-                setView('resend');
-            });
-        }
-
-        document.getElementById('backToLoginFromResend').addEventListener('click', function (e) {
-            e.preventDefault();
-            setView('login');
-        });
-
-        // Cooldown timer handler for resend
-        var initialCooldown = parseInt("{{ cooldown or 0 }}", 10);
-        if (initialCooldown > 0) {
-            startCooldownTimer(initialCooldown);
-        }
-
-        function startCooldownTimer(seconds) {
-            var btn = document.getElementById('resendBtn');
-            if (!btn) return;
-            btn.disabled = true;
-            var count = seconds;
-            btn.innerHTML = '<i class="bx bx-time me-2"></i> Resend in ' + count + 's';
-            var interval = setInterval(function() {
-                count--;
-                if (count <= 0) {
-                    clearInterval(interval);
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bx bx-envelope me-2"></i> Send Verification Link';
-                } else {
-                    btn.innerHTML = '<i class="bx bx-time me-2"></i> Resend in ' + count + 's';
-                }
-            }, 1000);
-        }
-
-        document.getElementById('signupForm').addEventListener('submit', function (e) {
-            var email = emailInput ? emailInput.value.trim() : '';
-            var username = usernameInput ? usernameInput.value.trim() : '';
-            var password = document.getElementById('signupPassword').value;
-            var confirmPassword = document.getElementById('confirmPassword').value;
-
-            clearIdentifierErrors();
-
-            if (!email && !username) {
-                e.preventDefault();
-                showSignupError('Please provide an email, a username, or both.');
-                if (emailInput) emailInput.classList.add('is-invalid');
-                if (usernameInput) usernameInput.classList.add('is-invalid');
-                if (emailInput) emailInput.focus();
-                return false;
+                    if (password !== confirmPasswordValue) {
+                        e.preventDefault();
+                        showSignupError('Passwords do not match.');
+                        return false;
+                    }
+                });
             }
-
-            if (email && (!email.includes('@') || !email.split('@')[1] || !email.split('@')[1].includes('.'))) {
-                e.preventDefault();
-                showSignupError('Please enter a valid email address.');
-                if (emailInput) {
-                    emailInput.classList.add('is-invalid');
-                    emailInput.focus();
-                }
-                return false;
-            }
-
-            if (password !== confirmPassword) {
-                e.preventDefault();
-                showSignupError('Passwords do not match.');
-                return false;
-            }
-        });
+        })();
     </script>
     <script src="{{ url_for('static', filename='index.js') }}"></script>
 </body>
