@@ -791,4 +791,66 @@ def test_archive_schedule_payload_only_valid_columns(monkeypatch):
     assert 'archive_reason' not in updated_payload
 
 
+def test_schedule_archive_passes_program_name_to_rpc_and_normalizes_output(monkeypatch):
+    client = app_module.app.test_client()
+
+    with client.session_transaction() as session:
+        session['user_id'] = 'user-1'
+        session['role'] = 'chair'
+        session['program'] = 'BSIT'
+
+    captured_rpc_calls = []
+
+    class MockRpcSupabase:
+        def table(self, name):
+            return FakeArchiveQuery(name)
+
+        def rpc(self, func_name, params=None):
+            class RpcCall:
+                def execute(self):
+                    captured_rpc_calls.append((func_name, dict(params or {})))
+                    # Live DB RPC returns full name when passed full name
+                    if params and params.get('p_program') == 'Bachelor of Science in Information Technology':
+                        return FakeResponse([
+                            {
+                                'batch_id': 'batch-live-1',
+                                'semester': '2nd Semester',
+                                'school_year': '2026-2027',
+                                'program': 'Bachelor of Science in Information Technology',
+                                'archived_at': '2026-10-14T16:17:03Z',
+                                'archived_by': 'SCHEDULER USER',
+                                'archived_by_title': 'Chair',
+                                'archive_reason': 'Archived schedule',
+                                'entry_count': 441,
+                                'section_count': 37,
+                                'sections': ['1A', '1B'],
+                                'is_used': True,
+                            }
+                        ])
+                    return FakeResponse([])
+            return RpcCall()
+
+    monkeypatch.setattr(app_module, 'supabase', MockRpcSupabase())
+    monkeypatch.setattr(app_module, '_get_user_program_id', lambda: 1)
+    monkeypatch.setattr(app_module, '_find_program_id_by_name', lambda p: 1 if p == 'BSIT' else None)
+    monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [
+        {'id': 1, 'program_code': 'BSIT', 'program_name': 'Bachelor of Science in Information Technology', 'archive': False}
+    ])
+
+    response = client.get('/schedule_archive')
+    assert response.status_code == 200
+
+    # Verify RPC was called with full program name
+    assert any(
+        call[0] == 'get_schedule_archive_batches'
+        and call[1].get('p_program') == 'Bachelor of Science in Information Technology'
+        for call in captured_rpc_calls
+    )
+
+    # Verify batch is displayed in template and normalized to 'BSIT'
+    assert b'batch-live-1' in response.data or b'batch-li' in response.data
+    assert b'BSIT' in response.data
+
+
+
 

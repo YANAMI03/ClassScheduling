@@ -14823,13 +14823,10 @@ def schedule_archive():
             semester_filter = active_semester
         else:
             semester_filter = '1st Semester'
-        school_year_filter = latest_archive.get('school_year') or ''
+        school_year_filter = ''
     else:
         if not semester_is_explicit:
-            if active_semester in SEMESTER_CHOICES:
-                semester_filter = active_semester
-            else:
-                semester_filter = '1st Semester'
+            semester_filter = ''
         if school_year_arg is None or school_year_filter.lower() in ('', 'all', 'all school years'):
             school_year_filter = ''
 
@@ -14855,9 +14852,26 @@ def schedule_archive():
                     except Exception:
                         pass
 
+                target_prog_name = None
+                for p in all_programs:
+                    if (
+                        str(p.get('program_code') or '').strip().casefold() == str(effective_program).strip().casefold()
+                        or str(p.get('id')) == str(effective_program_id)
+                        or str(p.get('program_name') or '').strip().casefold() == str(effective_program).strip().casefold()
+                    ):
+                        target_prog_name = p.get('program_name')
+                        break
+                if not target_prog_name:
+                    if (effective_program or '').casefold() in ('bsit', 'it', 'information technology'):
+                        target_prog_name = 'Bachelor of Science in Information Technology'
+                    elif (effective_program or '').casefold() in ('bsds', 'ds', 'data science'):
+                        target_prog_name = 'Bachelor of Science in Data Science'
+                    elif (effective_program or '').casefold() in ('bsba', 'ba', 'business administration'):
+                        target_prog_name = 'Bachelor of Science in Business Administration'
+
                 rpc_params = {
-                    'p_program': effective_program or None,
-                    'p_semester': semester_filter or None,
+                    'p_program': target_prog_name or effective_program or None,
+                    'p_semester': semester_filter if semester_is_explicit else None,
                 }
                 if school_year_filter:
                     rpc_params['p_school_year'] = school_year_filter
@@ -14874,6 +14888,16 @@ def schedule_archive():
                     )
                     rpc_params.pop('p_school_year', None)
                     res = supabase.rpc('get_schedule_archive_batches', rpc_params).execute()
+
+                if (not res or not res.data) and effective_program and target_prog_name and target_prog_name != effective_program:
+                    retry_params = dict(rpc_params)
+                    retry_params['p_program'] = effective_program
+                    try:
+                        retry_res = supabase.rpc('get_schedule_archive_batches', retry_params).execute()
+                        if retry_res and retry_res.data:
+                            res = retry_res
+                    except Exception:
+                        pass
 
                 if res and isinstance(res.data, list):
                     rpc_success = True
@@ -14892,13 +14916,29 @@ def schedule_archive():
                         if date_to and (is_legacy or not date_str or date_str > date_to):
                             continue
 
+                        prog_raw = r.get('program') or ''
+                        prog_code = ''
+                        for p in all_programs:
+                            if str(p.get('program_name') or '').strip().casefold() == prog_raw.strip().casefold():
+                                prog_code = p.get('program_code') or ''
+                                break
+                        if not prog_code:
+                            if 'information technology' in prog_raw.lower() or prog_raw.lower() in ('bsit', 'it'):
+                                prog_code = 'BSIT'
+                            elif 'data science' in prog_raw.lower() or prog_raw.lower() in ('bsds', 'ds'):
+                                prog_code = 'BSDS'
+                            elif 'business administration' in prog_raw.lower() or prog_raw.lower() in ('bsba', 'ba'):
+                                prog_code = 'BSBA'
+                            else:
+                                prog_code = prog_raw
+
                         secs = sorted(list(r.get('sections') or []))
                         batches_list.append({
                             'batch_id': bid,
                             'semester': r.get('semester') or '1st Semester',
                             'school_year': r.get('school_year') or '2026-2027',
                             'is_used': _is_used_true(r.get('is_used')),
-                            'program': r.get('program') or '',
+                            'program': prog_code or prog_raw,
                             'archived_at_raw': arch_at_raw,
                             'archived_at_fmt': arch_at_fmt,
                             'archived_at_date': date_str,
@@ -14932,11 +14972,11 @@ def schedule_archive():
             while archive_pages < max_archive_pages:
                 archive_pages += 1
                 try:
-                    cols = 'schedule_id, semester, school_year, is_used, program_id, program_code, section, major, archive, archive_batch_id, archived_at, preparer_name, preparer_title'
+                    cols = 'schedule_id, semester, school_year, is_used, program_id, section, major, archive, archive_batch_id, archived_at, preparer_name, preparer_title'
                     query = supabase.table('schedule_with_semester').select(cols).eq('archive', True)
                     if effective_program_id:
                         query = query.eq('program_id', effective_program_id)
-                    if semester_filter:
+                    if semester_filter and semester_is_explicit:
                         query = query.eq('semester', semester_filter)
                     if hasattr(query, 'range'):
                         chunk_res = query.range(start, start + page_size - 1).execute()
@@ -15477,7 +15517,7 @@ def restore_schedule_archive(batch_id):
             logging.warning(f"Error checking conflicts in restore_schedule_archive: {conf_err}")
 
         # Resolve target semester and program name for this batch
-        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_code').eq('archive', True)
+        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_name').eq('archive', True)
         if batch_id == 'legacy':
             sample_q = sample_q.is_('archive_batch_id', 'null')
         elif '__' in batch_id:
@@ -15493,12 +15533,12 @@ def restore_schedule_archive(batch_id):
         sample_rows = (sample_q.limit(1).execute().data if hasattr(sample_q, 'limit') else sample_q.execute().data) or []
         target_sem = batch_semester
         target_prog_id = batch_prog_id or user_prog_id
-        target_prog_name = (sample_rows[0].get('program_code') if sample_rows else None) or ''
+        target_prog_name = (sample_rows[0].get('program_name') if sample_rows else None) or ''
         if target_prog_id is None:
             flash('Cannot restore schedule: Its program cannot be determined from the linked course.', 'warning')
             return redirect(url_for('schedule_archive'))
-        if not target_prog_name and target_prog_id:
-            target_prog_name = _find_program_code_by_id(target_prog_id) or f"Program {target_prog_id}"
+        if target_prog_id:
+            target_prog_name = _find_program_code_by_id(target_prog_id) or target_prog_name or f"Program {target_prog_id}"
 
         # Rule: A restore must never leave two active schedules for the same program and semester.
         # If an active schedule already exists for that program and semester, block the restore with a clear message.
@@ -15709,7 +15749,7 @@ def delete_schedule_archive(batch_id):
 
     try:
         # Resolve batch details for logging
-        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_code').eq('archive', True)
+        sample_q = supabase.table('schedule_with_semester').select('semester, program_id, program_name').eq('archive', True)
         if batch_id == 'legacy':
             sample_q = sample_q.is_('archive_batch_id', 'null')
         elif '__' in batch_id:
@@ -15723,7 +15763,7 @@ def delete_schedule_archive(batch_id):
 
         sample_rows = (sample_q.limit(1).execute().data if hasattr(sample_q, 'limit') else sample_q.execute().data) or []
         target_sem = (sample_rows[0].get('semester') if sample_rows else None) or 'Unknown Semester'
-        target_prog = (sample_rows[0].get('program_code') if sample_rows else None) or 'All Programs'
+        target_prog = (sample_rows[0].get('program_name') if sample_rows else None) or 'All Programs'
 
         del_q = supabase.table('schedule').delete().eq('archive', True)
         if batch_id == 'legacy':
