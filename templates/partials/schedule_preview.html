@@ -1,0 +1,92 @@
+{#
+  Shared schedule preview card (static mockup).
+
+  Used by:
+    - templates/landing.html  (hero, right column)
+    - templates/login.html    (visual panel, right half)
+
+  Styling lives in static/schedule_preview.css so both pages stay in sync.
+
+  Set `schedule_preview_hidden = true` before including this partial to mark
+  the decorative copy as aria-hidden (the login page does this).
+#}
+{% set _schedule_hidden = schedule_preview_hidden | default(false) %}
+<div class="timetable-card"{% if _schedule_hidden %} aria-hidden="true"{% else %} aria-label="Sample Timetable Preview"{% endif %}>
+    <div class="timetable-card__header">
+        <span class="timetable-card__title">BSIT &middot; Section 3A</span>
+        <span class="timetable-card__semester">2nd Semester</span>
+    </div>
+
+    <div class="timetable-grid" role="table" aria-label="Weekly Schedule Illustration">
+        <!-- Column Headers -->
+        <div class="timetable-grid__col-header" role="columnheader">Mon</div>
+        <div class="timetable-grid__col-header" role="columnheader">Tue</div>
+        <div class="timetable-grid__col-header" role="columnheader">Wed</div>
+        <div class="timetable-grid__col-header" role="columnheader">Thu</div>
+        <div class="timetable-grid__col-header" role="columnheader">Fri</div>
+
+        <!-- Row 1: IT-WS03/Lab 2 (lab), empty, CC-104/Rm 305 (lecture), empty, IT-NET03/Lab 5 (lab) -->
+        <div class="timetable-grid__cell timetable-grid__cell--lab">
+            <span class="timetable-grid__cell-code">IT-WS03</span>
+            <span class="timetable-grid__cell-room">Lab 2</span>
+        </div>
+        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+            <span class="timetable-grid__cell-code">CC-104</span>
+            <span class="timetable-grid__cell-room">Rm 305</span>
+        </div>
+        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+        <div class="timetable-grid__cell timetable-grid__cell--lab">
+            <span class="timetable-grid__cell-code">IT-NET03</span>
+            <span class="timetable-grid__cell-room">Lab 5</span>
+        </div>
+
+        <!-- Row 2: IT-IM02/Rm 302 (lecture), IT-WS04/Lab 1 (lab), empty, IT-IAS02/Rm 304 (lecture), empty -->
+        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+            <span class="timetable-grid__cell-code">IT-IM02</span>
+            <span class="timetable-grid__cell-room">Rm 302</span>
+        </div>
+        <div class="timetable-grid__cell timetable-grid__cell--lab">
+            <span class="timetable-grid__cell-code">IT-WS04</span>
+            <span class="timetable-grid__cell-room">Lab 1</span>
+        </div>
+        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+            <span class="timetable-grid__cell-code">IT-IAS02</span>
+            <span class="timetable-grid__cell-room">Rm 304</span>
+        </div>
+        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+
+        <!-- Row 3: empty, IT-NET04/Rm 306 (lecture), IT-CAP01/Lab 3 (lab), empty, IT-WS05/Rm 301 (lecture) -->
+        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+            <span class="timetable-grid__cell-code">IT-NET04</span>
+            <span class="timetable-grid__cell-room">Rm 306</span>
+        </div>
+        <div class="timetable-grid__cell timetable-grid__cell--lab">
+            <span class="timetable-grid__cell-code">IT-CAP01</span>
+            <span class="timetable-grid__cell-room">Lab 3</span>
+        </div>
+        <div class="timetable-grid__cell timetable-grid__cell--empty" aria-label="Empty slot"></div>
+        <div class="timetable-grid__cell timetable-grid__cell--lecture">
+            <span class="timetable-grid__cell-code">IT-WS05</span>
+            <span class="timetable-grid__cell-room">Rm 301</span>
+        </div>
+    </div>
+
+    <!-- Timetable Legend -->
+    <div class="timetable-legend">
+        <div class="timetable-legend__item">
+            <span class="timetable-legend__indicator timetable-legend__indicator--lab" aria-hidden="true"></span>
+            <span>Laboratory</span>
+        </div>
+        <div class="timetable-legend__item">
+            <span class="timetable-legend__indicator timetable-legend__indicator--lecture" aria-hidden="true"></span>
+            <span>Lecture</span>
+        </div>
+        <div class="timetable-legend__item ms-auto">
+            <span class="timetable-legend__indicator timetable-legend__indicator--status" aria-hidden="true"></span>
+            <span>No conflicts detected</span>
+        </div>
+    </div>
+</div>

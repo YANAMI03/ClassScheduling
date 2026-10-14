@@ -200,6 +200,41 @@ def _attach_schedule_program(row):
         row['specialization'] = course['specialization']
     return row
 
+
+def _is_used_true(value):
+    """Single source of truth for reading a raw ``is_used`` value.
+
+    Returns ``True`` only when the value is exactly boolean ``True`` or the
+    string ``"true"`` (case-insensitive). PostgREST/RPC normally return a real
+    boolean, but values that travel through JSON, query strings or
+    ``data-*`` attributes can arrive as the string ``"false"`` -- which is
+    truthy in Python and must never be treated as used.
+    """
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() == 'true'
+    return False
+
+
+def _batch_is_used(rows):
+    """A schedule batch is "used" only when *every* row has is_used = true.
+
+    A batch with mixed values, or with no rows, is treated as NOT used. This is
+    the only place that decides a batch-level used status, so the badge, the
+    toggle button and the Used / Not Used counts can never disagree.
+    """
+    if not rows:
+        return False
+    return all(_is_used_true((row or {}).get('is_used')) for row in rows)
+
+
+def _batch_used_is_mixed(rows):
+    """True when a batch has both used and not-used rows (inconsistent data)."""
+    values = [_is_used_true((row or {}).get('is_used')) for row in (rows or [])]
+    return bool(values) and any(values) and not all(values)
+
+
 def _schedule_ids_for_program(program_id, archive=None, semester=None):
     """Resolve schedule IDs by the linked course's program through the derived view."""
     if archive is False:
@@ -1867,6 +1902,46 @@ def _get_active_semester(program_id=None):
     except Exception as err:
         logging.debug(f"Error fetching active semester: {err}")
     return None
+
+def _latest_archive_scope(program_id):
+    """Return the school_year + semester of a program's most recent archive.
+
+    Used to default the archive tab to a combination that actually contains
+    archives, so it never opens on an empty semester/school-year when archives
+    exist. Returns None when the program has no archives (or on lookup error).
+    """
+    if not program_id:
+        return None
+    try:
+        q = (
+            supabase.table('schedule_with_semester')
+            .select('school_year, semester, archived_at')
+            .eq('archive', True)
+            .eq('program_id', program_id)
+        )
+        q = q.order('archived_at', desc=True, nullsfirst=False).limit(1)
+        rows = q.execute().data or []
+    except Exception as err:
+        logging.warning(
+            f"Could not determine the latest archive scope for program_id={program_id}: {err}"
+        )
+        return None
+    if not isinstance(rows, list) or not rows:
+        return None
+    row = rows[0]
+    if not isinstance(row, dict):
+        return None
+    school_year = row.get('school_year')
+    semester = row.get('semester')
+    if school_year is not None and not isinstance(school_year, str):
+        return None
+    if semester is not None and not isinstance(semester, str):
+        return None
+    return {
+        'school_year': (school_year or '').strip(),
+        'semester': (semester or '').strip(),
+    }
+
 
 def get_school_year_options(ref_date=None):
     """
@@ -9882,7 +9957,13 @@ def schedules():
         if sched_rows:
             active_batch_id = sched_rows[0].get('archive_batch_id') or 'active'
             active_school_year = sched_rows[0].get('school_year')
-            active_is_used = any(bool(r.get('is_used')) for r in sched_rows)
+            active_is_used = _batch_is_used(sched_rows)
+            if _batch_used_is_mixed(sched_rows):
+                logging.warning(
+                    "Active schedule for program_id=%s semester=%s has mixed is_used values; "
+                    "treating the batch as NOT used.",
+                    effective_program_id, semester_filter
+                )
     except HTTPException:
         raise
     except Exception as err:
@@ -13921,9 +14002,11 @@ def archive_schedule():
 @app.route('/schedule_archive')
 @roles_required('admin', 'chair')
 def schedule_archive():
-    semester_filter = (request.args.get('semester') or '').strip()
+    semester_arg = request.args.get('semester')
     program_filter = (request.args.get('program') or '').strip()
-    school_year_filter = (request.args.get('school_year') or '').strip()
+    school_year_arg = request.args.get('school_year')
+    semester_filter = (semester_arg or '').strip()
+    school_year_filter = (school_year_arg or '').strip()
     status_filter = (request.args.get('status') or request.args.get('used') or 'all').strip().lower()
     date_from = (request.args.get('date_from') or '').strip()
     date_to = (request.args.get('date_to') or '').strip()
@@ -13958,14 +14041,34 @@ def schedule_archive():
             except Exception:
                 active_semester = ''
 
-    if not semester_filter or semester_filter.lower() in ('all', 'all semesters') or semester_filter not in SEMESTER_CHOICES:
-        if active_semester in SEMESTER_CHOICES:
+    # Default to the most recent archive for this program so the tab never opens
+    # on an empty school-year / semester combination when archives exist.
+    semester_is_explicit = (
+        semester_arg is not None
+        and semester_filter.lower() not in ('', 'all', 'all semesters')
+        and semester_filter in SEMESTER_CHOICES
+    )
+    # On a fresh open (no semester AND no school year supplied) prefer the most
+    # recent archive's scope so the tab never lands on an empty combination.
+    first_open = semester_arg is None and school_year_arg is None
+    latest_archive = _latest_archive_scope(effective_program_id) if first_open else None
+
+    if first_open and latest_archive:
+        if latest_archive.get('semester') in SEMESTER_CHOICES:
+            semester_filter = latest_archive['semester']
+        elif active_semester in SEMESTER_CHOICES:
             semester_filter = active_semester
         else:
             semester_filter = '1st Semester'
-
-    if school_year_filter.lower() in ('', 'all', 'all school years'):
-        school_year_filter = ''
+        school_year_filter = latest_archive.get('school_year') or ''
+    else:
+        if not semester_is_explicit:
+            if active_semester in SEMESTER_CHOICES:
+                semester_filter = active_semester
+            else:
+                semester_filter = '1st Semester'
+        if school_year_arg is None or school_year_filter.lower() in ('', 'all', 'all school years'):
+            school_year_filter = ''
 
     batches_list = []
     fetch_error = False
@@ -14001,7 +14104,11 @@ def schedule_archive():
 
                 try:
                     res = supabase.rpc('get_schedule_archive_batches', rpc_params).execute()
-                except Exception:
+                except Exception as rpc_first_err:
+                    logging.warning(
+                        "get_schedule_archive_batches RPC failed with the school_year filter (%s); retrying without it.",
+                        rpc_first_err,
+                    )
                     rpc_params.pop('p_school_year', None)
                     res = supabase.rpc('get_schedule_archive_batches', rpc_params).execute()
 
@@ -14027,7 +14134,7 @@ def schedule_archive():
                             'batch_id': bid,
                             'semester': r.get('semester') or '1st Semester',
                             'school_year': r.get('school_year') or '2026-2027',
-                            'is_used': bool(r.get('is_used')),
+                            'is_used': _is_used_true(r.get('is_used')),
                             'program': r.get('program') or '',
                             'archived_at_raw': arch_at_raw,
                             'archived_at_fmt': arch_at_fmt,
@@ -14041,7 +14148,11 @@ def schedule_archive():
                             'is_legacy': is_legacy,
                         })
             except Exception as rpc_err:
-                logging.debug(f"get_schedule_archive_batches RPC skipped ({rpc_err}), fallback.")
+                logging.warning(
+                    "get_schedule_archive_batches RPC failed; falling back to a direct query: %s",
+                    rpc_err,
+                    exc_info=True,
+                )
                 rpc_success = False
 
         if not rpc_success:
@@ -14110,7 +14221,7 @@ def schedule_archive():
                 raw_batch_id = r.get('archive_batch_id')
                 sem = r.get('semester') or '1st Semester'
                 sy = r.get('school_year') or '2026-2027'
-                is_u = bool(r.get('is_used'))
+                is_u = _is_used_true(r.get('is_used'))
                 prog = (_rel(r, 'program') or {}).get('program_name') or r.get('program_name') or ''
 
                 if raw_batch_id and str(raw_batch_id).strip() and str(raw_batch_id).strip() != 'None':
@@ -14135,7 +14246,7 @@ def schedule_archive():
                         'batch_id': bid,
                         'semester': sem,
                         'school_year': sy,
-                        'is_used': is_u,
+                        'is_used': True,
                         'program': prog,
                         'archived_at_raw': arch_at_raw,
                         'archived_at_fmt': arch_at_fmt,
@@ -14147,11 +14258,13 @@ def schedule_archive():
                         'sections_set': set(),
                         'programs_set': set(),
                         'semesters_set': set(),
+                        'used_values': set(),
                         'is_legacy': is_legacy,
                     }
                 batches_map[bid]['entry_count'] += 1
-                if is_u:
-                    batches_map[bid]['is_used'] = True
+                # A batch is used only if every one of its rows is used.
+                batches_map[bid]['is_used'] = batches_map[bid]['is_used'] and is_u
+                batches_map[bid]['used_values'].add(is_u)
                 if r.get('section'):
                     batches_map[bid]['sections_set'].add(r.get('section'))
                 if prog:
@@ -14169,6 +14282,13 @@ def schedule_archive():
                         b['program'] = list(b['programs_set'])[0]
                     elif len(b['programs_set']) > 1:
                         b['program'] = 'Multiple Programs'
+
+                used_values = b.pop('used_values', set())
+                if len(used_values) > 1:
+                    logging.warning(
+                        "Archived batch %s has mixed is_used values; treating it as NOT used.",
+                        b.get('batch_id')
+                    )
 
                 date_str = b.get('archived_at_date') or ''
                 if date_from and (b['is_legacy'] or not date_str or date_str < date_from):
@@ -14198,7 +14318,7 @@ def schedule_archive():
 
         # Compute batch counts for Used / Not Used tabs after school year / semester filters are applied
         count_all = len(batches_list)
-        count_used = sum(1 for b in batches_list if b.get('is_used'))
+        count_used = sum(1 for b in batches_list if _is_used_true(b.get('is_used')))
         count_not_used = count_all - count_used
 
         semester_options = list(SEMESTER_CHOICES)
@@ -14220,7 +14340,13 @@ def schedule_archive():
         count_used = 0
         count_not_used = 0
 
-    has_active_filters = bool(school_year_filter or date_from or date_to or (status_filter and status_filter != 'all'))
+    # Treat "active filters" as user-supplied filters only; the defaulted
+    # school year / semester from a fresh open must not look like a filter.
+    has_active_filters = bool(
+        (school_year_arg is not None and school_year_filter)
+        or date_from or date_to
+        or (status_filter and status_filter != 'all')
+    )
 
     return render_template(
         'schedule_archive.html',
@@ -14349,7 +14475,7 @@ def view_schedule_archive_batch(batch_id):
             'archived_by_title': first_row.get('preparer_title') or 'Role/title unavailable',
             'archive_reason': first_row.get('archive_reason') or ('Legacy archive' if batch_id == 'legacy' else 'Archived schedule'),
             'school_year': first_row.get('school_year') or '',
-            'is_used': any(bool(r.get('is_used')) for r in rows),
+            'is_used': _batch_is_used(rows),
         }
 
         sections_by_key = {}
@@ -14721,7 +14847,7 @@ def api_toggle_schedule_used():
         if user_role != 'admin' and user_prog_id is not None and sched_pid is not None and str(user_prog_id) != str(sched_pid):
             return jsonify({'ok': False, 'success': False, 'error': 'Permission denied: Cannot modify another program\'s schedule.'}), 403
 
-        current_is_used = any(bool(r.get('is_used')) for r in target_rows)
+        current_is_used = _batch_is_used(target_rows)
         if explicit_used is not None:
             if isinstance(explicit_used, str):
                 target_is_used = explicit_used.lower() in ('true', '1', 'yes')
@@ -14743,7 +14869,7 @@ def api_toggle_schedule_used():
                     d = rpc_res.data
                     if isinstance(d, dict) and d.get('success'):
                         rpc_success = True
-                        target_is_used = bool(d.get('is_used'))
+                        target_is_used = _is_used_true(d.get('is_used'))
             except Exception as rpc_err:
                 logging.warning(f"set_schedule_batch_used RPC fallback: {rpc_err}")
                 rpc_success = False

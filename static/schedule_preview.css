@@ -1,0 +1,188 @@
+/**
+ * NEUST CICT Class Scheduling and Room Allocation System
+ * Shared Schedule Preview Card
+ *
+ * Single source of truth for the static weekly-timetable mockup used by:
+ *   - the landing page hero
+ *   - the login page visual panel
+ *
+ * The component defines its own scoped tokens (falling back to the landing
+ * palette values) so it looks the same on both pages and can never drift.
+ */
+
+.timetable-card {
+  /* Component-scoped design tokens (landing palette) */
+  --tt-card-bg: #ffffff;
+  --tt-card-border: #dbeafe;
+  --tt-radius-card: 20px;
+  --tt-shadow-card: 0 16px 32px -8px rgba(11, 31, 77, 0.08),
+                    0 4px 12px -2px rgba(11, 31, 77, 0.04);
+  --tt-navy: #0b1f4d;
+  --tt-primary: #2563eb;
+  --tt-deep-blue: #1d4ed8;
+  --tt-lecture-bg: #dbeafe;
+  --tt-empty-bg: #f1f5f9;
+  --tt-small-text: #64748b;
+  --tt-muted-text: #334e7a;
+  --tt-status-green: #10b981;
+
+  background-color: var(--tt-card-bg);
+  border: 1px solid var(--tt-card-border);
+  border-radius: var(--tt-radius-card);
+  padding: 24px 24px 20px;
+  box-shadow: var(--tt-shadow-card);
+  width: 100%;
+}
+
+.timetable-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--tt-card-border);
+  margin-bottom: 16px;
+}
+
+.timetable-card__title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--tt-navy);
+  letter-spacing: -0.01em;
+}
+
+.timetable-card__semester {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tt-primary);
+}
+
+.timetable-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.timetable-grid__col-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tt-small-text);
+  text-align: center;
+  padding-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.timetable-grid__cell {
+  min-height: 52px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.timetable-grid__cell-code {
+  font-weight: 700;
+}
+
+.timetable-grid__cell-room {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* Lab Cell */
+.timetable-grid__cell--lab {
+  background-color: var(--tt-deep-blue);
+  color: var(--tt-card-bg);
+}
+
+/* Lecture Cell */
+.timetable-grid__cell--lecture {
+  background-color: var(--tt-lecture-bg);
+  color: var(--tt-deep-blue);
+}
+
+/* Empty Cell */
+.timetable-grid__cell--empty {
+  background-color: var(--tt-empty-bg);
+}
+
+/* Timetable Legend */
+.timetable-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--tt-card-border);
+  font-size: 12px;
+  color: var(--tt-muted-text);
+  font-weight: 600;
+}
+
+.timetable-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timetable-legend__indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.timetable-legend__indicator--lab {
+  background-color: var(--tt-deep-blue);
+}
+
+.timetable-legend__indicator--lecture {
+  background-color: var(--tt-lecture-bg);
+}
+
+.timetable-legend__indicator--status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--tt-status-green);
+}
+
+/* Responsive (matches the landing page breakpoints) */
+@media (max-width: 992px) {
+  .timetable-card {
+    max-width: 560px;
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .timetable-card {
+    padding: 16px 12px;
+  }
+
+  .timetable-grid {
+    gap: 4px;
+  }
+
+  .timetable-grid__cell {
+    min-height: 46px;
+    font-size: 9.5px;
+    padding: 4px 2px;
+  }
+
+  .timetable-grid__cell-room {
+    font-size: 9px;
+  }
+
+  .timetable-legend {
+    font-size: 11px;
+    gap: 10px;
+  }
+}

@@ -1,0 +1,533 @@
+/**
+ * NEUST CICT Class Scheduling and Room Allocation System
+ * Login Page Stylesheet (split-screen redesign)
+ *
+ * Visual language matches the public landing page:
+ *   - Plus Jakarta Sans
+ *   - primary blue #2563eb / hover #1d4ed8
+ *   - dark navy headings #0b1f4d
+ *   - light-blue surface #eff6ff
+ *
+ * The shared schedule mockup lives in static/schedule_preview.css.
+ */
+
+/* ==============================================================================
+   Design tokens
+   ============================================================================== */
+:root {
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --navy: #0b1f4d;
+  --surface-light: #eff6ff;
+  --surface-border: #dbeafe;
+  --muted-text: #334e7a;
+  --small-text: #64748b;
+  --field-border: #d1d5db;
+  --font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --radius-input: 10px;
+  --radius-btn: 10px;
+  --radius-visual: 20px;
+
+  --shadow-btn: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+/* ==============================================================================
+   Page shell: centered card on the tinted landing hero background
+   ============================================================================== */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: var(--surface-light);
+  font-family: var(--font-family);
+  color: var(--navy);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* The white card that holds the two halves */
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  background-color: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(15, 31, 75, 0.12);
+  overflow: hidden;
+}
+
+.login-card__row {
+  height: 100%;
+}
+
+/* Left half: the form */
+.login-panel--form {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 32px 24px;
+  overflow-y: auto;
+}
+
+/* Right half: visual panel (kept out of view until the lg breakpoint) */
+.login-panel--visual {
+  display: none;
+  height: 100%;
+  padding: 16px 16px 16px 0;
+}
+
+/* ==============================================================================
+   Brand (mirrors the landing navbar)
+   ============================================================================== */
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--navy);
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.login-brand__icon {
+  width: 38px;
+  height: 38px;
+  background-color: var(--primary);
+  color: #ffffff;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.login-brand__icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: #ffffff;
+  stroke-width: 2;
+  fill: none;
+}
+
+.login-brand__logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  object-fit: contain;
+  display: none; /* Fallback toggled on load via onerror/onload */
+}
+
+.login-brand__name {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--navy);
+}
+
+/* Centered form column */
+.login-panel__content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 360px;
+  margin-inline: auto;
+  padding-top: 20px;
+}
+
+/* ==============================================================================
+   Headings
+   ============================================================================== */
+.login-title {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--navy);
+  margin: 0 0 6px;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--small-text);
+  margin: 0 0 24px;
+}
+
+/* ==============================================================================
+   Alerts (flash messages + login errors)
+   ============================================================================== */
+.login-page .alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--radius-input);
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+
+.login-page .alert i {
+  font-size: 1rem;
+  line-height: 1.45;
+  flex-shrink: 0;
+}
+
+/* ==============================================================================
+   Form fields
+   ============================================================================== */
+.login-field {
+  margin-bottom: 20px;
+}
+
+.login-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.login-page .form-control {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  font-size: 15px;
+  font-family: var(--font-family);
+  color: var(--navy);
+  background-color: #ffffff;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-input);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.login-page .form-control::placeholder {
+  color: #9aa4b2;
+}
+
+.login-page .form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  outline: none;
+}
+
+.login-page .form-control.is-invalid {
+  border-color: #dc2626;
+}
+
+/* Browser autofill must keep the same white background and navy text
+   (Chrome/Edge/Safari paint a yellow-ish background otherwise). */
+.login-page .form-control:-webkit-autofill,
+.login-page .form-control:-webkit-autofill:hover,
+.login-page .form-control:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--navy);
+  caret-color: var(--navy);
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Keep the primary-blue focus ring for autofilled fields too. */
+.login-page .form-control:-webkit-autofill:focus {
+  border-color: var(--primary);
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset, 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 1000px #ffffff inset, 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Firefox autofill */
+.login-page .form-control:autofill {
+  background-color: #ffffff;
+  color: var(--navy);
+}
+
+.login-helper-text {
+  font-size: 13px;
+  color: var(--small-text);
+  margin: -8px 0 16px;
+}
+
+/* Password field with inside toggle button */
+.password-field-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-field-wrapper .form-control {
+  padding-right: 44px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 8px;
+  margin: 0;
+  color: var(--small-text);
+  cursor: pointer;
+  border-radius: 8px;
+  line-height: 1;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.password-toggle-btn:hover {
+  color: var(--navy);
+  background-color: rgba(15, 23, 42, 0.05);
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  color: var(--primary);
+}
+
+.password-toggle-btn i {
+  font-size: 1.05rem;
+}
+
+/* ==============================================================================
+   Primary button (same look as the landing "Login" button)
+   ============================================================================== */
+.login-page .btn-primary {
+  width: 100%;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 24px;
+  background-color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-btn);
+  color: #ffffff;
+  font-family: var(--font-family);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: var(--shadow-btn);
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.login-page .btn-primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.login-page .btn-primary:active {
+  transform: translateY(1px);
+}
+
+.login-page .btn-primary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.login-page .btn-primary:disabled,
+.login-page .btn-primary.disabled {
+  opacity: 0.75;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.login-submit {
+  margin-top: 8px; /* 20px field gap + 8px = 28px before the button */
+}
+
+/* ==============================================================================
+   Footer links
+   ============================================================================== */
+.login-toggle {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--small-text);
+}
+
+.login-toggle a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-toggle a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ==============================================================================
+   Right visual panel (desktop / tablet only)
+   ============================================================================== */
+.login-visual {
+  height: 100%;
+  border-radius: var(--radius-visual);
+  background-color: var(--surface-light);
+  border: 1px solid var(--surface-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 28px 24px;
+  overflow: hidden;
+}
+
+.login-visual__tagline {
+  max-width: 360px;
+  margin: 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--navy);
+}
+
+.login-visual__tagline span {
+  color: var(--primary);
+}
+
+.login-visual__card {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+}
+
+/* Floating status chip overlapping the card corner */
+.login-visual__chip {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  background-color: #ffffff;
+  border: 1px solid var(--surface-border);
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  white-space: nowrap;
+  box-shadow: 0 8px 18px -8px rgba(11, 31, 77, 0.28);
+}
+
+.login-visual__chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #10b981;
+  flex-shrink: 0;
+}
+
+/* ==============================================================================
+   Gentle fade-in
+   ============================================================================== */
+@keyframes loginFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.login-panel__content,
+.login-visual {
+  animation: loginFadeIn 0.5s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-panel__content,
+  .login-visual {
+    animation: none;
+  }
+}
+
+/* ==============================================================================
+   Button loading state (spinner while submitting)
+   ============================================================================== */
+.btn-loading {
+  opacity: 0.82;
+  cursor: progress !important;
+  pointer-events: none !important;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.btn-loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  flex-shrink: 0;
+  vertical-align: middle;
+  animation: btnSpinnerRotate 0.65s linear infinite;
+  margin-right: 0.45em;
+  position: relative;
+  top: -1px;
+}
+
+.btn-loading-spinner--icon-only {
+  margin-right: 0 !important;
+}
+
+.sibling-locked-mid-load {
+  opacity: 0.65 !important;
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+}
+
+@keyframes btnSpinnerRotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==============================================================================
+   Desktop: two-column card (Bootstrap `lg` breakpoint = 992px)
+   ============================================================================== */
+@media (min-width: 992px) {
+  .login-card {
+    max-width: 1040px;
+    height: 600px;
+    min-height: 560px;
+    max-height: calc(100vh - 48px);
+  }
+
+  .login-panel--form {
+    padding: 40px 44px;
+  }
+
+  .login-panel--visual {
+    display: block;
+  }
+}
+
+/* Small screens: tighter card padding and a lighter shadow */
+@media (max-width: 575.98px) {
+  .login-panel--form {
+    padding: 24px;
+  }
+
+  .login-card {
+    box-shadow: none;
+  }
+}
