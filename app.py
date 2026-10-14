@@ -71,6 +71,87 @@ supabase_admin: Client = (
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'scheduler-secret-key')
 
+# ---------------------------------------------------------------------------
+# Temporary performance instrumentation (opt-in).
+#
+# Enable with SCHED_TIMING_DEBUG=1. When off (the default) nothing is wrapped
+# and there is zero overhead. When on, every Supabase call is logged with its
+# duration and row count, and every request logs its total wall time. Remove
+# this block (or leave it disabled) once the slow paths are understood.
+# ---------------------------------------------------------------------------
+_SCHED_TIMING = (os.environ.get('SCHED_TIMING_DEBUG', '') or '').strip().lower() in ('1', 'true', 'yes')
+
+
+class _TimedBuilder:
+    """Transparent proxy that times the final `.execute()` of a Supabase query."""
+    __slots__ = ('_b', '_label')
+
+    def __init__(self, builder, label):
+        object.__setattr__(self, '_b', builder)
+        object.__setattr__(self, '_label', label)
+
+    def __getattr__(self, name):
+        attr = getattr(object.__getattribute__(self, '_b'), name)
+        if not callable(attr):
+            return attr
+
+        def _chained(*args, **kwargs):
+            result = attr(*args, **kwargs)
+            if result is not None and result.__class__.__module__.split('.')[0] == 'postgrest':
+                return _TimedBuilder(result, object.__getattribute__(self, '_label'))
+            return result
+
+        return _chained
+
+    def execute(self):
+        builder = object.__getattribute__(self, '_b')
+        label = object.__getattribute__(self, '_label')
+        started = time.perf_counter()
+        result = builder.execute()
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        data = getattr(result, 'data', None)
+        rows = len(data) if isinstance(data, list) else (1 if data else 0)
+        logging.info("[SCHED TIMING] db %s took %.1f ms (rows=%s)", label, elapsed_ms, rows)
+        return result
+
+
+def _install_supabase_timing():
+    if not _SCHED_TIMING:
+        return
+    original_table = supabase.table
+    original_rpc = supabase.rpc
+
+    def timed_table(name):
+        return _TimedBuilder(original_table(name), f"table:{name}")
+
+    def timed_rpc(fn, params=None):
+        return _TimedBuilder(original_rpc(fn, params or {}), f"rpc:{fn}")
+
+    supabase.table = timed_table
+    supabase.rpc = timed_rpc
+    logging.warning("[SCHED TIMING] Supabase call instrumentation enabled (SCHED_TIMING_DEBUG=1)")
+
+
+_install_supabase_timing()
+
+
+@app.before_request
+def _sched_timing_before():
+    if _SCHED_TIMING:
+        g._sched_t_start = time.perf_counter()
+
+
+@app.after_request
+def _sched_timing_after(response):
+    if _SCHED_TIMING:
+        started = getattr(g, '_sched_t_start', None)
+        if started is not None:
+            logging.info(
+                "[SCHED TIMING] request %s %s total %.1f ms (status %s)",
+                request.method, request.path, (time.perf_counter() - started) * 1000.0, response.status_code,
+            )
+    return response
+
 # Shared Constants
 MAX_TEACHING_HOURS = 40
 SEMESTER_CHOICES = ["1st Semester", "2nd Semester"]
@@ -93,21 +174,64 @@ def specialization_stage_payload():
     }
 
 
+# ---------------------------------------------------------------------------
+# Small lookup cache (specializations, etc.).
+#
+# These tables are tiny and change rarely, but they are read inside per-section
+# and per-row loops (e.g. `_derive_section_track`). Without a cache every call
+# hits Postgres, which turns a single page render into hundreds of queries
+# (N+1). A short in-memory TTL keeps a page load to one query per table while
+# still noticing edits within `_LOOKUP_TTL_SECONDS`. Write routes call
+# `_invalidate_lookup_cache()` so edits are reflected immediately.
+# ---------------------------------------------------------------------------
+_LOOKUP_TTL_SECONDS = 60
+_LOOKUP_CACHE = {}
+_LOOKUP_CACHE_LOCK = threading.Lock()
+
+
+def _lookup_cached(key, loader, ttl=_LOOKUP_TTL_SECONDS):
+    now = time.time()
+    with _LOOKUP_CACHE_LOCK:
+        entry = _LOOKUP_CACHE.get(key)
+        if entry is not None and (now - entry[0]) < ttl:
+            return entry[1]
+    value = loader()
+    with _LOOKUP_CACHE_LOCK:
+        _LOOKUP_CACHE[key] = (now, value)
+    return value
+
+
+def _invalidate_lookup_cache(*keys):
+    """Drop cached lookup rows. No keys = clear everything."""
+    with _LOOKUP_CACHE_LOCK:
+        if not keys:
+            _LOOKUP_CACHE.clear()
+        else:
+            for k in keys:
+                _LOOKUP_CACHE.pop(k, None)
+
+
 def _get_specializations(include_archived=True):
     """Return the global specializations list from public.specializations.
 
     Specializations are a single institution-wide list (no per-program scoping).
     include_archived=True keeps archived rows (needed to display existing courses);
     include_archived=False is for pickers and validation.
+
+    Cached for `_LOOKUP_TTL_SECONDS` because callers run inside per-section /
+    per-row loops; a copy is returned so callers can't mutate the cache.
     """
-    try:
-        q = supabase.table('specializations').select('*')
-        if not include_archived:
-            q = q.eq('archive', False)
-        return q.order('name').execute().data or []
-    except Exception as err:
-        logging.debug(f"Error fetching specializations: {err}")
-        return []
+    def _load():
+        try:
+            q = supabase.table('specializations').select('*')
+            if not include_archived:
+                q = q.eq('archive', False)
+            return q.order('name').execute().data or []
+        except Exception as err:
+            logging.debug(f"Error fetching specializations: {err}")
+            return []
+
+    return list(_lookup_cached(('specializations', bool(include_archived)), _load))
 
 
 def _specialization_name_by_id(spec_id):
@@ -964,7 +1088,7 @@ ROUTE_PERMISSIONS = {
     'export_professor_schedule_pdf': {'admin', 'chair', 'viewer'},
     'api_professor_availability': {'admin', 'chair', 'viewer'},
     'api_professor_workload': {'admin', 'chair', 'viewer'},
-    'my_schedule': {'admin', 'chair', 'viewer'},
+    'my_schedule': {'admin', 'chair'},
 
     # Schedules: Room Schedule (Admin READ-ONLY, Scheduler full, Viewer READ-ONLY)
     'room_schedule': {'admin', 'chair', 'viewer'},
@@ -1538,6 +1662,55 @@ def _get_user_program_id(user_id=None):
 
     return pid
 
+
+def _resolve_view_program(requested=None):
+    """Single source of truth for which program a schedule page is showing.
+
+    chair  -> their own program (any client-supplied value is ignored); a chair
+              without a program gets the "Program Required" page.
+    viewer -> the requested program when it exists and is not archived; otherwise
+              the first non-archived program ordered by program_code.
+    admin  -> the requested program when valid; otherwise their default program.
+
+    Returns (program_id, program_code, programs, program_required: bool).
+    """
+    norm_role = _normalize_role(session.get('role', ''))
+    all_programs = _get_programs(include_archived=False)
+
+    requested = str(requested or '').strip()
+    requested_id = None
+    if requested and requested.lower() not in ('all', 'all programs', 'none', ''):
+        candidate = _find_program_id_by_name(requested)
+        if candidate is not None and any(str(p.get('id')) == str(candidate) for p in all_programs):
+            requested_id = candidate
+
+    def _code(pid):
+        if pid is None:
+            return ''
+        return _find_program_code_by_id(pid) or next(
+            (p.get('program_code') for p in all_programs if str(p.get('id')) == str(pid)), ''
+        )
+
+    def _by_id(pid):
+        return [p for p in all_programs if str(p.get('id')) == str(pid)]
+
+    if norm_role == ROLE_VIEWER:
+        pid = requested_id or (all_programs[0].get('id') if all_programs else None)
+        return pid, _code(pid), all_programs, False
+
+    if norm_role == ROLE_ADMIN:
+        pid = (requested_id
+               or _find_program_id_by_name(session.get('program', ''))
+               or (all_programs[0].get('id') if all_programs else None))
+        return pid, _code(pid), all_programs, False
+
+    # Chair (scheduler) - strictly their own program, never the client value.
+    own_pid = _get_user_program_id()
+    if not own_pid:
+        return None, '', [], True
+    return own_pid, _code(own_pid), _by_id(own_pid), False
+
+
 def _get_professor_program_ids(prof_identifier):
     """Return the set of program_ids a professor is linked to (via professor_load or legacy tables)."""
     if not prof_identifier:
@@ -2025,28 +2198,53 @@ def _resolve_professor_info(prof_identifier):
     return prof_dict, prof_pc_ids, pc_course_codes
 
 def _get_active_semester(program_id=None):
-    """Return the currently active semester record, optionally scoped by program_id."""
-    try:
-        q = supabase.table('semester').select('*, program:program_id(program_code)').eq('is_active', True)
-        if program_id:
-            q = q.eq('program_id', program_id)
-        res = q.order('updated_at', desc=True).limit(1).execute()
-        if res.data and len(res.data) > 0:
-            sem = res.data[0]
-            prog = _rel(sem, 'program') or {}
-            sem['program_code'] = prog.get('program_code') or ''
-            return sem
+    """Return the currently active semester record, optionally scoped by program_id.
 
-        # Fallback: if no active semester specifically for this program_id, fetch any active semester
-        res_any = supabase.table('semester').select('*, program:program_id(program_code)').eq('is_active', True).limit(1).execute()
-        if res_any.data and len(res_any.data) > 0:
-            sem = res_any.data[0]
-            prog = _rel(sem, 'program') or {}
-            sem['program_code'] = prog.get('program_code') or ''
-            return sem
-    except Exception as err:
-        logging.debug(f"Error fetching active semester: {err}")
-    return None
+    Cached via _lookup_cached so that repeated calls within a request (e.g. per-
+    section loops in schedules / archive pages) hit the in-memory TTL cache
+    instead of hitting Postgres each time. Writes that change semester data
+    should call _invalidate_lookup_cache() to flush the cache.
+    """
+    def _load():
+        try:
+            q = supabase.table('semester').select('*, program:program_id(program_code)').eq('is_active', True)
+            if program_id:
+                q = q.eq('program_id', program_id)
+            res = q.order('updated_at', desc=True).limit(1).execute()
+            if res.data and len(res.data) > 0:
+                sem = res.data[0]
+                prog = _rel(sem, 'program') or {}
+                sem['program_code'] = prog.get('program_code') or ''
+                return sem
+
+            # Fallback: if no active semester specifically for this program_id, fetch any active semester
+            res_any = supabase.table('semester').select('*, program:program_id(program_code)').eq('is_active', True).limit(1).execute()
+            if res_any.data and len(res_any.data) > 0:
+                sem = res_any.data[0]
+                prog = _rel(sem, 'program') or {}
+                sem['program_code'] = prog.get('program_code') or ''
+                return sem
+        except Exception as err:
+            logging.debug(f"Error fetching active semester: {err}")
+        return None
+
+
+
+def _lookup_cached_wh(key, loader, ttl=_LOOKUP_TTL_SECONDS):
+    """TTL-cached wrapper specifically for working_hours lookups.
+
+    Shares the same TTL and invalidation mechanism as _lookup_cached so that
+    edits to working_hours (add/archive/restore) are reflected immediately.
+    """
+    now = time.time()
+    with _LOOKUP_CACHE_LOCK:
+        entry = _LOOKUP_CACHE.get(key)
+        if entry is not None and (now - entry[0]) < ttl:
+            return entry[1]
+    value = loader()
+    with _LOOKUP_CACHE_LOCK:
+        _LOOKUP_CACHE[key] = (now, value)
+    return value
 
 def _latest_archive_scope(program_id):
     """Return the school_year + semester of a program's most recent archive.
@@ -5512,6 +5710,7 @@ def add_specialization():
                 flash('Specialization already exists.', 'danger') or redirect(url_for('show_programs')))
     try:
         supabase.table('specializations').insert({'name': name, 'code': code}).execute()
+        _invalidate_lookup_cache()
         log_activity('create', 'specialization', f"{name} ({code or '-'})")
         msg = f"Specialization '{name}' added."
         return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
@@ -5542,6 +5741,7 @@ def edit_specialization(spec_id):
                 flash('Name already used.', 'danger') or redirect(url_for('show_programs')))
     try:
         supabase.table('specializations').update({'name': name, 'code': code}).eq('specialization_id', spec_id).execute()
+        _invalidate_lookup_cache()
         log_activity('edit', 'specialization', f"ID {spec_id}: {name}")
         msg = 'Specialization updated.'
         return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
@@ -5562,6 +5762,7 @@ def archive_specialization(spec_id):
         return _spec_error(msg) if is_ajax else (flash(msg, 'danger') or redirect(url_for('show_programs')))
     try:
         supabase.table('specializations').update({'archive': True}).eq('specialization_id', spec_id).execute()
+        _invalidate_lookup_cache()
         log_activity('archive', 'specialization', f"ID {spec_id}: {current.get('name')}")
         msg = 'Specialization archived. You can restore it later.'
         return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
@@ -5575,6 +5776,7 @@ def restore_specialization(spec_id):
     is_ajax = _is_ajax_request()
     try:
         supabase.table('specializations').update({'archive': False}).eq('specialization_id', spec_id).execute()
+        _invalidate_lookup_cache()
         log_activity('restore', 'specialization', f"ID {spec_id}")
         msg = 'Specialization restored.'
         return jsonify({'success': True, 'message': msg}) if is_ajax else (flash(msg, 'success') or redirect(url_for('show_programs')))
@@ -8390,27 +8592,8 @@ def _calculate_professor_availability(entries, working_hours=None, professor=Non
 
 
 
-@app.route('/my_schedule')
+
 @roles_required('viewer', 'admin', 'chair')
-def my_schedule():
-    """My Schedules: a Viewer's own schedule, matched by name across ALL programs.
-
-    The professor is resolved server-side from the logged-in account, so no
-    professor id is exposed in (or accepted from) the URL.
-    """
-    norm_role = _normalize_role(session.get('role', ''))
-    if norm_role != ROLE_VIEWER:
-        # Admins/Chairs use the full Professor Schedule tab.
-        return redirect(url_for('professor_schedule'))
-    key, _display_name = _find_viewer_professor_key(_get_session_user_row())
-    if not key:
-        flash('No schedule found for your name. Please make sure your account name matches your name in the system.', 'warning')
-        return redirect(url_for('schedules'))
-    # Render the schedule in place; the professor id never appears in the URL and
-    # view_professor_schedule enforces that a viewer can only see their own key.
-    return view_professor_schedule(key)
-
-
 @app.route('/professor_schedule')
 @roles_required('admin', 'chair')
 def professor_schedule():
@@ -8729,7 +8912,7 @@ def view_professor_schedule(prof_identifier):
 
     professor, prof_pc_ids, pc_course_codes = _resolve_professor_info(prof_identifier)
     if not professor:
-        return redirect(url_for('my_schedule') if is_viewer else url_for('professor_schedule'))
+        return redirect(url_for('schedules') if is_viewer else url_for('professor_schedule'))
 
     professor_name = professor.get('professor_name') or f"{professor.get('first_name', '')} {professor.get('last_name', '')}".strip()
     max_hours = MAX_TEACHING_HOURS
@@ -9504,17 +9687,17 @@ def api_professor_workload(prof_identifier):
 @app.route('/room_schedule')
 @roles_required('admin', 'chair', 'viewer')
 def room_schedule():
-    user_prog_id = _get_user_program_id()
     norm_role = _normalize_role(session.get('role', ''))
-    is_super_admin = norm_role == 'admin'
-    is_viewer = norm_role == 'viewer'
-    program = session.get('program', '')
+    is_super_admin = norm_role == ROLE_ADMIN
+    is_viewer = norm_role == ROLE_VIEWER
+    user_prog_id = _get_user_program_id()
     all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_code_by_id(user_prog_id) or (all_programs[0].get('program_code') if all_programs else '')
     program_filter = (request.args.get('program') or '').strip()
 
-    if not (is_super_admin or is_viewer) and not user_prog_id:
-        # Scheduler (Chair) without a program -> error with a logout option.
+    # One helper decides which program is shown, for every role.
+    effective_program_id, program_filter, programs, program_required = _resolve_view_program(program_filter)
+    if program_required:
+        # Chair without an assigned program. Viewers and admins never reach here.
         return render_template(
             'room_schedule.html',
             active_page='room_schedule',
@@ -9533,16 +9716,8 @@ def room_schedule():
             is_chair=True
         )
 
-    if is_super_admin or is_viewer:
-        # Admin and Viewer: read-only across all programs; may narrow via the filter.
-        programs = all_programs
-        if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
-            program_filter = 'All Programs' if is_viewer else default_prog
-    else:
-        programs = []
-        program_filter = default_prog
-
-    active_semester = _get_active_semester(user_prog_id)
+    active_semester = _get_active_semester(effective_program_id)
+    program = program_filter
 
     room_filter = request.args.get('room_id', '').strip()
     day_filter = request.args.get('day', '').strip()
@@ -9566,12 +9741,10 @@ def room_schedule():
         try:
             sched_cols = 'schedule_id, professor_load_id, room_id, section, semester, major, specialization, program_id, day, class_start, class_end'
             query = supabase.table('schedule_with_semester').select(sched_cols).eq('archive', False)
-            if not is_super_admin and not is_viewer and user_prog_id:
-                query = query.eq('program_id', user_prog_id)
-            elif (is_super_admin or is_viewer) and program_filter:
-                p_id = int(program_filter) if program_filter.isdigit() else _find_program_id_by_name(program_filter)
-                if p_id:
-                    query = query.eq('program_id', p_id)
+            if effective_program_id:
+                query = query.eq('program_id', effective_program_id)
+            else:
+                query = query.eq('program_id', -1)
 
             # Paginate so 5000+ rows load completely
             offset = 0
@@ -9590,12 +9763,10 @@ def room_schedule():
             try:
                 sched_cols = 'schedule_id, professor_load_id, room_id, section, day, class_start, class_end, professor_load(course(program_id, semester, specialization))'
                 query = supabase.table('schedule').select(sched_cols).eq('archive', False)
-                if not is_super_admin and not is_viewer and user_prog_id:
-                    query = query.eq('professor_load.course.program_id', user_prog_id)
-                elif (is_super_admin or is_viewer) and program_filter:
-                    p_id = int(program_filter) if program_filter.isdigit() else _find_program_id_by_name(program_filter)
-                    if p_id:
-                        query = query.eq('professor_load.course.program_id', p_id)
+                if effective_program_id:
+                    query = query.eq('professor_load.course.program_id', effective_program_id)
+                else:
+                    query = query.eq('professor_load.course.program_id', -1)
                 offset = 0
                 page_size = 1000
                 raw_rows = []
@@ -9694,24 +9865,17 @@ def view_room_schedule(room_id):
     program_filter = request.args.get('program', '').strip()
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
 
-    program = session.get('program', '')
-    user_role = (session.get('role') or '').lower()
-    norm_role = _normalize_role(user_role)
-    is_admin = norm_role == 'admin'
-    is_viewer = norm_role == 'viewer'
-    user_prog_id = _get_user_program_id()
-    if is_viewer and not user_prog_id:
+    norm_role = _normalize_role(session.get('role', ''))
+    is_admin = norm_role == ROLE_ADMIN
+    is_viewer = norm_role == ROLE_VIEWER
+
+    # One helper decides which program is shown, for every role.
+    effective_program_id, program_filter, _programs, program_required = _resolve_view_program(program_filter)
+    if program_required:
+        # Chair without an assigned program. Viewers and admins never reach here.
         flash("No program is assigned to your account. Please contact an administrator.", "warning")
         return redirect(url_for('room_schedule'))
-    all_programs = _get_programs(include_archived=False)
-    default_prog = program or _find_program_code_by_id(user_prog_id) or (all_programs[0].get('program_code') if all_programs else '')
-    if is_viewer:
-        program_filter = default_prog
-    elif is_admin:
-        if not program_filter or program_filter.lower() in ('all', 'all programs', 'none', ''):
-            program_filter = default_prog
-    else:
-        program_filter = default_prog
+    program = program_filter
 
     room_res = supabase.table('room').select('room_id, room_name, room_type').eq('room_id', room_id).execute()
     room = _first(room_res.data or [])
@@ -9735,12 +9899,8 @@ def view_room_schedule(room_id):
             maj = str(p_entry.get('major') or '')
             prog = str(p_entry.get('program') or '')
 
-            if user_role in ('super_admin', 'admin'):
-                if program_filter and prog != program_filter:
-                    continue
-            else:
-                if program and prog and prog != program:
-                    continue
+            if program_filter and prog and prog != program_filter:
+                continue
 
             if year_filter and not sec.startswith(str(year_filter)):
                 continue
@@ -9772,10 +9932,7 @@ def view_room_schedule(room_id):
                 'year_level': _year_of_section(p_entry.get('section')),
             })
     else:
-        is_admin = user_role in ('super_admin', 'admin')
-        norm_role = _normalize_role(user_role)
-        is_viewer = norm_role == 'viewer'
-        user_program_id = _get_user_program_id()
+        user_prog_id = _get_user_program_id()
         user_prog_name = session.get('program', '')
 
         query = supabase.table('schedule').select(
@@ -9813,18 +9970,21 @@ def view_room_schedule(room_id):
             p_info = _rel(row, 'program') or {}
             r_prog_name = p_info.get('program_code') or row.get('program') or ''
 
-            norm_role = _normalize_role(user_role)
-            is_viewer = norm_role == 'viewer'
-            is_own = True
-            if is_viewer or not is_admin:
-                if user_program_id and r_prog_id is not None:
-                    is_own = (str(r_prog_id) == str(user_program_id))
+            if is_viewer:
+                # Viewers see only the selected program, unmasked.
+                if effective_program_id and r_prog_id is not None and str(r_prog_id) != str(effective_program_id):
+                    continue
+                is_own = True
+            elif is_admin:
+                is_own = True
+            else:
+                # Chair: mask other programs' bookings.
+                if user_prog_id and r_prog_id is not None:
+                    is_own = (str(r_prog_id) == str(user_prog_id))
                 elif user_prog_name and r_prog_name:
                     is_own = (r_prog_name.strip().upper() == user_prog_name.strip().upper())
                 else:
                     is_own = False
-            else:
-                is_own = True
 
             prog_label = r_prog_name or (f"Program {r_prog_id}" if r_prog_id else "Other Program")
 
@@ -10341,72 +10501,27 @@ def schedules():
     fetch_error = None
     no_active_schedule = False
 
-    # ------------------------------------------------------------------
-    # DEFAULT PROGRAM
-    #   * Exactly one program selected at all times (no "All Programs").
-    #   * Chair -> their own program (server-scoped; cannot request another program).
-    #   * Viewer -> strictly their own program (locked to user record).
-    #   * Admin -> can select any program from dropdown / param.
-    # ------------------------------------------------------------------
-    default_pid = user_program_id or _find_program_id_by_name(program)
-    if not default_pid and all_programs:
-        default_pid = all_programs[0].get('id')
-
-    if not can_pick_program:
-        # Scheduler (Chair): scoped to their own program; a program is REQUIRED.
-        if not user_program_id:
-            return render_template(
-                'schedules.html',
-                active_page='schedules',
-                no_program_assigned=True,
-                no_program_message="No program is assigned to your account. Please contact an administrator.",
-                programs=[],
-                sections=[],
-                year_levels=[],
-                semesters=SEMESTER_CHOICES,
-                majors=[],
-                program_filter="",
-                can_pick_program=False,
-                is_admin=False,
-                is_viewer=False,
-                is_chair=True,
-                schedule_metadata={}
-            )
-        effective_program_id = default_pid
-        if program_arg_present and program_filter and program_filter.lower() != 'all':
-            target_pid = _find_program_id_by_name(program_filter)
-            if target_pid and effective_program_id and int(target_pid) != int(effective_program_id):
-                # Chair tried to view another program's schedule via the URL.
-                return access_denied({ROLE_CHAIR})
-            elif not effective_program_id and program and program_filter.strip().upper() != program.strip().upper():
-                return access_denied({ROLE_CHAIR})
-        program_filter = _find_program_code_by_id(effective_program_id) or program or (all_programs[0].get('program_code') if all_programs else '')
-        if effective_program_id:
-            programs = [p for p in all_programs if str(p.get('id')) == str(effective_program_id)]
-            if not programs:
-                programs = [{'id': effective_program_id, 'program_code': program_filter}]
-        else:
-            programs = []
-    elif is_viewer:
-        # Viewer: read-only across ALL programs; may narrow via the program filter.
-        if program_arg_present and program_filter and program_filter.lower() not in ('all', 'all programs', 'none', ''):
-            effective_program_id = _find_program_id_by_name(program_filter)
-        else:
-            effective_program_id = None
-        programs = all_programs
-        program_filter = _find_program_code_by_id(effective_program_id) if effective_program_id else 'All Programs'
-    else:
-        # Admin: may pick any program (defaults to a single program).
-        if program_arg_present and program_filter and program_filter.lower() != 'all':
-            target_pid = _find_program_id_by_name(program_filter)
-            if target_pid:
-                effective_program_id = target_pid
-            else:
-                effective_program_id = default_pid
-        else:
-            effective_program_id = default_pid
-        program_filter = _find_program_code_by_id(effective_program_id) or (all_programs[0].get('program_code') if all_programs else '')
-        programs = all_programs
+    # One helper decides which program is shown, for every role.
+    effective_program_id, program_filter, programs, program_required = _resolve_view_program(program_filter)
+    if program_required:
+        # Chair without an assigned program. Viewers and admins never reach here.
+        return render_template(
+            'schedules.html',
+            active_page='schedules',
+            no_program_assigned=True,
+            no_program_message="No program is assigned to your account. Please contact an administrator.",
+            programs=[],
+            sections=[],
+            year_levels=[],
+            semesters=SEMESTER_CHOICES,
+            majors=[],
+            program_filter="",
+            can_pick_program=False,
+            is_admin=False,
+            is_viewer=False,
+            is_chair=True,
+            schedule_metadata={}
+        )
 
     # ------------------------------------------------------------------
     # DEFAULT SEMESTER: the semester of the currently active (archive=false)
@@ -10445,8 +10560,6 @@ def schedules():
         # Backend program filter (via the linked course; no new schedule columns)
         if effective_program_id:
             query = query.eq('professor_load.course.program_id', effective_program_id)
-        elif is_viewer:
-            pass  # Viewer "All Programs": no program filter
         else:
             query = query.eq('professor_load.course.program_id', -1)
 
@@ -10625,14 +10738,17 @@ def view_schedule(section_name):
     semester_filter = request.args.get('semester', '')
     major_filter = request.args.get('major', '')
     mode = (request.args.get('mode') or request.args.get('source') or '').strip().lower()
-    program = session.get('program', '')
-    user_program_id = _get_user_program_id()
     norm_role = _normalize_role(session.get('role', ''))
     is_viewer = norm_role == ROLE_VIEWER
+    program_filter = (request.args.get('program') or '').strip()
 
-    if is_viewer and not user_program_id:
+    # One helper decides which program is shown, for every role.
+    effective_program_id, program_filter, _programs, program_required = _resolve_view_program(program_filter)
+    if program_required:
+        # Chair without an assigned program. Viewers and admins never reach here.
         flash("No program is assigned to your account. Please contact an administrator.", "warning")
         return redirect(url_for('schedules'))
+    program = program_filter  # program code, used for preview filtering
 
     preview_pool = _get_preview_for_user()
     has_preview = bool(preview_pool)
@@ -10694,8 +10810,15 @@ def view_schedule(section_name):
             'room(room_name)'
         ).eq('section', section_name).eq('archive', False)
 
-        if norm_role != ROLE_ADMIN and user_program_id:
-            query = query.eq('professor_load.course.program_id', user_program_id)
+        if effective_program_id:
+            query = query.eq('professor_load.course.program_id', effective_program_id)
+        else:
+            query = query.eq('professor_load.course.program_id', -1)
+
+        # Filter the semester in the query instead of pulling every semester's
+        # rows and discarding them in Python below.
+        if semester_filter:
+            query = query.eq('professor_load.course.semester', semester_filter)
 
         rows = query.execute().data or []
         rows = [_attach_schedule_program(row) for row in rows]
@@ -10770,38 +10893,11 @@ def view_schedule(section_name):
     except Exception:
         rooms = []
 
-    try:
-        pc_rows = (supabase.table('professor_load').select(
-            'id, course_id, professor_name, '
-            'course(course_id, course_code, program_id)'
-        ).execute().data) or []
-    except Exception:
-        pc_rows = []
-
-    if user_prog_id:
-        scoped_pc = [
-            r for r in pc_rows
-            if (_rel(r, 'course') or {}).get('program_id') == user_prog_id
-        ]
-        if scoped_pc:
-            pc_rows = scoped_pc
-
+    # The edit modal only exposes day/start/end/room now (professor, course and
+    # session are read-only), so the full professor_load listing that used to
+    # back a picker is no longer needed. Skipping it removes one full-table
+    # fetch (professor_load joined to course) on every section page load.
     all_professor_loads = []
-    for pc_item in pc_rows:
-        pcid = pc_item.get('id')
-        c_obj = _rel(pc_item, 'course') or {}
-        p_name = get_professor_name(pc_item) or ''
-        p_key = get_professor_key(pc_item) or ''
-        c_name = c_obj.get('course_code') or f"Course #{pc_item.get('course_id')}"
-        all_professor_loads.append({
-            'professor_load_id': pcid,
-            'prof_id': p_key,
-            'course_id': pc_item.get('course_id'),
-            'label': f"{p_name} - {c_name}",
-            'prof_name': p_name,
-            'course_code': c_name,
-        })
-    all_professor_loads.sort(key=lambda x: x['label'])
 
     return render_template(
         'generated_schedule.html',
@@ -11373,184 +11469,238 @@ def edit_schedule(section_name):
     })
 
 
+def _detect_edit_conflicts(exclude_schedule_id, professor_load_id, section, room_id, day, start_sec, end_sec):
+    """Compare the edited session against every OTHER active schedule row.
+
+    Overlap is strict (start < other_end AND end > other_start), so back-to-back
+    sessions are allowed. Returns a list of human-readable conflict messages.
+    """
+    conflicts = []
+    try:
+        rows = (supabase.table('schedule').select(
+            'schedule_id, professor_load_id, room_id, day, class_start, class_end, section, '
+            'professor_load(id, professor_name, course(course_code))'
+        ).eq('archive', False).eq('day', day).execute().data) or []
+    except Exception:
+        return conflicts
+
+    for r in rows:
+        if str(r.get('schedule_id')) == str(exclude_schedule_id):
+            continue
+        r_start = r.get('class_start')
+        r_end = r.get('class_end')
+        if r_start is None or r_end is None:
+            continue
+        rs = _to_seconds(r_start)
+        re_ = _to_seconds(r_end)
+        if not (start_sec < re_ and rs < end_sec):
+            continue
+
+        pc = _rel(r, 'professor_load') or {}
+        c = _rel(pc, 'course') or {}
+        r_course = c.get('course_code') or ''
+        r_prof = pc.get('professor_name') or ''
+        r_section = r.get('section') or ''
+        r_room_id = r.get('room_id')
+        when = f"{day} {_format_time(r_start)}-{_format_time(r_end)}"
+
+        if professor_load_id is not None and str(r.get('professor_load_id')) == str(professor_load_id):
+            conflicts.append(f"Prof. {r_prof} already has {r_course} ({r_section}) on {when}")
+        if section and r_section == section:
+            conflicts.append(f"Section {section} already has {r_course} on {when}")
+        if room_id is not None and r_room_id is not None and str(r_room_id) == str(room_id):
+            conflicts.append(f"Room {r_room_id} is already used by {r_course} ({r_section}) on {when}")
+
+    return conflicts
+
+
+def _validate_working_hours_for_edit(day, start, end):
+    """Return a conflict message when the time is outside working hours/lunch."""
+    start_td = _parse_time(start)
+    end_td = _parse_time(end)
+    if start_td is None or end_td is None:
+        return None
+    try:
+        wh_rows = (supabase.table('working_hours').select('*').eq('archive', False).execute().data) or []
+    except Exception:
+        wh_rows = []
+
+    if not wh_rows:
+        # No configured working hours -> no window/lunch constraint (generation
+        # falls back to a default window in the same situation).
+        return None
+
+    def _day_matches(w):
+        d = (day or '').strip().title()
+        if not d:
+            return False
+        wd = str(w.get('day') or '').strip()
+        if wd:
+            return d in [x.strip().title() for x in wd.split(',') if x.strip()]
+        # Legacy rows use start_day / end_day (inclusive range).
+        sd = str(w.get('start_day') or '').strip().title()
+        ed = str(w.get('end_day') or '').strip().title()
+        if sd or ed:
+            days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            if d not in days:
+                return False
+            lo = days.index(sd) if sd in days else 0
+            hi = days.index(ed) if ed in days else 6
+            return lo <= days.index(d) <= hi
+        return False
+
+    day_rows = [w for w in wh_rows if _day_matches(w)]
+    if not day_rows:
+        return f"{day} is not an active working day."
+    for w in day_rows:
+        w_start = _parse_time(w.get('start_time'))
+        w_end = _parse_time(w.get('end_time'))
+        if w_start is None or w_end is None:
+            continue
+        if start_td < w_start or end_td > w_end:
+            return (f"{day} {_format_time(start)}-{_format_time(end)} is outside the operating hours "
+                    f"({_format_time(w.get('start_time'))}-{_format_time(w.get('end_time'))}).")
+        lunch = w.get('lunch_time')
+        if lunch and _is_blocked_by_lunch(start_td, end_td, lunch):
+            return f"Lunch break conflict: {day} {_format_time(start)}-{_format_time(end)} overlaps the lunch break ({_format_time(lunch)})."
+        return None
+    return None
+
+
 @app.route('/edit_schedule_entry/<int:schedule_id>', methods=['POST'])
 @roles_required('chair')
 def edit_schedule_entry(schedule_id):
     payload = request.get_json(silent=True) or {}
-    course_code = (payload.get('course_code') or '').strip()
-    professor_name = (payload.get('professor_name') or '').strip()
-    room_name = (payload.get('room_name') or '').strip()
+    day = (payload.get('day') or '').strip()
+    start = (payload.get('start') or '').strip()
+    end = (payload.get('end') or '').strip()
     timeslot = (payload.get('timeslot') or '').strip()
-    session_type = (payload.get('session_type') or '').strip()
-    professor_load_id = payload.get('professor_load_id')
-    day = payload.get('day')
-    start = payload.get('start')
-    end = payload.get('end')
     room_id = payload.get('room_id')
-    program = session.get('program', '')
-    user_role = (session.get('role') or 'chair').lower()
 
-    if not course_code and not professor_name and not room_name and not timeslot and not session_type and not professor_load_id and not day and not start and not end and not room_id:
-        return jsonify({'success': False, 'message': 'Please complete at least one field.'}), 400
-
+    # Only day / start / end / room are editable. Professor, course, section,
+    # session type, semester, school year and program are read-only and ignored.
     try:
         query = supabase.table('schedule').select(
             'schedule_id, professor_load_id, room_id, day, class_start, class_end, session_type, section, '
             'professor_load!inner(id, course_id, professor_name, course!inner(course_code, program_id, program:program_id(program_code)))'
         ).eq('schedule_id', schedule_id).eq('archive', False)
         user_prog_id = _get_user_program_id()
-        if user_role not in ('super_admin', 'admin') and user_prog_id:
+        if user_prog_id:
             query = query.eq('professor_load.course.program_id', user_prog_id)
-
-        res = query.execute()
-        existing = _first(res.data or [])
-        if existing:
-            _attach_schedule_program(existing)
-
-        if not existing:
-            return jsonify({'success': False, 'message': 'Schedule entry not found.'}), 404
-
-        existing_pc = _rel(existing, 'professor_load') or {}
-        existing_course_id = existing_pc.get('course_id')
-        existing_prof_id = get_professor_key(existing_pc)
-
-        target_professor_load_id = None
-
-        if professor_load_id:
-            try:
-                target_professor_load_id = int(professor_load_id)
-            except (ValueError, TypeError):
-                return jsonify({'success': False, 'message': 'Invalid professor-course selection.'}), 400
-        elif course_code or professor_name:
-            target_course_id = existing_course_id
-            if course_code:
-                eff_pid = existing.get('program_id') or _find_program_id_by_name(program) or user_prog_id
-                if eff_pid:
-                    c_res = supabase.table('course').select('course_id').eq('program_id', eff_pid).eq('course_code', course_code).limit(1).execute()
-                    c_row = _first(c_res.data or [])
-                    if c_row:
-                        target_course_id = c_row['course_id']
-
-            target_prof_id = existing_prof_id
-            if professor_name:
-                if professor_name.upper() in ('NONE', 'N/A', 'UNASSIGNED', 'TBA', 'PROFESSOR A'):
-                    target_professor_load_id = None
-                elif target_course_id:
-                    norm_key = professor_load_importer.normalize_professor_key(professor_name)
-                    try:
-                        pc_match = supabase.table('professor_load').select('id, professor_name').eq('course_id', target_course_id).execute()
-                        for row in (pc_match.data or []):
-                            r_key = row.get('professor_key') or professor_load_importer.normalize_professor_key(row.get('professor_name') or '')
-                            if r_key == norm_key:
-                                target_professor_load_id = row['id']
-                                break
-                    except Exception as pc_err:
-                        logging.debug(f"Error querying professor_load in edit_schedule_entry: {pc_err}")
-            else:
-                target_professor_load_id = None
-        else:
-            target_professor_load_id = existing.get('professor_load_id')
-
-        effective_session_type = session_type or existing.get('session_type') or 'Lecture'
-        target_room_id = existing.get('room_id')
-        if _is_ilp_session(effective_session_type):
-            # ILP sessions never occupy a room.
-            target_room_id = None
-        elif room_id:
-            try:
-                target_room_id = int(room_id)
-            except (ValueError, TypeError):
-                pass
-        elif room_name:
-            if room_name.upper() in ('TBA', 'NONE', 'N/A'):
-                target_room_id = None
-            else:
-                r_res = supabase.table('room').select('room_id, room_name, room_type').eq('room_name', room_name).limit(1).execute()
-                r_row = _first(r_res.data or [])
-                if r_row:
-                    target_room_id = r_row['room_id']
-
-        target_day = day or existing.get('day')
-        target_start = start or existing.get('class_start')
-        target_end = end or existing.get('class_end')
-
-        if timeslot and '|' in timeslot:
-            parts = timeslot.split('|', 1)
-            d_part = parts[0].strip()
-            t_part = parts[1].strip()
-            if d_part in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']:
-                target_day = d_part
-            if '-' in t_part:
-                sp, ep = t_part.split('-', 1)
-                st = _parse_time(sp.strip())
-                et = _parse_time(ep.strip())
-                if st: target_start = str(st)
-                if et: target_end = str(et)
-
-        room_conflict = _find_room_schedule_conflict(
-            target_room_id,
-            target_day,
-            target_start,
-            target_end,
-            exclude_schedule_id=schedule_id,
-        )
-        if room_conflict:
-            conflict_section = room_conflict.get('section') or 'another section'
-            conflict_start = _format_time(room_conflict.get('class_start')) or str(room_conflict.get('class_start'))
-            conflict_end = _format_time(room_conflict.get('class_end')) or str(room_conflict.get('class_end'))
-            return jsonify({
-                'success': False,
-                'message': (
-                    f"Room conflict: The selected room is already booked on {target_day} "
-                    f"from {conflict_start} to {conflict_end} for Section {conflict_section}."
-                ),
-            }), 409
-
-        # Lunch Break Conflict check: prevent scheduling during system lunch break
-        if target_start and target_end:
-            st_td = _parse_time(target_start)
-            et_td = _parse_time(target_end)
-            if st_td and et_td:
-                try:
-                    ts_res = supabase.table('working_hours').select('lunch_time').execute()
-                    ts_rows = ts_res.data or []
-                except Exception:
-                    ts_rows = []
-                conf_lunch_td = None
-                for tr in ts_rows:
-                    parsed_lt = _parse_time(tr.get('lunch_time'))
-                    if parsed_lt is not None:
-                        conf_lunch_td = parsed_lt
-                        break
-                if conf_lunch_td is None:
-                    conf_lunch_td = timedelta(hours=12)
-
-                if _is_blocked_by_lunch(st_td, et_td, conf_lunch_td):
-                    lunch_str = f"{_format_time(conf_lunch_td)} - {_format_time(conf_lunch_td + timedelta(hours=1))}"
-                    return jsonify({
-                        'success': False,
-                        'message': f"Lunch break conflict: Classes cannot be scheduled during the designated lunch break ({lunch_str})."
-                    }), 400
-
-        update_payload = {
-            'professor_load_id': target_professor_load_id,
-            'room_id': target_room_id,
-            'session_type': session_type or existing.get('session_type') or 'Lecture',
-        }
-        if target_day:
-            update_payload['day'] = target_day
-        if target_start:
-            update_payload['class_start'] = target_start
-        if target_end:
-            update_payload['class_end'] = target_end
-
-        supabase.table('schedule').update(update_payload).eq('schedule_id', schedule_id).execute()
-        flash('Edited successfully', 'success')
-        return jsonify({'success': True, 'message': 'Schedule entry updated successfully.'})
-
+        existing = _first((query.execute().data) or [])
     except Exception as err:
-        logging.exception(f"Error in edit_schedule_entry: {err}")
+        logging.exception(f"Error loading schedule entry in edit_schedule_entry: {err}")
+        return jsonify({'success': False, 'message': 'Schedule entry not found.'}), 404
+
+    if not existing:
+        return jsonify({'success': False, 'message': 'Schedule entry not found or it is archived.'}), 404
+
+    existing_pc = _rel(existing, 'professor_load') or {}
+    existing_course = _rel(existing_pc, 'course') or {}
+    professor_load_id = existing.get('professor_load_id')
+    section = existing.get('section')
+    session_type = existing.get('session_type') or 'Lecture'
+    course_code = existing_course.get('course_code') or ''
+
+    # Parse a combined "Day | HH:MM AM - HH:MM PM" timeslot if supplied.
+    if timeslot and '|' in timeslot:
+        d_part, t_part = timeslot.split('|', 1)
+        d_part = d_part.strip()
+        t_part = t_part.strip()
+        if d_part in _DAY_ORDER:
+            day = d_part
+        if '-' in t_part:
+            sp, ep = t_part.split('-', 1)
+            if not start:
+                start = sp.strip()
+            if not end:
+                end = ep.strip()
+
+    if not day:
+        day = existing.get('day')
+
+    start_td = _parse_time(start) if start else _parse_time(existing.get('class_start'))
+    end_td = _parse_time(end) if end else _parse_time(existing.get('class_end'))
+    if start_td is None or end_td is None:
+        return jsonify({'success': False, 'message': 'Invalid start or end time.'}), 400
+
+    # Keep the session duration unchanged when only the start time changed.
+    orig_start_td = _parse_time(existing.get('class_start'))
+    orig_end_td = _parse_time(existing.get('class_end'))
+    orig_duration = (orig_end_td - orig_start_td) if (orig_start_td is not None and orig_end_td is not None) else None
+    if start and not end and orig_duration is not None:
+        end_td = start_td + orig_duration
+
+    if end_td <= start_td:
+        return jsonify({'success': False, 'message': 'End time must be after start time.'}), 400
+
+    target_start = _to_time_string(start_td)
+    target_end = _to_time_string(end_td)
+
+    # Room: non-archived + type-compatible. ILP sessions never have a room.
+    target_room_id = existing.get('room_id')
+    if _is_ilp_session(session_type):
+        target_room_id = None
+    elif room_id is not None and str(room_id) not in ('', '0', 'None'):
+        try:
+            target_room_id = int(room_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Invalid room.'}), 400
+        # Re-validate type only when the room actually changes (an unchanged room
+        # was already valid at generation time).
+        if str(target_room_id) != str(existing.get('room_id')):
+            room_row = _first((supabase.table('room').select('room_id, room_name, room_type').eq('room_id', target_room_id).eq('archive', False).limit(1).execute().data) or [])
+            if not room_row:
+                return jsonify({'success': False, 'message': 'Selected room is not available.'}), 400
+            if not _room_matches_session(room_row, session_type):
+                return jsonify({'success': False, 'message': f"Room type mismatch: a {session_type} session cannot use a {room_row.get('room_type')} room."}), 400
+    elif room_id in (None, '', '0', 0):
+        target_room_id = None
+
+    # Server-side conflict detection (professor / section / room / working hours).
+    conflicts = _detect_edit_conflicts(
+        exclude_schedule_id=schedule_id,
+        professor_load_id=professor_load_id,
+        section=section,
+        room_id=target_room_id,
+        day=day,
+        start_sec=_to_seconds(target_start),
+        end_sec=_to_seconds(target_end),
+    )
+    if conflicts:
+        return jsonify({
+            'success': False,
+            'conflicts': conflicts,
+            'message': '; '.join(conflicts[:4]) + ('…' if len(conflicts) > 4 else ''),
+        }), 409
+
+    wh_msg = _validate_working_hours_for_edit(day, target_start, target_end)
+    if wh_msg:
+        return jsonify({'success': False, 'message': wh_msg}), 400
+
+    old_day = existing.get('day')
+    old_start = existing.get('class_start')
+    old_end = existing.get('class_end')
+    old_room = existing.get('room_id')
+
+    try:
+        supabase.table('schedule').update({
+            'day': day,
+            'class_start': target_start,
+            'class_end': target_end,
+            'room_id': target_room_id,
+        }).eq('schedule_id', schedule_id).execute()
+    except Exception as err:
+        logging.exception(f"Error updating schedule entry {schedule_id}: {err}")
         return jsonify({'success': False, 'message': f'Error updating schedule: {str(err)}'}), 500
+
+    log_activity('edit', 'schedule', (
+        f"Session {section} ({course_code}): day '{old_day}'->'{day}', "
+        f"time '{_format_time(old_start)}-{_format_time(old_end)}'->'{_format_time(target_start)}-{_format_time(target_end)}', "
+        f"room '{old_room}'->'{target_room_id}'"
+    ))
+
+    return jsonify({'success': True, 'message': 'Schedule entry updated successfully.'})
 
 #-------------------------------------------------------add_working_hours----------------------------------------------------------------------------------------------
 @app.route('/add_working_hours', methods=['POST'])

@@ -225,10 +225,6 @@
 
             {# ── VIEWER ROLE / DEFAULT ── #}
             {% else %}
-            <a href="/my_schedule" class="sidebar__link {% if active_page == 'my_schedule' %}sidebar__link--active{% endif %}" title="My Schedule">
-                <i class="bx bx-calendar-check sidebar__icon"></i>
-                <span class="sidebar__label">My Schedule</span>
-            </a>
             <a href="/schedules" class="sidebar__link {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
                 <i class="bx bx-grid-alt sidebar__icon"></i>
                 <span class="sidebar__label">Section Schedule</span>
@@ -238,7 +234,6 @@
                 <span class="sidebar__label">Room Schedule</span>
             </a>
             {% endif %}
-        </nav>
         <div class="sidebar__footer">
             <a href="{{ url_for('logout') }}" class="sidebar__link sidebar__link--logout">
                 <i class="bx bx-log-out sidebar__icon"></i>

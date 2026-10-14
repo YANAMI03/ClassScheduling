@@ -61,11 +61,14 @@
 </div>
 
 {% if no_program_assigned %}
-<div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
-    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
-    <div>
-        <strong>Program Required:</strong> {{ no_program_message or "No program is assigned to your account. Please contact an administrator." }}
+<div class="alert alert-warning d-flex align-items-center justify-content-between mb-4" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+        <div>
+            <strong>Program Required:</strong> {{ no_program_message or "No program is assigned to your account. Please contact an administrator." }}
+        </div>
     </div>
+    <a href="{{ url_for('logout') }}" class="btn btn-outline-dark btn-sm"><i class="bx bx-log-out me-1"></i>Log out</a>
 </div>
 {% endif %}
 
@@ -235,6 +238,7 @@
                                             <tr class="schedule-row"
                                                 tabindex="0"
                                                 role="button"
+                                                data-href="/schedule/{{ item.section.section }}?semester={{ item.section.semester | urlencode if item.section.semester else '' }}&major={{ item.section.major | urlencode if item.section.major else '' }}"
                                                 data-course="{{ entry.course_code or 'TBA' }}"
                                                 data-professor="{{ entry.professor_name or 'TBA' }}"
                                                 data-room="{{ entry.room_name or 'TBA' }}"
@@ -380,6 +384,21 @@ $(function(){
     });
 
     $('.section-card').on('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ') {
+            if ($(e.target).closest('.stop-prop, button, a').length) return;
+            e.preventDefault();
+            var href = $(this).data('href');
+            if (href) window.location.href = href;
+        }
+    });
+
+    $('.schedule-row').on('click', function(e){
+        if ($(e.target).closest('.stop-prop, button, a').length) return;
+        var href = $(this).data('href');
+        if (href) window.location.href = href;
+    });
+
+    $('.schedule-row').on('keydown', function(e){
         if (e.key === 'Enter' || e.key === ' ') {
             if ($(e.target).closest('.stop-prop, button, a').length) return;
             e.preventDefault();

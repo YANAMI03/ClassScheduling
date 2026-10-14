@@ -444,9 +444,12 @@ def test_scheduler_cannot_tamper_program_in_schedules(test_client, monkeypatch):
         sess['program'] = 'BSIT'
         sess['program_id'] = 1
 
-    # Scheduler attempting to view BSDS via program parameter must be rejected with 403
+    # Scheduler attempting to view BSDS via program parameter is IGNORED:
+    # a chair is always scoped to their own program (no error, no switch).
     res = test_client.get('/schedules?program=BSDS')
-    assert res.status_code == 403
+    assert res.status_code == 200
+    # Chairs do not get a program dropdown, so they cannot switch programs.
+    assert 'id="programFilter"' not in res.data.decode('utf-8')
 
 
 # -----------------------------------------------------------------------------

@@ -17,7 +17,9 @@ def _reset_rbac_caches():
     app_module._LIVE_USER_ROLE_UPDATES.clear()
     with app_module._USER_ROLE_CACHE_LOCK:
         app_module._USER_ROLE_CACHE.clear()
+    app_module._invalidate_lookup_cache()
     yield
     app_module._LIVE_USER_ROLE_UPDATES.clear()
     with app_module._USER_ROLE_CACHE_LOCK:
         app_module._USER_ROLE_CACHE.clear()
+    app_module._invalidate_lookup_cache()

@@ -131,8 +131,8 @@ def test_viewer_with_db_program_and_empty_session_is_scoped(monkeypatch):
     assert 'No program is assigned to your account' not in res.data.decode('utf-8', 'ignore')
 
 
-def test_viewer_without_program_still_sees_error(monkeypatch):
-    """A viewer with no program on public.users must still get the alert."""
+def test_viewer_without_program_sees_all_programs(monkeypatch):
+    """A viewer with no program is global: no 'Program Required' alert."""
     monkeypatch.setattr(app_module, 'supabase', FakeSupabase(_store(None)))
     client = _client()
     with client.session_transaction() as sess:
@@ -144,12 +144,30 @@ def test_viewer_without_program_still_sees_error(monkeypatch):
 
     res = client.get('/schedules')
     assert res.status_code == 200
+    assert 'No program is assigned to your account. Please contact an administrator.' not in res.data.decode('utf-8', 'ignore')
+
+
+def test_chair_without_program_sees_error(monkeypatch):
+    """A scheduler (chair) without a program still gets the alert."""
+    store = _store(None)
+    store['users'][0]['role'] = 'chair'
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase(store))
+    client = _client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'v1'
+        sess['role'] = 'chair'
+        sess['username'] = 'chair1'
+        sess['jwt_token'] = 'tok'
+        sess['refresh_token'] = 'ref'
+
+    res = client.get('/schedules')
+    assert res.status_code == 200
     assert 'No program is assigned to your account. Please contact an administrator.' in res.data.decode('utf-8', 'ignore')
 
 
-def test_establish_session_refreshes_viewer_program(monkeypatch):
-    """Login must populate session['program_id'] for a viewer (not clear it)."""
-    monkeypatch.setattr(app_module, 'supabase', FakeSupabase(_store(1)))
+def test_establish_session_keeps_viewer_without_program(monkeypatch):
+    """Login keeps a viewer global (program_id None)."""
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase(_store(None)))
     monkeypatch.setattr(app_module, '_get_programs', lambda *a, **k: [{'id': 1, 'program_code': 'BSIT'}])
     auth_user = SimpleNamespace(
         id='v1', email='v@example.com', user_metadata={'username': 'viewer1'},
@@ -161,4 +179,43 @@ def test_establish_session_refreshes_viewer_program(monkeypatch):
         assert app_module._establish_authenticated_session(session_data) is True
         from flask import session as f_session
         assert f_session.get('role') == 'viewer'
-        assert f_session.get('program_id') == 1
+        assert f_session.get('program_id') is None
+
+
+def _viewer_client(monkeypatch):
+    monkeypatch.setattr(app_module, 'supabase', FakeSupabase(_store(None)))
+    client = _client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'v1'
+        sess['role'] = 'viewer'
+        sess['username'] = 'viewer1'
+        sess['jwt_token'] = 'tok'
+        sess['refresh_token'] = 'ref'
+    return client
+
+
+def test_viewer_can_open_room_schedule_without_program(monkeypatch):
+    client = _viewer_client(monkeypatch)
+    res = client.get('/room_schedule')
+    assert res.status_code == 200
+    assert 'No program is assigned to your account' not in res.data.decode('utf-8', 'ignore')
+
+
+def test_viewer_can_open_section_detail_without_program(monkeypatch):
+    client = _viewer_client(monkeypatch)
+    res = client.get('/schedule/BSIT-1A')
+    assert res.status_code == 200
+    assert b'No program is assigned' not in res.data
+
+
+def test_viewer_can_switch_program(monkeypatch):
+    client = _viewer_client(monkeypatch)
+    res = client.get('/schedules?program=BSIT')
+    assert res.status_code == 200
+    assert b'No program is assigned' not in res.data
+
+
+def test_viewer_blocked_from_edit_endpoint(monkeypatch):
+    client = _viewer_client(monkeypatch)
+    res = client.post('/edit_user/v1', data={'role': 'viewer'})
+    assert res.status_code == 403
