@@ -36,7 +36,6 @@
                 <i class="bx bx-buildings me-1"></i>Program
             </label>
             <select id="programFilter" name="program" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="" {% if not program_filter or program_filter|lower == 'all' %}selected{% endif %}>All Programs</option>
                 {% for p in programs %}
                 <option value="{{ p.program_name }}" {% if p.program_name == program_filter %}selected{% endif %}>{{ p.program_name }}</option>
                 {% else %}

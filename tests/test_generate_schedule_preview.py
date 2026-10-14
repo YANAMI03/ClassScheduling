@@ -1067,12 +1067,12 @@ def test_confirm_preview_passes_professor_load_id_to_rpc(monkeypatch):
     rows = captured_rpc.get('params', {}).get('p_rows', [])
     assert len(rows) == 1
     assert rows[0].get('professor_load_id') == 101
-    assert rows[0].get('prepared_by_user_id') == 1
-    assert 'prepared_by_name' not in rows[0]
-    assert 'prepared_by_title' not in rows[0]
-    assert captured_rpc['params'].get('p_prepared_by_user_id') == 1
-    assert 'p_prepared_by_name' not in captured_rpc['params']
-    assert 'p_prepared_by_title' not in captured_rpc['params']
+    assert 'prepared_by_user_id' not in rows[0]
+    assert rows[0].get('prepared_by_name') == 'TESTER'
+    assert rows[0].get('prepared_by_title') == 'Chair'
+    assert 'p_prepared_by_user_id' not in captured_rpc['params']
+    assert captured_rpc['params'].get('p_prepared_by_name') == 'TESTER'
+    assert captured_rpc['params'].get('p_prepared_by_title') == 'Chair'
     assert 'program_id' not in rows[0]
     assert 'course_id' not in rows[0]
     assert 'prof_id' not in rows[0]

@@ -240,7 +240,8 @@ def test_client_restore_discards_removed_preparer_snapshot_fields(monkeypatch):
     ]
     assert upserts == [[{
         'schedule_id': 1,
-        'prepared_by_user_id': 'user-1',
+        'prepared_by_name': 'Legacy Name',
+        'prepared_by_title': 'Legacy Title',
         'professor_load_id': None,
     }]]
 
@@ -460,12 +461,12 @@ def test_client_restore_discards_dropped_columns_across_tables(monkeypatch):
     assert 'program_id' not in upsert_map['professor_load']
     assert 'prof_id' not in upsert_map['professor_load']
 
-    # schedule: course_id, program, program_id, prepared_by snapshot columns discarded
+    # schedule: course_id, program, program_id, prepared_by snapshot columns discarded; prepared_by_name & prepared_by_title kept
     sched_row = upsert_map['schedule']
     assert 'course_id' not in sched_row
     assert 'program' not in sched_row
     assert 'program_id' not in sched_row
     assert 'prepared_by' not in sched_row
-    assert 'prepared_by_name' not in sched_row
-    assert 'prepared_by_title' not in sched_row
+    assert sched_row.get('prepared_by_name') == 'Admin User'
+    assert sched_row.get('prepared_by_title') == 'Chair'
 

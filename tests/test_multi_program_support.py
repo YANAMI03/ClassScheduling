@@ -709,7 +709,7 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
         sess['role'] = 'Admin'
         sess['program'] = 'BSIT'
 
-    # Admin visits /schedules without program param -> defaults to All Programs
+    # Admin visits /schedules without program param -> defaults to user's program (BSIT)
     resp = test_client.get('/schedules')
     assert resp.status_code == 200
     html = resp.data.decode('utf-8')
@@ -719,12 +719,13 @@ def test_admin_schedule_viewing_single_program_and_dropdown(test_client, monkeyp
     assert 'name="program"' in html
     assert '<option value="BSIT"' in html
     assert '<option value="BSDS"' in html
-    # 'All Programs' is an option for admin
-    assert 'All Programs' in html
+    # 'All Programs' and 'All Semesters' are NOT options
+    assert 'All Programs' not in html
+    assert 'All Semesters' not in html
 
-    # Both BSIT-1A and BSDS-1A are displayed by default (All programs)
+    # BSIT-1A is displayed by default, BSDS-1A is not (scoped to BSIT)
     assert 'BSIT-1A' in html
-    assert 'BSDS-1A' in html
+    assert 'BSDS-1A' not in html
 
     # Admin selects BSDS
     resp_bsds = test_client.get('/schedules?program=BSDS')
@@ -808,8 +809,10 @@ def test_scheduler_schedule_viewing_isolated_to_program(test_client, monkeypatch
     resp = test_client.get('/schedules')
     assert resp.status_code == 200
     html = resp.data.decode('utf-8')
-    # Scheduler does not have program dropdown
-    assert 'id="programFilter"' not in html
+    # Scheduler program filter shows only their program (BSIT)
+    assert '<option value="BSIT"' in html
+    assert '<option value="BSDS"' not in html
+    assert 'All Programs' not in html
     # Schedulers only see BSIT
     assert 'BSIT-1A' in html
     assert 'BSDS-1A' not in html
