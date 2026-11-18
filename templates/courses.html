@@ -109,9 +109,14 @@
                 <label class="form-label">Specialization</label>
                 <select name="specialization_id" id="add_specialization" class="form-select">
                     <option value="" selected>{{ specialization_stage.general_label }}</option>
+                    {% set init_prog_id = active_program_id or (user_program_id if not is_admin else None) %}
+                    {% if init_prog_id %}
                     {% for s in specializations %}
-                    <option value="{{ s.specialization_id }}">{{ s.name }}</option>
+                    {% if not s.archive and s.program_id is not none and s.program_id|string == init_prog_id|string %}
+                    <option value="{{ s.specialization_id }}" data-program-id="{{ s.program_id }}">{{ s.name }}</option>
+                    {% endif %}
                     {% endfor %}
+                    {% endif %}
                 </select>
             </div>
             <div class="col-12">
@@ -405,9 +410,6 @@
                             <label class="form-label">Specialization</label>
                             <select name="specialization_id" id="edit_specialization" class="form-select">
                                 <option value="">{{ specialization_stage.general_label }}</option>
-                                {% for s in specializations %}
-                                <option value="{{ s.specialization_id }}">{{ s.name }}</option>
-                                {% endfor %}
                             </select>
                         </div>
                     </div>
@@ -428,10 +430,32 @@ $(function(){
     $('#editModal').appendTo("body");
     {% endif %}
     
-    // Specializations are available at every year level and semester, so the
-    // picker is always shown. Blank means General (specialization_id = NULL).
+    // Specializations are scoped to the selected program (specializations.program_id)
+    // and only active (archive = false) rows are listed. Blank means General (NULL).
     var SPEC_STAGE = {{ specialization_stage|tojson }};
     var GENERAL_LABEL = (SPEC_STAGE && SPEC_STAGE.general_label) || 'General';
+    var ALL_ACTIVE_SPECS = {{ specializations|tojson }};
+
+    function populateSpecializationsForProgram($specSelect, programId, desiredValue) {
+        if (!$specSelect || !$specSelect.length) return;
+        var pidStr = programId !== undefined && programId !== null ? String(programId).trim() : '';
+        var prevVal = desiredValue !== undefined ? String(desiredValue || '') : String($specSelect.val() || '');
+        $specSelect.empty();
+        $specSelect.append($('<option>', { value: '', text: GENERAL_LABEL }));
+        var matched = false;
+        if (pidStr) {
+            (ALL_ACTIVE_SPECS || []).forEach(function(s) {
+                if (s && !s.archive && s.program_id !== null && s.program_id !== undefined && String(s.program_id) === pidStr) {
+                    var sid = String(s.specialization_id);
+                    $specSelect.append($('<option>', { value: sid, text: s.name || '' }));
+                    if (prevVal && sid === prevVal) {
+                        matched = true;
+                    }
+                }
+            });
+        }
+        $specSelect.val(matched ? prevVal : '');
+    }
 
     function toggleSpecializationField(yearSelect, semesterSelect, specField, preserveValue) {
         var selectEl = specField.find('select');
@@ -442,8 +466,15 @@ $(function(){
     // Add Course form
     var $addYearLevel = $('#add_year_level');
     var $addSemester = $('#add_semester');
-    var $addSpecField = $('#add_specialization').closest('.col-lg-3');
+    var $addSpecSelect = $('#add_specialization');
+    var $addSpecField = $addSpecSelect.closest('.col-lg-3');
+
+    function getAddProgramId() {
+        return $('#add_program_id').val() || $('input[name="program_id"]').val() || '';
+    }
+
     $('#add_program_id').on('change', function () {
+        populateSpecializationsForProgram($addSpecSelect, getAddProgramId(), '');
         toggleSpecializationField($addYearLevel, $addSemester, $addSpecField, false);
     });
     
@@ -455,13 +486,15 @@ $(function(){
         toggleSpecializationField($addYearLevel, $addSemester, $addSpecField, false);
     });
     
-    // Initial state for Add Course
+    // Initial state for Add Course: filter specializations for the initially selected program
+    populateSpecializationsForProgram($addSpecSelect, getAddProgramId(), $addSpecSelect.val());
     toggleSpecializationField($addYearLevel, $addSemester, $addSpecField, false);
     
     // Edit Course form
     var $editYearLevel = $('#edit_year_level');
     var $editSemester = $('#edit_semester');
-    var $editSpecField = $('#edit_specialization').closest('.col-md-4');
+    var $editSpecSelect = $('#edit_specialization');
+    var $editSpecField = $editSpecSelect.closest('.col-md-4');
     
     $editYearLevel.on('change', function() {
         toggleSpecializationField($editYearLevel, $editSemester, $editSpecField, false);
@@ -472,6 +505,7 @@ $(function(){
     });
 
     $('#edit_program_id').on('change', function() {
+        populateSpecializationsForProgram($editSpecSelect, $(this).val(), '');
         toggleSpecializationField($editYearLevel, $editSemester, $editSpecField, false);
     });
     
@@ -512,7 +546,11 @@ $(function(){
         $('#edit_semester').val(semVal);
 
         var specIdVal = $t.data('specialization-id');
-        $('#edit_specialization').val(specIdVal !== undefined && specIdVal !== null && specIdVal !== '' ? String(specIdVal) : '');
+        populateSpecializationsForProgram(
+            $editSpecSelect,
+            $('#edit_program_id').val(),
+            specIdVal !== undefined && specIdVal !== null && specIdVal !== '' ? String(specIdVal) : ''
+        );
 
         $('#editForm').attr('action', '/edit_course/' + $t.data('id'));
         

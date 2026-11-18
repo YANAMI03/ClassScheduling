@@ -118,13 +118,11 @@
             {% set user_role_norm = 'admin' %}
         {% elif raw_role == ROLE_CHAIR %}
             {% set user_role_norm = 'chair' %}
-        {% elif raw_role == ROLE_VIEWER %}
-            {% set user_role_norm = 'viewer' %}
         {% else %}
-            {% set user_role_norm = 'viewer' %}
+            {% set user_role_norm = '' %}
         {% endif %}
         <div class="sidebar__brand">
-            <a href="{% if user_role_norm in ['admin', 'viewer'] %}/schedules{% else %}/{% endif %}" class="sidebar__logo">
+            <a href="{% if user_role_norm == 'admin' %}/schedules{% else %}/{% endif %}" class="sidebar__logo">
                 <i class="bx bx-calendar-alt sidebar__logo-icon"></i>
                 <span class="sidebar__logo-text">Class Scheduler</span>
             </a>
@@ -221,17 +219,6 @@
             <a href="/activity_log" class="sidebar__link {% if active_page == 'activity_log' %}sidebar__link--active{% endif %}" title="Activity Log">
                 <i class="bx bx-history sidebar__icon"></i>
                 <span class="sidebar__label">Activity Log</span>
-            </a>
-
-            {# ── VIEWER ROLE / DEFAULT ── #}
-            {% else %}
-            <a href="/schedules" class="sidebar__link {% if active_page == 'schedules' %}sidebar__link--active{% endif %}" title="Section Schedule">
-                <i class="bx bx-grid-alt sidebar__icon"></i>
-                <span class="sidebar__label">Section Schedule</span>
-            </a>
-            <a href="/room_schedule" class="sidebar__link {% if active_page == 'room_schedule' %}sidebar__link--active{% endif %}" title="Room Schedule">
-                <i class="bx bx-building sidebar__icon"></i>
-                <span class="sidebar__label">Room Schedule</span>
             </a>
             {% endif %}
         <div class="sidebar__footer">

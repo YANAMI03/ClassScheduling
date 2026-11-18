@@ -1,11 +1,12 @@
 """Focused tests for the dedicated ILP placement rules.
 
 Covers the ILP placement checklist:
-  - Two courses in the same section get ILP at 7-8 AM and at 11-12 (or after the window end).
+  - Two courses in the same section get ILP at 7-8 AM and at 11-12 (or end of day inside window).
   - Two different sections can both have ILP on Monday 7-8 AM (no global ILP limit).
   - No professor or section is ever double-booked.
-  - No ILP is placed in the middle of the working-hours window outside zones a/b.
-  - ILP never goes before 7 AM, past 8 PM, or overlaps lunch.
+  - ILP sessions stay strictly inside each day's working_hours window (start_time to end_time, never overlapping lunch).
+  - No "up to 2 hours past window end" allowance and no hard 8:00 PM cap: working_hours is the only time limit.
+  - When no valid slot exists inside the working_hours window, ILP is left unscheduled and reported with course, section, and professor.
   - Lecture/lab placement is identical whether or not ILP exists.
   - Lecture and lab room assignment is unchanged.
 """
@@ -15,8 +16,17 @@ import app as app_module
 
 
 # ---------------------------------------------------------------------------
-# Minimal Supabase stub (supports the equality filters generation relies on)
+# Minimal Supabase stub (supports the filters generation relies on)
 # ---------------------------------------------------------------------------
+class _NotProxy:
+    def __init__(self, q):
+        self._q = q
+
+    def is_(self, col, val):
+        self._q._filters.append(('not_is', col, val))
+        return self._q
+
+
 class _Query:
     def __init__(self, rows):
         self._rows = rows
@@ -26,12 +36,20 @@ class _Query:
         return self
 
     def eq(self, col, val):
-        self._filters.append((col, val))
+        self._filters.append(('eq', col, val))
         return self
 
     def in_(self, col, vals):
-        self._filters.append((col, ('__in__', list(vals))))
+        self._filters.append(('in', col, list(vals)))
         return self
+
+    def is_(self, col, val):
+        self._filters.append(('is', col, val))
+        return self
+
+    @property
+    def not_(self):
+        return _NotProxy(self)
 
     def neq(self, *args, **kwargs):
         return self
@@ -53,7 +71,7 @@ class _Query:
 
     def update(self, payload):
         for row in self._rows:
-            if all(str(row.get(c)) == str(v) for c, v in self._filters):
+            if self._matches(row):
                 row.update(payload)
         class _R:
             data = []
@@ -69,14 +87,25 @@ class _Query:
     def delete(self):
         return self
 
+    def _matches(self, row):
+        for op, col, val in self._filters:
+            rv = row.get(col)
+            if op == 'eq':
+                if str(rv) != str(val):
+                    return False
+            elif op == 'in':
+                if rv not in val:
+                    return False
+            elif op == 'is':
+                if val == 'null' and rv is not None:
+                    return False
+            elif op == 'not_is':
+                if val == 'null' and rv is None:
+                    return False
+        return True
+
     def execute(self):
-        rows = list(self._rows)
-        for col, val in self._filters:
-            if isinstance(val, tuple) and val and val[0] == '__in__':
-                allowed = val[1]
-                rows = [r for r in rows if r.get(col) in allowed]
-            else:
-                rows = [r for r in rows if str(r.get(col)) == str(val)]
+        rows = [r for r in self._rows if self._matches(r)]
         class _R:
             pass
         resp = _R()
@@ -94,6 +123,7 @@ class MockSupabase:
             'professor': professors or [],
             'room': rooms or [],
             'working_hours': working_hours or [],
+            'archived_schedule': [],
         }
 
     def table(self, name):
@@ -137,8 +167,8 @@ def _generate(monkeypatch, courses, profs, loads, rooms, working_hours, schedule
     client = app_module.app.test_client()
     with client.session_transaction() as s:
         s['user_id'] = 1
-        s['username'] = 'sched'
-        s['role'] = 'Scheduler'
+        s['username'] = 'chair'
+        s['role'] = 'chair'
         s['program'] = 'BSIT'
         s['program_id'] = 1
 
@@ -180,13 +210,20 @@ def _window_map(wh):
 
 
 def _assert_ilp_bounds(entries, wh):
-    lunch_s, lunch_e = _td('12:00:00'), _td('13:00:00')
+    windows = _window_map(wh)
+    lunches = {d['day']: _td(d.get('lunch_time') or '12:00:00') for d in wh}
     for e in _ilps(entries):
+        day = e['day']
+        assert day in windows, f'ILP scheduled on non-working day {day}'
+        win_s, win_e = windows[day]
         st, en = _td(e['start']), _td(e['end'])
-        assert st >= _td('07:00:00'), 'ILP must never start before 7:00 AM'
-        assert en <= _td('20:00:00'), 'ILP must never end after 8:00 PM'
+        assert st >= win_s, f'ILP {e["start"]} starts before {day} window start'
+        assert en <= win_e, f'ILP {e["end"]} ends after {day} window end'
         assert (en - st) == timedelta(hours=1)
-        assert not (st < lunch_e and lunch_s < en), 'ILP must not overlap lunch'
+        lunch_s = lunches[day]
+        if lunch_s is not None:
+            lunch_e = lunch_s + timedelta(hours=1)
+            assert not (st < lunch_e and lunch_s < en), 'ILP must not overlap lunch'
 
 
 # ---------------------------------------------------------------------------
@@ -232,9 +269,9 @@ def test_two_sections_can_both_use_monday_7_8(monkeypatch):
     _assert_no_overlaps(entries)
 
 
-def test_no_midday_ilp_outside_allowed_zones(monkeypatch):
-    # Window 08:00-16:00. Every ILP must be at 7-8, immediately after a 3-hour class,
-    # or after the window end -- never in a midday gap like 1-2 PM or 2-3 PM.
+def test_ilp_stays_inside_working_hours_priority_zones(monkeypatch):
+    # Window 08:00-16:00 across Mon & Tue.
+    # Every ILP must stay inside [08:00, 16:00], preferring after a 3h class (11-12) then end of day (15-16).
     wh = [_day('Monday', '08:00:00', '16:00:00', wid=1),
           _day('Tuesday', '08:00:00', '16:00:00', wid=2)]
     rooms = [_room(), _room(2, 'Room 102', 'Lecture Room')]
@@ -246,69 +283,68 @@ def test_no_midday_ilp_outside_allowed_zones(monkeypatch):
     entries, errors, unscheduled = _generate(monkeypatch, courses, profs, loads, rooms, wh, students=90)
 
     windows = _window_map(wh)
-    lunch_s = _td('12:00:00')
     for e in _ilps(entries):
-        st = _td(e['start'])
+        st, en = _td(e['start']), _td(e['end'])
         win_start, win_end = windows[e['day']]
-        if st == _td('07:00:00'):
-            continue  # zone (a)
-        if st >= win_end:
-            continue  # zone (c)
-        # zone (b): exactly the hour after a 3-hour class of the section
-        after_3h = False
-        for other in entries:
-            if other.get('section') != e.get('section') or other.get('day') != e.get('day'):
-                continue
-            ost, oen = _td(other.get('start')), _td(other.get('end'))
-            if ost is None or oen is None:
-                continue
-            if (oen - ost) == timedelta(hours=3) and oen == st:
-                after_3h = True
-                break
-        assert after_3h, f'ILP at {e["day"]} {e["start"]} is not in an allowed zone'
+        assert win_start <= st and en <= win_end, f'ILP at {e["day"]} {e["start"]}-{e["end"]} escaped window'
+        if st == win_end - timedelta(hours=1):
+            continue  # zone (c): last hour inside window
+        after_3h = any(
+            other.get('section') == e.get('section') and other.get('day') == e.get('day')
+            and _td(other.get('start')) is not None and _td(other.get('end')) is not None
+            and (_td(other.get('end')) - _td(other.get('start'))) == timedelta(hours=3)
+            and _td(other.get('end')) == st
+            for other in entries
+        )
+        assert after_3h, f'ILP at {e["day"]} {e["start"]} is not in priority zone b or c'
     _assert_ilp_bounds(entries, wh)
 
 
-def test_ilp_after_window_end_zone_c(monkeypatch):
-    # Window 07:00-17:00. Block 7-8 (zone a) with an existing section row and force the
-    # 3h lecture to 14:00-17:00, so the only remaining zone is (c) after the window end.
-    wh = [_day('Monday', '07:00:00', '17:00:00', wid=1)]
+def test_ilp_never_placed_past_7pm_window_end_and_reports_unscheduled(monkeypatch):
+    # Window 08:00-19:00 (ends at 7:00 PM). Section 1A is booked 08-12 and 13-16,
+    # and the 3h lecture takes 16-19. No free hour remains inside [08:00, 19:00].
+    # Old rule would have placed ILP at 7:00-8:00 PM; new rule MUST leave it unscheduled
+    # and report course code, section, and professor in the generation notice.
+    wh = [_day('Monday', '08:00:00', '19:00:00', wid=1)]
     rooms = [_room()]
     schedules = [
-        {'schedule_id': 900, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
-         'class_start': '08:00:00', 'class_end': '14:00:00', 'professor_load_id': None,
-         'program_id': 2, 'semester': '1st Semester', 'archive': False},
-        {'schedule_id': 901, 'section': '1A', 'room_id': None, 'day': 'Monday',
-         'class_start': '07:00:00', 'class_end': '08:00:00', 'professor_load_id': None,
-         'program_id': 2, 'semester': '1st Semester', 'archive': False},
+        {'schedule_id': 900, 'section': '1A', 'room_id': 1, 'day': 'Monday',
+         'class_start': '08:00:00', 'class_end': '12:00:00', 'professor_load_id': None,
+         'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
+        {'schedule_id': 901, 'section': '1A', 'room_id': 1, 'day': 'Monday',
+         'class_start': '13:00:00', 'class_end': '16:00:00', 'professor_load_id': None,
+         'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
     ]
     entries, errors, unscheduled = _generate(monkeypatch, [_course(100, 'IT-A')], [_prof(10, 'Alan', 'Turing')],
                                              [_load(101, 10, 100, 1, 'Alan Turing')], rooms, wh, schedules=schedules)
-    ilp = _ilps(entries)
-    assert errors == []
-    assert len(ilp) == 1
-    assert (ilp[0]['day'], ilp[0]['start'], ilp[0]['end']) == ('Monday', '05:00 PM', '06:00 PM')
+    assert _ilps(entries) == [], 'ILP must never be placed at 7-8 PM when window ends at 7:00 PM'
+    assert len(errors) == 1
+    assert errors[0]['course'] == 'IT-A'
+    assert errors[0]['section'] == '1A'
+    assert errors[0]['professor'] == 'Alan Turing'
+    assert 'genuinely has no free hour' in errors[0]['reason']
+    ilp_rows = [u for u in unscheduled if u.get('session_type') == 'ILP']
+    assert len(ilp_rows) == 1
+    assert ilp_rows[0]['course'] == 'IT-A'
+    assert ilp_rows[0]['section'] == '1A'
+    assert ilp_rows[0]['professor'] == 'Alan Turing'
 
 
 def test_ilp_failure_reported_with_accurate_diagnostics(monkeypatch):
-    # Window 08:00-20:00. Section 1A is booked 07-08 and 08-17, and the 3h lecture is 17-20.
-    # Section 1A genuinely has no free hour left, so all steps (a-e) fail.
+    # Window 08:00-20:00. Section 1A is booked 08-17, and the 3h lecture is 17-20.
+    # Section 1A genuinely has no free hour left inside the window.
     wh = [_day('Monday', '08:00:00', '20:00:00', wid=1)]
     rooms = [_room()]
     schedules = [
         {'schedule_id': 900, 'section': '1A', 'room_id': 1, 'day': 'Monday',
          'class_start': '08:00:00', 'class_end': '17:00:00', 'professor_load_id': None,
-         'program_id': 2, 'semester': '1st Semester', 'archive': False},
-        {'schedule_id': 901, 'section': '1A', 'room_id': None, 'day': 'Monday',
-         'class_start': '07:00:00', 'class_end': '08:00:00', 'professor_load_id': None,
-         'program_id': 2, 'semester': '1st Semester', 'archive': False},
+         'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
     ]
     entries, errors, unscheduled = _generate(monkeypatch, [_course(100, 'IT-A')], [_prof(10, 'Alan', 'Turing')],
                                              [_load(101, 10, 100, 1, 'Alan Turing')], rooms, wh, schedules=schedules)
     assert _ilps(entries) == []
     assert len(errors) == 1
     assert 'genuinely has no free hour' in errors[0]['reason']
-    # The unscheduled report tags the failure as ILP (not lecture/lab).
     ilp_rows = [u for u in unscheduled if u.get('session_type') == 'ILP']
     assert len(ilp_rows) == 1
     assert ilp_rows[0]['course'] == 'IT-A'
@@ -338,7 +374,6 @@ def test_lecture_lab_identical_with_and_without_ilp(monkeypatch):
         )
 
     assert _signature(with_ilp) == _signature(without_ilp)
-    # ILP is present only in the ILP run.
     assert len(_ilps(with_ilp)) == 1
     assert _ilps(without_ilp) == []
 
@@ -391,48 +426,50 @@ def test_lecture_and_lab_room_assignment_unchanged(monkeypatch):
     assert all(_td(e['end']) <= _td('20:00:00') for e in entries)
 
 
-def test_ilp_ladder_step_d_beyond_2h_past_window(monkeypatch):
-    # Window 08:00-15:00.
-    # Block step c (15:00-17:00) with existing schedule for section 1A.
-    # Lecture 08:00-11:00 has hour after class (11:00-12:00) blocked for section 1A.
-    # Step d (17:00-18:00, beyond 2h past window) should place the ILP before step e.
-    wh = [_day('Monday', '08:00:00', '15:00:00', wid=1)]
+def test_ilp_prefers_last_hour_inside_window_step_c(monkeypatch):
+    # Window 08:00-17:00. 2h lecture (no 3h class -> step b skipped), 8 AM start (-> step a skipped).
+    # Step c places ILP in the last hour inside the window (16:00-17:00), never past 17:00.
+    wh = [_day('Monday', '08:00:00', '17:00:00', wid=1)]
     rooms = [_room()]
-    schedules = [
-        # Block step b (11:00-12:00)
-        {'schedule_id': 901, 'section': '1A', 'room_id': None, 'day': 'Monday',
-         'class_start': '11:00:00', 'class_end': '12:00:00', 'professor_load_id': None,
-         'program_id': 2, 'semester': '1st Semester', 'archive': False},
-        # Block step c (15:00-17:00)
-        {'schedule_id': 902, 'section': '1A', 'room_id': None, 'day': 'Monday',
-         'class_start': '15:00:00', 'class_end': '17:00:00', 'professor_load_id': None,
-         'program_id': 2, 'semester': '1st Semester', 'archive': False},
-    ]
     entries, errors, unscheduled = _generate(
-        monkeypatch, [_course(100, 'IT-A', lec=3, lab=0, ilp=1)],
+        monkeypatch, [_course(100, 'IT-A', lec=2, lab=0, ilp=1)],
         [_prof(10, 'Alan', 'Turing')], [_load(101, 10, 100, 1, 'Alan Turing')],
-        rooms, wh, schedules=schedules
+        rooms, wh
     )
     ilp = _ilps(entries)
     assert errors == []
     assert len(ilp) == 1
-    # Step d should place it at 17:00-18:00 (5:00 PM - 6:00 PM)
-    assert (ilp[0]['day'], ilp[0]['start'], ilp[0]['end']) == ('Monday', '05:00 PM', '06:00 PM')
+    assert (ilp[0]['day'], ilp[0]['start'], ilp[0]['end']) == ('Monday', '04:00 PM', '05:00 PM')
+    _assert_ilp_bounds(entries, wh)
 
 
-def test_ilp_ladder_step_e_window_gap(monkeypatch):
-    # Window 08:00-17:00.
-    # Post-window (17:00-20:00) completely blocked for section 1A (steps c and d unavailable).
-    # Course is 2h lecture (no 3h class, so step b unavailable).
-    # Window starts at 8 AM (step a unavailable).
-    # ILP must fall back to step e: a free 1-hour gap inside the window, never overlapping lunch (12:00-13:00).
+def test_ilp_allows_past_8pm_when_working_hours_ends_at_9pm(monkeypatch):
+    # Hard 8:00 PM cap is removed: when working_hours ends at 21:00 (9:00 PM),
+    # ILP can be placed at 20:00-21:00 (the last hour inside the window).
+    wh = [_day('Monday', '08:00:00', '21:00:00', wid=1)]
+    rooms = [_room()]
+    entries, errors, unscheduled = _generate(
+        monkeypatch, [_course(100, 'IT-A', lec=2, lab=0, ilp=1)],
+        [_prof(10, 'Alan', 'Turing')], [_load(101, 10, 100, 1, 'Alan Turing')],
+        rooms, wh
+    )
+    ilp = _ilps(entries)
+    assert errors == []
+    assert len(ilp) == 1
+    assert (ilp[0]['day'], ilp[0]['start'], ilp[0]['end']) == ('Monday', '08:00 PM', '09:00 PM')
+    _assert_ilp_bounds(entries, wh)
+
+
+def test_ilp_ladder_step_d_earlier_window_gap(monkeypatch):
+    # Window 08:00-17:00. Last hour (16:00-17:00) is blocked for section 1A (step c unavailable).
+    # Course is 2h lecture (no 3h class -> step b unavailable); 8 AM start (-> step a unavailable).
+    # ILP must fall back to step d: the latest earlier free 1-hour gap inside the window (15:00-16:00).
     wh = [_day('Monday', '08:00:00', '17:00:00', wid=1)]
     rooms = [_room()]
     schedules = [
-        # Block post-window entirely (17:00-20:00)
         {'schedule_id': 901, 'section': '1A', 'room_id': None, 'day': 'Monday',
-         'class_start': '17:00:00', 'class_end': '20:00:00', 'professor_load_id': None,
-         'program_id': 2, 'semester': '1st Semester', 'archive': False},
+         'class_start': '16:00:00', 'class_end': '17:00:00', 'professor_load_id': None,
+         'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
     ]
     entries, errors, unscheduled = _generate(
         monkeypatch, [_course(100, 'IT-A', lec=2, lab=0, ilp=1)],
@@ -442,15 +479,12 @@ def test_ilp_ladder_step_e_window_gap(monkeypatch):
     ilp = _ilps(entries)
     assert errors == []
     assert len(ilp) == 1
-    st = _td(ilp[0]['start'])
-    en = _td(ilp[0]['end'])
-    assert st >= _td('08:00:00'), 'must be within window'
-    assert en <= _td('17:00:00'), 'must be within window'
+    assert (ilp[0]['day'], ilp[0]['start'], ilp[0]['end']) == ('Monday', '03:00 PM', '04:00 PM')
     _assert_ilp_bounds(entries, wh)
 
 
-def test_ilp_ladder_a_to_c_tried_before_d_and_e(monkeypatch):
-    # When step a (7:00-8:00 AM) is available, ILP must take step a, NOT step e (gap).
+def test_ilp_ladder_a_to_b_tried_before_end_of_day_and_gap(monkeypatch):
+    # When step a (7:00-8:00 AM) is available, ILP must take step a, NOT step c/d.
     wh = [_day('Monday', '07:00:00', '17:00:00', wid=1)]
     rooms = [_room()]
     entries, errors, unscheduled = _generate(
@@ -472,7 +506,7 @@ def test_ilp_failure_diagnostics_when_professor_fully_booked(monkeypatch):
         # Alan Turing (prof_id=10) booked 08:00-17:00 with another section
         {'schedule_id': 900, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
          'class_start': '08:00:00', 'class_end': '17:00:00', 'prof_id': 10,
-         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
     ]
     # IT-A lecture (3h) takes 17:00-20:00 for Turing.
     entries, errors, unscheduled = _generate(
@@ -497,15 +531,15 @@ def test_ilp_failure_diagnostics_mutual_conflict(monkeypatch):
         # Alan Turing (prof 10) busy 08:00-10:00 with section 9Z
         {'schedule_id': 901, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
          'class_start': '08:00:00', 'class_end': '10:00:00', 'prof_id': 10,
-         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
         # Alan Turing (prof 10) busy 11:00-20:00 with section 9Z
         {'schedule_id': 902, 'section': '9Z', 'room_id': 1, 'day': 'Monday',
          'class_start': '11:00:00', 'class_end': '20:00:00', 'prof_id': 10,
-         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+         'professor_load_id': 999, 'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
         # Section 1A busy 10:00-20:00 with prof 20
         {'schedule_id': 903, 'section': '1A', 'room_id': 2, 'day': 'Monday',
          'class_start': '10:00:00', 'class_end': '20:00:00', 'prof_id': 20,
-         'professor_load_id': 998, 'program_id': 2, 'semester': '1st Semester', 'archive': False},
+         'professor_load_id': 998, 'program_id': 2, 'semester': '1st Semester', 'archive_batch_id': None},
     ]
     # Course is ILP-only (0 lec, 0 lab, 1 ilp)
     entries, errors, unscheduled = _generate(
@@ -518,3 +552,21 @@ def test_ilp_failure_diagnostics_mutual_conflict(monkeypatch):
     assert 'Mutual timeslot conflict' in errors[0]['reason']
     assert errors[0]['prof_free'] > 0
     assert errors[0]['sec_free'] > 0
+
+
+def test_working_hours_edit_validation_enforces_exact_window(monkeypatch):
+    # Monday: 08:00-19:00 (no 7-8 AM, no 7-8 PM).
+    # Wednesday: 08:00-21:00 (8-9 PM IS allowed when working_hours allows it).
+    wh = [
+        _day('Monday', '08:00:00', '19:00:00', lunch='12:00:00', wid=1),
+        _day('Wednesday', '08:00:00', '21:00:00', lunch='12:00:00', wid=2),
+    ]
+    db = MockSupabase(working_hours=wh)
+    monkeypatch.setattr(app_module, 'supabase', db)
+
+    assert app_module._validate_working_hours_for_edit('Monday', '07:00:00', '08:00:00') is not None
+    assert app_module._validate_working_hours_for_edit('Monday', '19:00:00', '20:00:00') is not None
+    assert app_module._validate_working_hours_for_edit('Monday', '18:00:00', '19:00:00') is None
+    assert app_module._validate_working_hours_for_edit('Wednesday', '20:00:00', '21:00:00') is None
+    assert app_module._validate_working_hours_for_edit('Wednesday', '21:00:00', '22:00:00') is not None
+
