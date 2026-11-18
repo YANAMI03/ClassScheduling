@@ -242,7 +242,7 @@
         </h2>
         <div class="profile-user-role-badge mb-3">
             <i class="bx bx-badge-check text-primary"></i>
-            <span>{{ user.role or 'Viewer' }}</span>
+            <span>{{ role_label(user.role) if user.role else '—' }}</span>
         </div>
         <div>
             <button type="button" class="btn btn-outline-primary btn-sm profile-upload-btn" onclick="document.getElementById('avatarInput').click();">
@@ -315,7 +315,7 @@
             </div>
             <div class="profile-info-content">
                 <span class="profile-info-label">Role</span>
-                <strong class="profile-info-value">{{ user.role or 'Viewer' }}</strong>
+                <strong class="profile-info-value">{{ role_label(user.role) if user.role else '—' }}</strong>
             </div>
         </div>
     </div>

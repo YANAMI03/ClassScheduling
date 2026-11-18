@@ -85,8 +85,8 @@
             You do not have permission to access this page. Please use the navigation menu or return to your allowed home page.
         </p>
         <div>
-            {% set role_lower = current_user_role if current_user_role else 'viewer' %}
-            {% if role_lower in ['admin', 'viewer'] %}
+            {% set role_lower = current_user_role %}
+            {% if role_lower == 'admin' %}
             <a href="{{ url_for('schedules') }}" class="btn denied-action-btn" id="btn-back-home">
                 <i class="bx bx-arrow-back"></i> Go to Section Schedule
             </a>

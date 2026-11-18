@@ -1,14 +1,12 @@
 """Single source of truth for user roles.
 
-The role that used to be called "Scheduler" is now "Chair" (a PURE RENAME: same
-permissions, same program scoping).  Only three roles exist in this system:
+Only two roles exist in this system:
 
     ROLE_ADMIN  = 'admin'
     ROLE_CHAIR  = 'chair'   (formerly 'scheduler')
-    ROLE_VIEWER = 'viewer'
 
 Every layer -- Flask decorators, the central permission map, the sidebar,
-templates, the Users tab whitelist/dropdown, sign-up, the activity log, backup
+templates, the Users tab whitelist/dropdown, the activity log, backup
 sanitisation and the automated access audit -- must import the constants and
 helpers below instead of hard-coding role strings.
 
@@ -21,16 +19,14 @@ from __future__ import annotations
 # ── Canonical stored values ────────────────────────────────────────────────────
 ROLE_ADMIN = 'admin'
 ROLE_CHAIR = 'chair'
-ROLE_VIEWER = 'viewer'
 
-VALID_ROLES = frozenset({ROLE_ADMIN, ROLE_CHAIR, ROLE_VIEWER})
+VALID_ROLES = frozenset({ROLE_ADMIN, ROLE_CHAIR})
 
 # Human-readable display labels.  The stored value stays 'chair'; only the label
 # maps to "Chair".
 ROLE_LABELS = {
     ROLE_ADMIN: 'Admin',
     ROLE_CHAIR: 'Chair',
-    ROLE_VIEWER: 'Viewer',
 }
 
 # ── Legacy / alias normalisation ───────────────────────────────────────────────
@@ -52,12 +48,6 @@ ROLE_ALIASES = {
     'department_head': ROLE_CHAIR,
     'dean': ROLE_CHAIR,
     'dean_chair': ROLE_CHAIR,
-    # Viewer family
-    'viewer': ROLE_VIEWER,
-    'instructor': ROLE_VIEWER,
-    'guest': ROLE_VIEWER,
-    'faculty': ROLE_VIEWER,
-    'teacher': ROLE_VIEWER,
 }
 
 # Temporary transition map: legacy stored values -> new stored values.
@@ -87,10 +77,9 @@ def slugify(value) -> str:
 def normalize_role(value) -> str:
     """Return the canonical role for ``value``.
 
-    Known aliases (including the legacy ``scheduler``, ``dean``, ``super_admin``,
-    ``instructor`` ...) are mapped to ``admin`` / ``chair`` / ``viewer``.  An
-    unknown value is returned as a normalised slug so callers can detect and
-    deny it (never silently promoted).
+    Known aliases (including the legacy ``scheduler``, ``dean``, ``super_admin``)
+    are mapped to ``admin`` / ``chair``.  An unknown value is returned as a
+    normalised slug so callers can detect and deny it (never silently promoted).
     """
     slug = slugify(value)
     if not slug:
@@ -109,7 +98,7 @@ normalize = normalize_role
 
 
 def is_known_role(value) -> bool:
-    """True when ``value`` maps to one of the three canonical roles."""
+    """True when ``value`` maps to one of the two canonical roles."""
     return normalize_role(value) in VALID_ROLES
 
 
@@ -119,16 +108,16 @@ def role_label(value) -> str:
     if canonical in ROLE_LABELS:
         return ROLE_LABELS[canonical]
     if not canonical:
-        return 'Viewer'
+        return 'Unknown'
     return canonical.replace('_', ' ').replace('/', ' ').title()
 
 
-def sanitize_stored_role(value, default: str = ROLE_VIEWER) -> str:
+def sanitize_stored_role(value, default: str = '') -> str:
     """Coerce a role destined for the ``users`` table.
 
     Legacy values (``scheduler`` / ``dean``) become ``chair``; anything that is
-    not admin / chair / viewer falls back to ``default``.  Used by Backup &
-    Restore so a restored file can never introduce a role outside the whitelist.
+    not admin / chair falls back to ``default``.  Used by Backup & Restore so a
+    restored file can never introduce a role outside the whitelist.
     """
     canonical = normalize_role(value)
     if canonical in VALID_ROLES:
@@ -139,7 +128,7 @@ def sanitize_stored_role(value, default: str = ROLE_VIEWER) -> str:
 def role_for_restore(value) -> str:
     """Map an old backup's stored role value to the current stored value.
 
-    ``'scheduler'`` -> ``'chair'`` (pure rename).  Unknown roles are coerced to
-    ``viewer`` so a restore can never create a privilege outside the whitelist.
+    ``'scheduler'`` -> ``'chair'`` (pure rename).  Unknown roles return ``''``
+    so restore can disable legacy accounts rather than granting privileges.
     """
-    return sanitize_stored_role(value, default=ROLE_VIEWER)
+    return sanitize_stored_role(value, default='')

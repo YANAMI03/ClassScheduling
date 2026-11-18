@@ -18,7 +18,6 @@
         <p class="page-subtitle">Interactive weekly timetable grid, free periods, and class schedule details</p>
     </div>
     <div class="d-flex gap-2 align-items-center flex-wrap">
-        {% if session.get('role') != 'viewer' %}
         <a id="exportExcelBtn"
             href="/schedule/{{ section.section_name or section.section }}/export?semester={{ semester_filter }}&major={{ major_filter }}{% if is_preview %}&mode=preview{% endif %}"
             class="btn btn-success" title="Export Section Schedule to Excel">
@@ -28,7 +27,6 @@
             class="btn btn-danger" title="Export Section Schedule to PDF (NEUST format)">
             <i class="bx bx-file-pdf me-1"></i> Export to PDF
         </a>
-        {% endif %}
         <a href="/schedules" class="btn btn-outline-secondary">
             <i class="bx bx-arrow-back"></i> Back to Section Schedule
         </a>

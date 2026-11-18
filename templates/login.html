@@ -69,7 +69,7 @@
                 {% endif %}
 
                 <!-- Login Form -->
-                <form method="post" action="{{ url_for('login') }}" id="loginForm" class="{% if active_tab in ('signup', 'resend') %}hidden{% endif %}">
+                <form method="post" action="{{ url_for('login') }}" id="loginForm" class="{% if active_tab == 'resend' %}hidden{% endif %}">
                     <h1 class="login-title">Welcome back</h1>
                     <p class="login-subtitle">Sign in to manage class schedules</p>
 
@@ -96,76 +96,6 @@
 
                     <p class="login-toggle" style="margin-top: 0.25rem;">
                         <a href="{{ url_for('forgot_password') }}">Forgot password?</a>
-                    </p>
-
-                    <p class="login-toggle">
-                        Don't have an account? <a href="{{ url_for('signup') }}">Sign up</a>
-                    </p>
-                </form>
-
-                <!-- Sign Up Form (legacy inline flow) -->
-                <form method="post" action="{{ url_for('signup') }}" id="signupForm" class="{% if active_tab != 'signup' %}hidden{% endif %}">
-                    <h1 class="login-title">Create your account</h1>
-                    <p class="login-subtitle">Set up your ClassScheduling account</p>
-
-                    <div class="alert alert-danger hidden" id="signupError" role="alert">
-                        <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
-                        <span id="signupErrorText">Please provide an email, a username, or both.</span>
-                    </div>
-
-                    <div class="login-field">
-                        <label for="firstName" class="login-label">First Name</label>
-                        <input type="text" id="firstName" name="first_name" class="form-control"
-                            placeholder="Enter your first name" required value="{{ request.form.get('first_name', '') }}">
-                    </div>
-                    <div class="login-field">
-                        <label for="lastName" class="login-label">Last Name</label>
-                        <input type="text" id="lastName" name="last_name" class="form-control"
-                            placeholder="Enter your last name" required value="{{ request.form.get('last_name', '') }}">
-                    </div>
-                    <div class="login-field">
-                        <label for="signupEmail" class="login-label">Email</label>
-                        <input type="email" id="signupEmail" name="email" class="form-control" placeholder="Enter your email"
-                            value="{{ request.form.get('email', '') }}">
-                    </div>
-                    <div class="login-helper-text">
-                        Provide an email, a username, or both.
-                    </div>
-                    <div class="login-field">
-                        <label for="signupUsername" class="login-label">Username</label>
-                        <input type="text" id="signupUsername" name="username" class="form-control" placeholder="Choose a username"
-                            value="{{ request.form.get('username', '') }}">
-                    </div>
-                    <div class="login-field">
-                        <label for="signupPassword" class="login-label">Password</label>
-                        <div class="password-field-wrapper">
-                            <input type="password" id="signupPassword" name="password" class="form-control"
-                                placeholder="Choose a password" autocomplete="new-password" required>
-                            <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="login-field">
-                        <label for="confirmPassword" class="login-label">Confirm Password</label>
-                        <div class="password-field-wrapper">
-                            <input type="password" id="confirmPassword" name="confirm_password" class="form-control"
-                                placeholder="Confirm your password" autocomplete="new-password" required>
-                            <button type="button" class="password-toggle-btn" aria-label="Show password" aria-pressed="false" tabindex="0" data-loader-skip>
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary login-submit" data-loading-text="Signing up...">
-                        <i class="bi bi-person-plus"></i> Sign Up
-                    </button>
-
-                    <p class="login-toggle">
-                        Already have an account? <a href="#" id="showLogin">Login</a>
-                    </p>
-                    <p class="login-toggle">
-                        Didn't receive verification email? <a href="#" id="showResendFromSignup">Resend Verification</a>
                     </p>
                 </form>
 
@@ -253,38 +183,10 @@
 
             document.querySelectorAll('.password-field-wrapper').forEach(initPasswordToggle);
 
-            var emailInput = document.getElementById('signupEmail');
-            var usernameInput = document.getElementById('signupUsername');
-            var signupError = document.getElementById('signupError');
-            var signupErrorText = document.getElementById('signupErrorText');
             var loginForm = document.getElementById('loginForm');
-            var signupForm = document.getElementById('signupForm');
             var resendForm = document.getElementById('resendForm');
 
-            function showSignupError(msg) {
-                if (signupError && signupErrorText) {
-                    signupErrorText.textContent = msg;
-                    signupError.classList.remove('hidden');
-                } else {
-                    alert(msg);
-                }
-            }
-
-            function clearIdentifierErrors() {
-                if (signupError) {
-                    signupError.classList.add('hidden');
-                }
-                if (emailInput) {
-                    emailInput.classList.remove('is-invalid');
-                }
-                if (usernameInput) {
-                    usernameInput.classList.remove('is-invalid');
-                }
-            }
-
             function setView(view) {
-                clearIdentifierErrors();
-
                 // Reset all password toggles to hidden
                 document.querySelectorAll('.password-field-wrapper').forEach(function (w) {
                     var inp = w.querySelector('input');
@@ -298,58 +200,20 @@
                     }
                 });
 
-                if (!loginForm || !signupForm || !resendForm) return;
+                if (!loginForm || !resendForm) return;
 
-                if (view === 'signup') {
+                if (view === 'resend') {
                     loginForm.classList.add('hidden');
-                    resendForm.classList.add('hidden');
-                    signupForm.classList.remove('hidden');
-                } else if (view === 'resend') {
-                    loginForm.classList.add('hidden');
-                    signupForm.classList.add('hidden');
                     resendForm.classList.remove('hidden');
                 } else {
-                    signupForm.classList.add('hidden');
                     resendForm.classList.add('hidden');
                     loginForm.classList.remove('hidden');
                 }
             }
 
-            if (emailInput) {
-                emailInput.addEventListener('input', function () {
-                    if (emailInput.value.trim() || (usernameInput && usernameInput.value.trim())) {
-                        clearIdentifierErrors();
-                    }
-                });
-            }
-
-            if (usernameInput) {
-                usernameInput.addEventListener('input', function () {
-                    if (usernameInput.value.trim() || (emailInput && emailInput.value.trim())) {
-                        clearIdentifierErrors();
-                    }
-                });
-            }
-
-            var showLogin = document.getElementById('showLogin');
-            if (showLogin) {
-                showLogin.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    setView('login');
-                });
-            }
-
             var showResend = document.getElementById('showResend');
             if (showResend) {
                 showResend.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    setView('resend');
-                });
-            }
-
-            var showResendFromSignup = document.getElementById('showResendFromSignup');
-            if (showResendFromSignup) {
-                showResendFromSignup.addEventListener('click', function (e) {
                     e.preventDefault();
                     setView('resend');
                 });
@@ -385,44 +249,6 @@
                         btn.innerHTML = '<i class="bi bi-clock"></i> Resend in ' + count + 's';
                     }
                 }, 1000);
-            }
-
-            if (signupForm) {
-                signupForm.addEventListener('submit', function (e) {
-                    var email = emailInput ? emailInput.value.trim() : '';
-                    var username = usernameInput ? usernameInput.value.trim() : '';
-                    var signupPassword = document.getElementById('signupPassword');
-                    var confirmPassword = document.getElementById('confirmPassword');
-                    var password = signupPassword ? signupPassword.value : '';
-                    var confirmPasswordValue = confirmPassword ? confirmPassword.value : '';
-
-                    clearIdentifierErrors();
-
-                    if (!email && !username) {
-                        e.preventDefault();
-                        showSignupError('Please provide an email, a username, or both.');
-                        if (emailInput) emailInput.classList.add('is-invalid');
-                        if (usernameInput) usernameInput.classList.add('is-invalid');
-                        if (emailInput) emailInput.focus();
-                        return false;
-                    }
-
-                    if (email && (!email.includes('@') || !email.split('@')[1] || !email.split('@')[1].includes('.'))) {
-                        e.preventDefault();
-                        showSignupError('Please enter a valid email address.');
-                        if (emailInput) {
-                            emailInput.classList.add('is-invalid');
-                            emailInput.focus();
-                        }
-                        return false;
-                    }
-
-                    if (password !== confirmPasswordValue) {
-                        e.preventDefault();
-                        showSignupError('Passwords do not match.');
-                        return false;
-                    }
-                });
             }
         })();
     </script>

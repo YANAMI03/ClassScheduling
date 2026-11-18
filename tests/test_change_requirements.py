@@ -781,18 +781,23 @@ def test_checklist_ilp_multisection_generation_and_placement_rules(monkeypatch):
     sec_set = {e['section'] for e in ilp_entries}
     assert sec_set == {'1A', '1B', '1C'}
 
-    # 2. Each ILP entry is exactly 1 hour, has no room, belongs to Alan, avoids lunch, and obeys the 8 PM cap.
+    # 2. Each ILP entry is exactly 1 hour, has no room, belongs to Alan, avoids lunch, and stays inside working_hours.
     _lunch_start = app_module._parse_time('12:00:00')
     _lunch_end = app_module._parse_time('13:00:00')
-    _day_cap = app_module._parse_time('20:00:00')
+    _day_windows = {
+        w['day']: (app_module._parse_time(w['start_time']), app_module._parse_time(w['end_time']))
+        for w in working_hours
+    }
     for e in ilp_entries:
         assert e['room_id'] is None
         assert e['room_name'] == 'No room'
         assert e['professor_name'] == 'Alan Turing'
         st = app_module._parse_time(e['start'])
         en = app_module._parse_time(e['end'])
+        win_s, win_e = _day_windows[e['day']]
         assert (en - st) == _td(hours=1)
-        assert en <= _day_cap, 'ILP must never end after 8:00 PM'
+        assert st >= win_s, 'ILP must never start before the day working_hours start'
+        assert en <= win_e, 'ILP must never end after the day working_hours end'
         assert not (st < _lunch_end and _lunch_start < en), 'ILP must not overlap lunch'
 
     # 3. No professor is double-booked: with a single professor, all ILP hours are distinct.

@@ -194,26 +194,43 @@
             </div>
             <div class="modal-body">
                 <form id="addSpecForm" class="row g-2 align-items-end mb-3">
-                    <div class="col-md-5">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold mb-1">Program <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="specProgramId" name="program_id" required>
+                            <option value="" disabled selected>Select Program</option>
+                            {% for p in programs %}
+                            <option value="{{ p.id }}">{{ p.program_code }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
                         <label class="form-label small fw-bold mb-1">Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control form-control-sm" id="specName" name="name" placeholder="e.g. Database Systems" maxlength="100" required>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label small fw-bold mb-1">Code</label>
                         <input type="text" class="form-control form-control-sm" id="specCode" name="code" placeholder="e.g. DST" maxlength="10">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <button type="submit" class="btn btn-primary btn-sm w-100" id="btn-add-spec" data-loading-text="Adding...">
                             <i class="bx bx-plus me-1"></i> Add Specialization
                         </button>
                     </div>
                     <div class="col-12">
-                        <div class="form-text small">"General" is built in and cannot be added here.</div>
+                        <div class="form-text small">"General" is built in and cannot be added here. Each specialization belongs to one program.</div>
                     </div>
                 </form>
 
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="small fw-bold text-uppercase text-muted" style="letter-spacing:.5px;">Declared Specializations</span>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="small fw-bold text-uppercase text-muted" style="letter-spacing:.5px;">Declared Specializations</span>
+                        <select class="form-select form-select-sm" id="specFilterProgram" style="width: auto; min-width: 140px;">
+                            <option value="all">All Programs</option>
+                            {% for p in programs %}
+                            <option value="{{ p.id }}">{{ p.program_code }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" role="switch" id="specShowArchived">
                         <label class="form-check-label small" for="specShowArchived">Show archived</label>
@@ -224,14 +241,15 @@
                     <table class="table table-sm table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
+                                <th style="width:110px;">Program</th>
                                 <th>Name</th>
-                                <th style="width:110px;">Code</th>
-                                <th style="width:110px;">Status</th>
-                                <th class="text-end" style="width:150px;">Actions</th>
+                                <th style="width:100px;">Code</th>
+                                <th style="width:100px;">Status</th>
+                                <th class="text-end" style="width:140px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="specTableBody">
-                            <tr><td colspan="4" class="text-center text-muted py-3">Loading&hellip;</td></tr>
+                            <tr><td colspan="5" class="text-center text-muted py-3">Loading&hellip;</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -253,6 +271,15 @@
             </div>
             <form id="editSpecForm" method="POST" action="">
                 <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Program <span class="text-danger">*</span></label>
+                        <select class="form-select" id="editSpecProgramId" name="program_id" required>
+                            <option value="" disabled>Select Program</option>
+                            {% for p in programs %}
+                            <option value="{{ p.id }}">{{ p.program_code }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="editSpecName" name="name" maxlength="100" required>
@@ -321,14 +348,20 @@ document.addEventListener('DOMContentLoaded', function() {
         var body = document.getElementById('specTableBody');
         if (!body) return;
         var archived = document.getElementById('specShowArchived').checked ? 'true' : 'false';
-        body.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Loading&hellip;</td></tr>';
-        fetch('/api/specializations?archived=' + archived,
+        var filterEl = document.getElementById('specFilterProgram');
+        var programId = filterEl ? filterEl.value : 'all';
+        var qs = '?archived=' + encodeURIComponent(archived);
+        if (programId && programId !== 'all') {
+            qs += '&program_id=' + encodeURIComponent(programId);
+        }
+        body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Loading&hellip;</td></tr>';
+        fetch('/api/specializations' + qs,
               { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var specs = (data && data.specializations) || [];
                 if (!specs.length) {
-                    body.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No specializations declared yet.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No specializations declared yet.</td></tr>';
                     return;
                 }
                 body.innerHTML = specs.map(function(s) {
@@ -337,15 +370,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         : '<span class="badge bg-success-subtle text-success border">Active</span>';
                     var nameAttr = (s.name || '').replace(/"/g, '&quot;');
                     var codeAttr = (s.code || '').replace(/"/g, '&quot;');
+                    var progBadge = s.program_code
+                        ? '<span class="badge bg-primary-subtle text-primary border">' + s.program_code + '</span>'
+                        : '<span class="text-muted small">—</span>';
                     var actions = s.archive
                         ? '<button type="button" class="btn btn-outline-success btn-sm spec-restore" data-id="' + s.specialization_id + '"><i class="bx bx-reset"></i> Restore</button>'
-                        : '<button type="button" class="btn btn-outline-secondary btn-sm spec-edit" data-id="' + s.specialization_id + '" data-name="' + nameAttr + '" data-code="' + codeAttr + '"><i class="bx bx-edit"></i></button>'
+                        : '<button type="button" class="btn btn-outline-secondary btn-sm spec-edit" data-id="' + s.specialization_id + '" data-program-id="' + (s.program_id || '') + '" data-name="' + nameAttr + '" data-code="' + codeAttr + '"><i class="bx bx-edit"></i></button>'
                           + '<button type="button" class="btn btn-outline-warning btn-sm ms-1 spec-archive" data-id="' + s.specialization_id + '" data-name="' + nameAttr + '"><i class="bx bx-archive"></i></button>';
-                    return '<tr><td class="fw-medium">' + (s.name || '') + '</td><td>' + (s.code || '—') + '</td><td>' + status + '</td><td class="text-end">' + actions + '</td></tr>';
+                    return '<tr><td>' + progBadge + '</td><td class="fw-medium">' + (s.name || '') + '</td><td>' + (s.code || '—') + '</td><td>' + status + '</td><td class="text-end">' + actions + '</td></tr>';
                 }).join('');
             })
             .catch(function() {
-                body.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load specializations.</td></tr>';
+                body.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Failed to load specializations.</td></tr>';
             });
     }
 
@@ -357,18 +393,36 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     var specShowArchivedToggle = document.getElementById('specShowArchived');
     if (specShowArchivedToggle) specShowArchivedToggle.addEventListener('change', loadSpecializations);
+    var specFilterProgram = document.getElementById('specFilterProgram');
+    if (specFilterProgram) {
+        specFilterProgram.addEventListener('change', function() {
+            var addProg = document.getElementById('specProgramId');
+            if (addProg && this.value && this.value !== 'all') {
+                addProg.value = this.value;
+            }
+            loadSpecializations();
+        });
+    }
 
     var addSpecForm = document.getElementById('addSpecForm');
     if (addSpecForm) {
         addSpecForm.addEventListener('submit', function(e) {
             e.preventDefault();
             var btn = document.getElementById('btn-add-spec');
+            var chosenProg = document.getElementById('specProgramId') ? document.getElementById('specProgramId').value : '';
             if (typeof window.setButtonLoading === 'function') window.setButtonLoading(btn, true, 'Adding...');
             fetch('/add_specialization', { method: 'POST', body: new FormData(addSpecForm),
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
-                    if (d && d.success) { specToast(d.message || 'Added.', 'success'); addSpecForm.reset(); loadSpecializations(); }
+                    if (d && d.success) {
+                        specToast(d.message || 'Added.', 'success');
+                        addSpecForm.reset();
+                        if (chosenProg && document.getElementById('specProgramId')) {
+                            document.getElementById('specProgramId').value = chosenProg;
+                        }
+                        loadSpecializations();
+                    }
                     else { specToast((d && (d.message || d.error)) || 'Failed to add.', 'error'); }
                 })
                 .catch(function() { specToast('Network error.', 'error'); })
@@ -382,6 +436,8 @@ document.addEventListener('DOMContentLoaded', function() {
             var archBtn = e.target.closest('.spec-archive');
             var restBtn = e.target.closest('.spec-restore');
             if (editBtn) {
+                var editProg = document.getElementById('editSpecProgramId');
+                if (editProg) editProg.value = editBtn.getAttribute('data-program-id') || '';
                 document.getElementById('editSpecName').value = editBtn.getAttribute('data-name') || '';
                 document.getElementById('editSpecCode').value = editBtn.getAttribute('data-code') || '';
                 document.getElementById('editSpecForm').action = '/edit_specialization/' + editBtn.getAttribute('data-id');
